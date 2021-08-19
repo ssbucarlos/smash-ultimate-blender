@@ -8,6 +8,7 @@ bl_info = {
     'blender': (2, 91, 0),
     'special thanks': 'The rokoko plugin for being the reference used to make this UI'
 }
+
 import bpy, sys
 
 from . import panels
@@ -24,6 +25,8 @@ classes = [
     panels.import_model.ImportModelPanel,
     panels.import_model.ModelFolderSelector,
     panels.import_model.ModelImporter,
+    panels.export_model.ExportModelPanel,
+    panels.export_model.ModelExporterOperator,
     panels.io_matl.MaterialPanel,
     panels.io_matl.SsbhLibJsonFileSelector,
     panels.io_matl.NumatbFileSelector,

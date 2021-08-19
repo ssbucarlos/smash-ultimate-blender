@@ -84,3 +84,10 @@ def register():
         type=Object,
         poll=exo_skel.poll_armatures,
     )
+
+    Scene.sub_model_export_armature = PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,
+    )
