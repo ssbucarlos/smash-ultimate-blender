@@ -15,3 +15,6 @@ Eventually, ssbh_lib will be called directly without needing the user to convert
 
 # Please Note!
 This is not the model.numdlb importer script! 
+# Special Thanks
+SMG for creating SSBH_DATA_PY, which without it none of this would be possible https://github.com/ScanMountGoat/ssbh_data_py
+(and also for providing alot of the reference code for how to use the library, most of which was shamelessly stolen and implemented here)
