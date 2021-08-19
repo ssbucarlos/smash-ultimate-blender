@@ -187,9 +187,10 @@ def create_verts(bm, mesh_object, skel):
     for (index, (pos, nrm)) in enumerate(zip(mesh_object.positions[0].data, mesh_object.normals[0].data)):
         # Vertex attributes
         # TODO: Tangents/bitangents?
+        # Ok but fr need to figure out tangents/bitangents in blender
         vert = bm.verts.new()
         vert.co = pos[:3]
-        vert.normal = nrm[:3]
+        vert.normal = nrm[:3] # <--- Funny prank, this doesn't actually set the custom normals in blender
         vert.index = index
 
 
@@ -349,6 +350,10 @@ def create_blender_mesh(mesh_object, skel):
     bm.to_mesh(blender_mesh)
     bm.free()
 
+    # Now that the mesh is created, now we can assign split custom normals
+    blender_mesh.use_auto_smooth = True # Required to use custom normals
+    vertex_normals = mesh_object.normals[0].data
+    blender_mesh.normals_split_custom_set_from_vertices([(vn[0], vn[1], vn[2]) for vn in vertex_normals])
     return blender_mesh
 
 
