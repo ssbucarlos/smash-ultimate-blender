@@ -1,5 +1,5 @@
 # smash-ultimate-blender
-Blender Plugin containing utilities for Smash Ultimate Models and Animations.
+Blender Plugin that (will eventually contatin) utilities for Smash Ultimate Models and Animations.
 
 # Current Features
 1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
@@ -13,3 +13,5 @@ Blender Plugin containing utilities for Smash Ultimate Models and Animations.
 ssbh_lib_json.exe is currently needed to convert the outputted .JSON https://github.com/ultimate-research/ssbh_lib
 Eventually, ssbh_lib will be called directly without needing the user to convert exported JSON
 
+# Please Note!
+This is not the model.numdlb importer script! 
