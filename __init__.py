@@ -21,7 +21,13 @@ def check_unsupported_blender_versions():
         raise ImportError('Cant use a Blender version older than 2.80, please use 2.80 or later')
          
 classes = [
+    panels.import_model.ImportModelPanel,
+    panels.import_model.ModelFolderSelector,
+    panels.import_model.ModelImporter,
     panels.io_matl.MaterialPanel,
+    panels.io_matl.SsbhLibJsonFileSelector,
+    panels.io_matl.NumatbFileSelector,
+    panels.io_matl.MatlReimporter,
     panels.exo_skel.BuildBoneList,
     panels.exo_skel.RenameOtherBones,
     panels.exo_skel.VIEW3D_PT_ultimate_exo_skel,
@@ -30,6 +36,7 @@ classes = [
     panels.exo_skel.MakeCombinedSkeleton,
     panels.exo_skel.ExportHelperBoneJson,
     panels.exo_skel.ExportSkelJson,
+
     #panels.exo_skel.ExoSkelProperties,
 ]
 

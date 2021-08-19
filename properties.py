@@ -1,7 +1,7 @@
 from bpy.types import Scene, Object
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 
-from .panels import exo_skel
+from .panels import exo_skel, io_matl
 
 def register():
     Scene.smash_armature = PointerProperty(
@@ -33,4 +33,54 @@ def register():
         name="Prefix",
         description="The Prefix that will be added to the bones in the 'Other' armature. Must begin with H_ or else it wont work!",
         default="H_Exo_"
+    )
+
+    Scene.ssbh_lib_json_path = StringProperty(
+        name='ssbh_lib_json path',
+        description='The Path to the ssbh_lib_json.exe file',
+        default='',
+    )
+    
+
+    Scene.numatb_file_path = StringProperty(
+        name='.numatb file path',
+        description='The Path to the model.numatb file',
+        default='',
+    )
+
+    Scene.sub_model_numshb_file_name = StringProperty(
+        name='.numshb file path',
+        description='The Path to the model.numshb file',
+        default='',
+    )
+
+    Scene.sub_model_nusktb_file_name = StringProperty(
+        name='.nusktb file path',
+        description='The Path to the model.nusktb file',
+        default='',
+    )
+
+    Scene.sub_model_numdlb_file_name = StringProperty(
+        name='.numdlb file path',
+        description='The Path to the model.numdlb file',
+        default='',
+    )
+
+    Scene.sub_model_numatb_file_name = StringProperty(
+        name='.numatb file path',
+        description='The Path to the model.numatb file',
+        default='',
+    )
+
+    Scene.sub_model_folder_path = StringProperty(
+        name='Model folder path',
+        description='The path to the model folder',
+        default='',
+    )
+
+    Scene.io_matl_armature = PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,
     )
