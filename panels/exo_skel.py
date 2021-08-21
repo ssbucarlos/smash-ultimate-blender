@@ -264,7 +264,7 @@ class ExportSkelJson(bpy.types.Operator):
                 nullBones.append(eb[key])
             elif 'H_' in key:
                 helperBones.append(eb[key])
-            elif any(ss in key for ss in ['Mouth', 'Finger']) or key == 'Have':
+            elif any(ss in key for ss in ['Mouth', 'Finger', 'Face']) or key == 'Have':
                 miscBones.append(eb[key])
                 for child in eb[key].children_recursive:
                     if any(ss in child.name for ss in ['_eff', '_offset']):
