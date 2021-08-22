@@ -439,7 +439,8 @@ class ExportHelperBoneJson(bpy.types.Operator):
         text = bpy.data.texts.new('SUB_HELPER_BONE_JSON')
         text.write(json.dumps(output, indent = 2))
         return {'FINISHED'}       
-        
+
+
 class SUB_UL_BoneList(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         #other_armature = get_other_armature()
@@ -500,7 +501,7 @@ class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
         row.operator(ExportHelperBoneJson.bl_idname, text='Create Helper Bone JSON Text')
         
         row = layout.row(align=True)
-        row.operator(ExportSkelJson.bl_idname, text='Create Skel Json')
+        row.label(text='To export the .NUSKTB, use the Model Exporter. Make sure to link a vanilla nusktb!!!')
 '''
 class ExoSkelProperties(bpy.types.PropertyGroup):
     smash_armature = PointerProperty(

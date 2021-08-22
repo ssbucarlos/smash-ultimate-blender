@@ -27,6 +27,7 @@ classes = [
     panels.import_model.ModelImporter,
     panels.export_model.ExportModelPanel,
     panels.export_model.ModelExporterOperator,
+    panels.export_model.VanillaNusktbSelector,
     panels.io_matl.MaterialPanel,
     panels.io_matl.SsbhLibJsonFileSelector,
     panels.io_matl.NumatbFileSelector,
