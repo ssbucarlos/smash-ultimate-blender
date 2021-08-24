@@ -1,13 +1,18 @@
 import os
-import bpy
 import os.path
-from bpy.props import StringProperty
-
-from bpy_extras.io_utils import ImportHelper
-
+import subprocess
+import bpy
 import mathutils
 import time
 import bmesh
+import json
+
+from bpy.props import StringProperty
+from bpy_extras.io_utils import ImportHelper
+
+from ..operators import master_shader
+
+
 
 class ImportModelPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
@@ -150,16 +155,37 @@ def import_model(self, context):
     nusktb_name = context.scene.sub_model_nusktb_file_name
     numatb_name = context.scene.sub_model_numatb_file_name
     
-    model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name)
-    mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name)
-    skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name)
+    ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name)
+    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name)
+    ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name)
+    ssbh_material_json = load_numatb_json(dir + numatb_name)
 
-
-    armature = create_armature(skel, context)
-    create_mesh(model, mesh, skel, armature, context)
+    armature = create_armature(ssbh_skel, context)
+    create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
 
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
+
+def get_ssbh_lib_json_exe_path():
+    print('this_file_path = %s' % (__file__))
+    this_file_path = __file__
+    return this_file_path + '/../../ssbh_lib_json/ssbh_lib_json.exe'
+
+def load_numatb_json(numatb_path):
+    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
+    print('ssbh_lib_json_exe_path = %s' % ssbh_lib_json_exe_path)
+    output_json_path = numatb_path + '.json'
+
+    # Run ssbh_lib_json
+    subprocess.run([ssbh_lib_json_exe_path, numatb_path, output_json_path])
+
+    # Load Outputted Json
+    numatb_json = None
+    with open(output_json_path) as f:
+        numatb_json = json.load(f)
+
+    return numatb_json
+
 
 
 '''
@@ -366,29 +392,165 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
 
     return blender_mesh
 
-
-def create_mesh(model, mesh, skel, armature, context):
+def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context):
     '''
     So the goal here is to create a set of materials to share among the meshes for this model.
     But, other previously created models can have materials of the same name.
     Gonna make sure not to conflict.
     example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
     '''
-    numdlb_material_labels = {e.material_label for e in model.entries} # {blah} creates a set aka a list with no duplicates. {} creates an empty dictionary tho
+    numdlb_material_labels = {e.material_label for e in ssbh_model.entries} # {blah} creates a set aka a list with no duplicates. {} creates an empty dictionary tho
     label_to_material_dict = {} # This creates an empty Dictionary
+    
+    # Make Master Shader if its not already made
+    master_shader.create_master_shader()
+
     for label in numdlb_material_labels:
-        label_to_material_dict[label] = bpy.data.materials.new(label)
+        blender_mat = bpy.data.materials.new(label)
+        setup_blender_mat(blender_mat, label, ssbh_material_json)
+        label_to_material_dict[label] = blender_mat
+        
     
     name_index_mat_dict = {}
-    for e in model.entries:
+    for e in ssbh_model.entries:
 	    name_index_mat_dict[e.mesh_object_name] = {}
-    for e in model.entries:
+    for e in ssbh_model.entries:
         name_index_mat_dict[e.mesh_object_name][e.mesh_object_sub_index] = label_to_material_dict[e.material_label]
 
-    for ssbh_mesh_object in mesh.objects:
-        blender_mesh = create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict)
+    for ssbh_mesh_object in ssbh_mesh.objects:
+        blender_mesh = create_blender_mesh(ssbh_mesh_object, ssbh_skel, name_index_mat_dict)
         mesh_obj = bpy.data.objects.new(blender_mesh.name, blender_mesh)
 
-        attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_object.parent_bone_name)
+        attach_armature_create_vertex_groups(mesh_obj, ssbh_skel, armature, ssbh_mesh_object.parent_bone_name)
 
         context.collection.objects.link(mesh_obj)
+
+def setup_blender_mat(blender_mat, material_label, ssbh_material_json):
+    ssbh_mat_entries = ssbh_material_json['data']['Matl']['entries']
+
+    entry = None
+    for ssbh_mat_entry in ssbh_mat_entries:
+        if ssbh_mat_entry['material_label'] == material_label:
+            entry = ssbh_mat_entry
+
+    # Clone Master Shader
+    master_shader_name = master_shader.get_master_shader_name()
+    master_node_group = bpy.data.node_groups.get(master_shader_name)
+    clone_group = master_node_group.copy()
+
+    # Setup Clone
+    clone_group.name = entry['shader_label']
+
+    # Add our new Nodes
+    blender_mat.use_nodes = True
+    nodes = blender_mat.node_tree.nodes
+    links = blender_mat.node_tree.links
+
+    # Cleanse Node Tree
+    nodes.clear()
+    
+    material_output_node = nodes.new('ShaderNodeOutputMaterial')
+    material_output_node.location = (900,0)
+    node_group_node = nodes.new('ShaderNodeGroup')
+
+    node_group_node.width = 600
+    node_group_node.location = (-300, 300)
+    node_group_node.node_tree = clone_group
+    for input in node_group_node.inputs:
+        input.hide = True
+    shader_label = node_group_node.inputs['Shader Label']
+    shader_label.hide = False
+    shader_label.default_value = entry['shader_label']
+    material_label = node_group_node.inputs['Material Name']
+    material_label.hide = False
+    material_label.default_value = entry['material_label']
+
+    attributes = entry['attributes']['Attributes16']
+    for attribute in attributes:
+        param_id = attribute['param_id']
+        for input in node_group_node.inputs:
+            if input.name.split(' ')[0] == param_id:
+                input.hide = False
+        if 'BlendState0' in param_id:
+            blend_state = attribute['param']['data']['BlendState']
+            source_color = blend_state['source_color']
+            unk2 = blend_state['unk2']
+            destination_color = blend_state['destination_color']
+            unk4 = blend_state['unk4']
+            unk5 = blend_state['unk5']
+            unk6 = blend_state['unk6']
+            unk7 = blend_state['unk7']
+            unk8 = blend_state['unk8']
+            unk9 = blend_state['unk9']
+            unk10 = blend_state['unk10']
+            blend_state_inputs = []
+            for input in node_group_node.inputs:
+                if input.name.split(' ')[0] == 'BlendState0':
+                    blend_state_inputs.append(input)
+            for input in blend_state_inputs:
+                field_name = input.name.split(' ')[1]
+                if field_name == 'Field1':
+                    input.default_value = source_color
+                if field_name == 'Field2':
+                    input.default_value = unk2
+                if field_name == 'Field3':
+                    input.default_value = destination_color
+                if field_name == 'Field4':
+                    input.default_value = unk4
+                if field_name == 'Field5':
+                    input.default_value = unk5
+                if field_name == 'Field6':
+                    input.default_value = unk6
+                if field_name == 'Field7':
+                    input.default_value = unk7
+                if field_name == 'Field8':
+                    input.default_value = unk8
+                if field_name == 'Field9':
+                    input.default_value = unk9
+                if field_name == 'Field10':
+                    input.default_value = unk10
+
+        if 'CustomBoolean' in param_id:
+            bool_value = attribute['param']['data']['Boolean']
+            input = node_group_node.inputs.get(param_id)
+            input.default_value = bool_value
+
+        if 'CustomFloat' in param_id:
+            float_value = attribute['param']['data']['Float']
+            input = node_group_node.inputs.get(param_id)
+            input.default_value = float_value
+        
+        if 'CustomVector' in param_id:
+            vector4 = attribute['param']['data']['Vector4']
+            x = vector4['x']
+            y = vector4['y']
+            z = vector4['z']
+            w = vector4['w']
+            inputs = []
+            for input in node_group_node.inputs:
+                if input.name.split(' ')[0] == param_id:
+                    inputs.append(input)
+            if len(inputs) == 1:
+                inputs[0].default_value = (x,y,z,w)
+            elif len(inputs) == 2:
+                for input in inputs:
+                    field = input.name.split(' ')[1]
+                    if field == 'RGB':
+                        input.default_value = (x,y,z,1)
+                    if field == 'Alpha':
+                        input.default_value = w
+            else:
+                for input in inputs:
+                    axis = input.name.split(' ')[1]
+                    if axis == 'X':
+                        input.default_value = x
+                    if axis == 'Y':
+                        input.default_value = y
+                    if axis == 'Z':
+                        input.default_value = z
+                    if axis == 'W':
+                        input.default_value = w 
+
+    links.new(material_output_node.inputs[0], node_group_node.outputs[0])
+
+    return
