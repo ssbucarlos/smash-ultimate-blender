@@ -145,16 +145,18 @@ class ModelImporter(bpy.types.Operator):
 def import_model(self, context):
     from ..ssbh_data_py import ssbh_data_py
     dir = context.scene.sub_model_folder_path
-    mumdlb_name = context.scene.sub_model_numdlb_file_name
+    numdlb_name = context.scene.sub_model_numdlb_file_name
     numshb_name = context.scene.sub_model_numshb_file_name
     nusktb_name = context.scene.sub_model_nusktb_file_name
     numatb_name = context.scene.sub_model_numatb_file_name
     
+    model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name)
     mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name)
     skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name)
 
+
     armature = create_armature(skel, context)
-    create_mesh(mesh, skel, armature, context)
+    create_mesh(model, mesh, skel, armature, context)
 
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
@@ -336,32 +338,57 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, parent_bone_n
         modifier.object = armature
 
 
-def create_blender_mesh(mesh_object, skel):
-    blender_mesh = bpy.data.meshes.new(mesh_object.name)
+def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
+    blender_mesh = bpy.data.meshes.new(ssbh_mesh_object.name)
 
     # Using bmesh is faster than from_pydata and setting additional vertex parameters.
     bm = bmesh.new()
 
-    create_verts(bm, mesh_object, skel)
-    create_faces(bm, mesh_object)
-    create_uvs(bm, mesh_object)
-    create_color_sets(bm, mesh_object)
+    create_verts(bm, ssbh_mesh_object, skel)
+    create_faces(bm, ssbh_mesh_object)
+    create_uvs(bm, ssbh_mesh_object)
+    create_color_sets(bm, ssbh_mesh_object)
 
     bm.to_mesh(blender_mesh)
     bm.free()
 
     # Now that the mesh is created, now we can assign split custom normals
     blender_mesh.use_auto_smooth = True # Required to use custom normals
-    vertex_normals = mesh_object.normals[0].data
+    vertex_normals = ssbh_mesh_object.normals[0].data
     blender_mesh.normals_split_custom_set_from_vertices([(vn[0], vn[1], vn[2]) for vn in vertex_normals])
+
+    # Assign Material
+    material = name_index_mat_dict[ssbh_mesh_object.name][ssbh_mesh_object.sub_index]
+    blender_mesh.materials.append(material)
+    for polygon in blender_mesh.polygons:
+        polygon.material_index = blender_mesh.materials.find(material.name)
+
+
     return blender_mesh
 
 
-def create_mesh(mesh, skel, armature, context):
-    for mesh_object in mesh.objects:
-        blender_mesh = create_blender_mesh(mesh_object, skel)
+def create_mesh(model, mesh, skel, armature, context):
+    '''
+    So the goal here is to create a set of materials to share among the meshes for this model.
+    But, other previously created models can have materials of the same name.
+    Gonna make sure not to conflict.
+    example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
+    '''
+    numdlb_material_labels = {e.material_label for e in model.entries} # {blah} creates a set aka a list with no duplicates. {} creates an empty dictionary tho
+    label_to_material_dict = {} # This creates an empty Dictionary
+    for label in numdlb_material_labels:
+        label_to_material_dict[label] = bpy.data.materials.new(label)
+    
+    name_index_mat_dict = {}
+    for e in model.entries:
+	    name_index_mat_dict[e.mesh_object_name] = {}
+    for e in model.entries:
+        name_index_mat_dict[e.mesh_object_name][e.mesh_object_sub_index] = label_to_material_dict[e.material_label]
+
+    for ssbh_mesh_object in mesh.objects:
+        blender_mesh = create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict)
         mesh_obj = bpy.data.objects.new(blender_mesh.name, blender_mesh)
-        
-        attach_armature_create_vertex_groups(mesh_obj, skel, armature, mesh_object.parent_bone_name)
+
+        attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_object.parent_bone_name)
 
         context.collection.objects.link(mesh_obj)

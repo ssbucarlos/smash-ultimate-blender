@@ -110,6 +110,8 @@ class ModelExporterOperator(Operator, ImportHelper):
         return {'FINISHED'}
 
 def export_model(context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, linked_nusktb_settings):
+    if include_numdlb:
+        export_numdlb(context, filepath)
     if include_numshb:
         export_numshb(context, filepath)
     if include_nusktb:
@@ -118,17 +120,29 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
         else:
             export_nusktb(context, filepath, linked_nusktb_settings)
 
+def export_numdlb(context, filepath):
+    arma = context.scene.sub_model_export_armature
+
 def export_numshb(context, filepath):
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
     for mesh in export_meshes:
+        '''
+        Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
+
+        list of potential issues that need to validate
+        1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials
+        '''
+        mesh_object_copy = mesh.copy() # Copy the Mesh Object
+        mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
+        mesh_data_copy = mesh_object_copy.data
         real_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
         ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(real_mesh_name, 0)
 
         position0 = ssbh_data_py.mesh_data.AttributeData('Postion0')
-        position0.data = [list(vertex.co[:]) for vertex in mesh.data.vertices] # Thanks SMG for these one-liners
+        position0.data = [list(vertex.co[:]) for vertex in mesh_data_copy.vertices] # Thanks SMG for these one-liners
         ssbh_mesh_object.positions = [position0]
 
         normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
@@ -136,14 +150,21 @@ def export_numshb(context, filepath):
         # So we gotta go through loop by loop
         # mesh.data.loops[index].normal contains the actual custom normal data
         index_to_normals_dict = {} # Dont judge the internet told me list insertion was bugged plus dictionaries are goated
-        mesh.data.calc_normals_split() # Needed apparently or the vertex normal data wont be filled 
-        for loop in mesh.data.loops:
+        mesh_data_copy.calc_normals_split() # Needed apparently or the vertex normal data wont be filled 
+        for loop in mesh_data_copy.loops:
             index_to_normals_dict[loop.vertex_index] = loop.normal[:]
         normal0.data = [list(index_to_normals_dict[key]) for key in sorted(index_to_normals_dict.keys())]
         ssbh_mesh_object.normals = [normal0]
 
         # Python magic to flatten the faces into a single list of vertex indices.
-        ssbh_mesh_object.vertex_indices = [index for face in mesh.data.polygons for index in face.vertices]
+        ssbh_mesh_object.vertex_indices = [index for face in mesh_data_copy.polygons for index in face.vertices]
+
+        # Export Weights
+
+        # Export Maps
+
+        
+        bpy.data.meshes.remove(mesh_data_copy)
 
         ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
