@@ -483,7 +483,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
     material_output_node = nodes.new('ShaderNodeOutputMaterial')
     material_output_node.location = (900,0)
     node_group_node = nodes.new('ShaderNodeGroup')
-
+    node_group_node.name = 'smash_ultimate_shader'
     node_group_node.width = 600
     node_group_node.location = (-300, 300)
     node_group_node.node_tree = clone_group

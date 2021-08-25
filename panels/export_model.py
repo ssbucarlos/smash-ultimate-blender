@@ -110,9 +110,13 @@ class ModelExporterOperator(Operator, ImportHelper):
         return {'FINISHED'}
 
 def export_model(context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, linked_nusktb_settings):
+    '''
+    numdlb and numshb are inherently linked, must export both if exporting one
     if include_numdlb:
         export_numdlb(context, filepath)
-    if include_numshb:
+    '''
+    
+    if include_numshb and include_numdlb:
         export_numshb(context, filepath)
     if include_nusktb:
         if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
@@ -122,12 +126,33 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
 
 def export_numdlb(context, filepath):
     arma = context.scene.sub_model_export_armature
+    ssbh_model = ssbh_data_py.modl_data.ModlData()
+    ssbh_model.model_name = 'model'
+    ssbh_model.skeleton_file_name = 'model.nusktb'
+    ssbh_model.material_file_names = ['model.numatb']
+    ssbh_model.animation_file_name = None
+
+def get_material_label_from_mesh(mesh):
+    material = mesh.material_slots[0].material
+    nodes = material.node_tree.nodes
+    node_group_node = nodes['smash_ultimate_shader']
+    mat_label = node_group_node.inputs['Material Name'].default_value
+
+    return mat_label
 
 def export_numshb(context, filepath):
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
+    ssbh_model_data = ssbh_data_py.modl_data.ModlData()
+    ssbh_model_data.model_name = 'model'
+    ssbh_model_data.skeleton_file_name = 'model.nusktb'
+    ssbh_model_data.material_file_names = ['model.numatb']
+    ssbh_model_data.animation_file_name = None
+    ssbh_model_data.mesh_file_name = 'model.numshb'
+
+    real_mesh_name_list = []
     for mesh in export_meshes:
         '''
         Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
@@ -135,12 +160,21 @@ def export_numshb(context, filepath):
         list of potential issues that need to validate
         1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials
         '''
+        
         mesh_object_copy = mesh.copy() # Copy the Mesh Object
         mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
         mesh_data_copy = mesh_object_copy.data
         real_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
-        ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(real_mesh_name, 0)
 
+        # Quick Detour to file out MODL stuff
+        ssbh_mesh_object_sub_index = real_mesh_name_list.count(real_mesh_name)
+        real_mesh_name_list.append(real_mesh_name)
+        mat_label = get_material_label_from_mesh(mesh)
+        ssbh_model_entry = ssbh_data_py.modl_data.ModlEntryData(real_mesh_name, ssbh_mesh_object_sub_index, mat_label)
+        ssbh_model_data.entries.append(ssbh_model_entry)
+
+        # Back to MESH stuff
+        ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(real_mesh_name, ssbh_mesh_object_sub_index)
         position0 = ssbh_data_py.mesh_data.AttributeData('Postion0')
         position0.data = [list(vertex.co[:]) for vertex in mesh_data_copy.vertices] # Thanks SMG for these one-liners
         ssbh_mesh_object.positions = [position0]
@@ -163,13 +197,16 @@ def export_numshb(context, filepath):
 
         # Export Maps
 
+        # Bounding Sphere
+
+        
         
         bpy.data.meshes.remove(mesh_data_copy)
-
+        #bpy.data.objects.remove(mesh_object_copy)
         ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
     ssbh_mesh_data.save(filepath + 'model.numshb')
-
+    ssbh_model_data.save(filepath + 'model.numdlb')
     return
 
 def export_nusktb_no_link(context, filepath):
