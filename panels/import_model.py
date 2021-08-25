@@ -9,6 +9,7 @@ import json
 
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
+from bpy_extras import image_utils
 
 from ..operators import master_shader
 
@@ -268,7 +269,7 @@ def create_uvs(bm, mesh):
         for face in bm.faces:
             for loop in face.loops:
                 # Get the index of the vertex the loop contains.
-                loop[uv_layer].uv = attribute_data.data[loop.vert.index][:2]
+                loop[uv_layer].uv = [attribute_data.data[loop.vert.index][0], 1 - attribute_data.data[loop.vert.index][1]] # This 'Flips' the imported UVs
 
 
 def create_color_sets(bm, mesh):
@@ -405,9 +406,13 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
     # Make Master Shader if its not already made
     master_shader.create_master_shader()
 
+    texture_name_to_image_dict = {}
+    texture_name_to_image_dict = import_material_images(ssbh_material_json, context)
+
     for label in numdlb_material_labels:
         blender_mat = bpy.data.materials.new(label)
-        setup_blender_mat(blender_mat, label, ssbh_material_json)
+
+        setup_blender_mat(blender_mat, label, ssbh_material_json, texture_name_to_image_dict)
         label_to_material_dict[label] = blender_mat
         
     
@@ -425,13 +430,39 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
 
         context.collection.objects.link(mesh_obj)
 
-def setup_blender_mat(blender_mat, material_label, ssbh_material_json):
+def import_material_images(ssbh_material_json, context):
+    texture_name_to_image_dict = {}
+    texture_name_set = set()
+
+    ssbh_mat_entries = ssbh_material_json['data']['Matl']['entries']
+    for ssbh_mat_entry in ssbh_mat_entries:
+        attributes = ssbh_mat_entry['attributes']['Attributes16']
+        for attribute in attributes:
+            if 'Texture' in attribute['param_id']:
+                texture_name_set.add(attribute['param']['data']['MatlString'])
+
+    print('texture_name_set = %s' % texture_name_set)
+
+    for texture_name in texture_name_set:
+        dir = context.scene.sub_model_folder_path
+        image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
+        texture_name_to_image_dict[texture_name] = image
+
+    return texture_name_to_image_dict
+
+def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_name_to_image_dict):
     ssbh_mat_entries = ssbh_material_json['data']['Matl']['entries']
 
     entry = None
     for ssbh_mat_entry in ssbh_mat_entries:
         if ssbh_mat_entry['material_label'] == material_label:
             entry = ssbh_mat_entry
+
+    # Change Mat Settings
+    # Change Transparency Stuff Later
+    blender_mat.blend_method = 'CLIP'
+    blender_mat.use_backface_culling = True
+    blender_mat.show_transparent_back = False
 
     # Clone Master Shader
     master_shader_name = master_shader.get_master_shader_name()
@@ -552,5 +583,34 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json):
                         input.default_value = w 
 
     links.new(material_output_node.inputs[0], node_group_node.outputs[0])
+
+    # Add image texture nodes
+    node_count = 0
+    for attribute in attributes:
+        param_id = attribute['param_id']
+        if 'Texture' in param_id:
+            texture_node = nodes.new('ShaderNodeTexImage')
+            texture_node.location = (-800, -275 * node_count + 300)
+            texture_file_name = attribute['param']['data']['MatlString']
+            texture_node.name = texture_file_name
+            texture_node.label = texture_file_name
+            texture_node.image = texture_name_to_image_dict[texture_file_name]
+            #texture_node.image = texture_file_name + '.png', context.scene.sub_model_folder_path, place_holder=True, check_existing=False, force_reload=True)
+            matched_rgb_input = None
+            matched_alpha_input = None
+            for input in node_group_node.inputs:
+                if param_id == input.name.split(' ')[0]:
+                    if 'RGB' == input.name.split(' ')[1]:
+                        matched_rgb_input = input
+                    else:
+                        matched_alpha_input = input
+            # For now, manually set the colorspace types....
+            linear_textures = ['Texture6', 'Texture4']
+            if param_id in linear_textures:
+                texture_node.image.colorspace_settings.name = 'Linear'
+
+            links.new(matched_rgb_input, texture_node.outputs['Color'])
+            links.new(matched_alpha_input, texture_node.outputs['Alpha'])
+            node_count = node_count + 1
 
     return
