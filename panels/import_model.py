@@ -293,8 +293,7 @@ def create_color_sets(bm, mesh):
             for loop in face.loops:
                 # Get the index of the vertex the loop contains.
                 scale = get_color_scale(attribute_data.name)
-                print('%s %s %s' % (attribute_data.name, scale, attribute_data.data[loop.vert.index]))
-                loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
+                loop[color_layer] = attribute_data.data[loop.vert.index]
 
 
 def create_armature(skel, context):
