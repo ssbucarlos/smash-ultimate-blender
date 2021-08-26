@@ -9,6 +9,8 @@ After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (
 
 # Current Features
 1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
+2.  .NUMDLB, .NUMSHB, .NUSKTB Import And Export
+3.  .NUMATB import
 
 # Planned Features
 1. Import - Export of Models, Materials, Animations
