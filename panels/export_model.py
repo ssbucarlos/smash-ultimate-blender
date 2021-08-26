@@ -115,15 +115,24 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     if include_numdlb:
         export_numdlb(context, filepath)
     '''
+    ssbh_skel_data = None
+    if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
+        ssbh_skel_data = make_skel_no_link(context)
+    else:
+        ssbh_skel_data = make_skel(context, linked_nusktb_settings)
     
-    if include_numshb and include_numdlb:
-        export_numshb(context, filepath)
-    if include_nusktb:
-        if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
-            export_nusktb_no_link(context, filepath)
-        else:
-            export_nusktb(context, filepath, linked_nusktb_settings)
+    ssbh_modl_data = None
+    ssbh_mesh_data = None
+    ssbh_modl_data, ssbh_mesh_data = make_modl_and_mesh_data(context, ssbh_skel_data)
 
+    if include_numdlb:
+        ssbh_modl_data.save(filepath + 'model.numdlb')
+    if include_numshb:
+        ssbh_mesh_data.save(filepath + 'model.numshb')
+    if include_nusktb:
+        ssbh_skel_data.save(filepath + 'model.nusktb')
+
+'''
 def export_numdlb(context, filepath):
     arma = context.scene.sub_model_export_armature
     ssbh_model = ssbh_data_py.modl_data.ModlData()
@@ -131,7 +140,7 @@ def export_numdlb(context, filepath):
     ssbh_model.skeleton_file_name = 'model.nusktb'
     ssbh_model.material_file_names = ['model.numatb']
     ssbh_model.animation_file_name = None
-
+'''
 def get_material_label_from_mesh(mesh):
     material = mesh.material_slots[0].material
     nodes = material.node_tree.nodes
@@ -140,17 +149,26 @@ def get_material_label_from_mesh(mesh):
 
     return mat_label
 
-def export_numshb(context, filepath):
+def find_bone_index(skel, name):
+    for i, bone in enumerate(skel.bones):
+        if bone.name == name:
+            return i
+
+    return None
+
+def make_modl_and_mesh_data(context, ssbh_skel_data):
+
+    ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
+    ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
+
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
-    ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
-
-    ssbh_model_data = ssbh_data_py.modl_data.ModlData()
-    ssbh_model_data.model_name = 'model'
-    ssbh_model_data.skeleton_file_name = 'model.nusktb'
-    ssbh_model_data.material_file_names = ['model.numatb']
-    ssbh_model_data.animation_file_name = None
-    ssbh_model_data.mesh_file_name = 'model.numshb'
+    
+    ssbh_modl_data.model_name = 'model'
+    ssbh_modl_data.skeleton_file_name = 'model.nusktb'
+    ssbh_modl_data.material_file_names = ['model.numatb']
+    ssbh_modl_data.animation_file_name = None
+    ssbh_modl_data.mesh_file_name = 'model.numshb'
 
     real_mesh_name_list = []
     for mesh in export_meshes:
@@ -170,8 +188,8 @@ def export_numshb(context, filepath):
         ssbh_mesh_object_sub_index = real_mesh_name_list.count(real_mesh_name)
         real_mesh_name_list.append(real_mesh_name)
         mat_label = get_material_label_from_mesh(mesh)
-        ssbh_model_entry = ssbh_data_py.modl_data.ModlEntryData(real_mesh_name, ssbh_mesh_object_sub_index, mat_label)
-        ssbh_model_data.entries.append(ssbh_model_entry)
+        ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(real_mesh_name, ssbh_mesh_object_sub_index, mat_label)
+        ssbh_modl_data.entries.append(ssbh_modl_entry)
 
         # Back to MESH stuff
         ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(real_mesh_name, ssbh_mesh_object_sub_index)
@@ -194,10 +212,29 @@ def export_numshb(context, filepath):
         ssbh_mesh_object.vertex_indices = [index for face in mesh_data_copy.polygons for index in face.vertices]
 
         # Export Weights
+        blender_weight_layer = 0 # TODO: Research weight layers
+        
+        index_to_name_dict = {vg.index: vg.name for vg in mesh_object_copy.vertex_groups}
+       
+        bone_name_to_vertex_weights = {bone.name : [] for bone in ssbh_skel_data.bones}
 
+        for vertex in mesh_data_copy.vertices:
+            for group in vertex.groups:
+                group_index = group.group
+                weight = group.weight
+                group_name = index_to_name_dict[group_index]
+                bone_index = find_bone_index(ssbh_skel_data, group_name)
+                if bone_index is None:
+                    continue
+                ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, weight)
+                bone_name_to_vertex_weights[group_name].append(ssbh_vertex_weight)
+        
+        BoneInfluence = ssbh_data_py.mesh_data.BoneInfluence
+        ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in bone_name_to_vertex_weights.items()]
+
+            
         # Export Maps
 
-        # Bounding Sphere
 
         
         
@@ -205,11 +242,11 @@ def export_numshb(context, filepath):
         #bpy.data.objects.remove(mesh_object_copy)
         ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
-    ssbh_mesh_data.save(filepath + 'model.numshb')
-    ssbh_model_data.save(filepath + 'model.numdlb')
-    return
+    #ssbh_mesh_data.save(filepath + 'model.numshb')
+    #ssbh_model_data.save(filepath + 'model.numdlb')
+    return ssbh_modl_data, ssbh_mesh_data
 
-def export_nusktb_no_link(context, filepath):
+def make_skel_no_link(context):
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
     arma.select_set(True)
@@ -229,14 +266,14 @@ def export_nusktb_no_link(context, filepath):
             ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, edit_bone.matrix.transposed(), None)
         ssbh_skel.bones.append(ssbh_bone) 
 
-    ssbh_skel.save(filepath + 'model.nusktb')
+    #ssbh_skel.save(filepath + 'model.nusktb')
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
     bpy.context.view_layer.objects.active = None
-    return
+    return ssbh_skel
 
-def export_nusktb(context, filepath, linked_nusktb_settings):
+def make_skel(context, linked_nusktb_settings):
     '''
     Wow i wrote this terribly lol, #TODO ReWrite this
     '''
@@ -319,12 +356,12 @@ def export_nusktb(context, filepath, linked_nusktb_settings):
                     ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, blender_bone.matrix.transposed(), None)
             ssbh_skel.bones.append(ssbh_bone)    
 
-    ssbh_skel.save(filepath + 'model.nusktb')
+    #ssbh_skel.save(filepath + 'model.nusktb')
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
     bpy.context.view_layer.objects.active = None
-    return
+    return ssbh_skel
 
 
         

@@ -156,10 +156,10 @@ def import_model(self, context):
     nusktb_name = context.scene.sub_model_nusktb_file_name
     numatb_name = context.scene.sub_model_numatb_file_name
     
-    ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name)
-    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name)
-    ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name)
-    ssbh_material_json = load_numatb_json(dir + numatb_name)
+    ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
+    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name) if numshb_name != '' else None
+    ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
+    ssbh_material_json = load_numatb_json(dir + numatb_name) if numshb_name != '' else None
 
     armature = create_armature(ssbh_skel, context)
     create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
@@ -463,7 +463,10 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
     blender_mat.blend_method = 'CLIP'
     blender_mat.use_backface_culling = True
     blender_mat.show_transparent_back = False
-
+    alpha_blend_suffixes = ['_far', '_sort', '_near']
+    if any(suffix in entry['shader_label'] for suffix in alpha_blend_suffixes):
+        blender_mat.blend_method = 'BLEND'
+        
     # Clone Master Shader
     master_shader_name = master_shader.get_master_shader_name()
     master_node_group = bpy.data.node_groups.get(master_shader_name)
