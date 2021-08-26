@@ -271,6 +271,19 @@ def create_uvs(bm, mesh):
                 # Get the index of the vertex the loop contains.
                 loop[uv_layer].uv = [attribute_data.data[loop.vert.index][0], 1 - attribute_data.data[loop.vert.index][1]] # This 'Flips' the imported UVs
 
+def get_color_scale(color_set_name):
+    scale = 2 if color_set_name == 'colorSet1' else\
+            7 if color_set_name == 'colorSet2' else\
+            7 if color_set_name == 'colorSet2_1' else\
+            7 if color_set_name == 'colorSet2_2' else\
+            7 if color_set_name == 'colorSet2_3' else\
+            2 if color_set_name == 'colorSet3' else\
+            2 if color_set_name == 'colorSet4' else\
+            3 if color_set_name == 'colorSet5' else\
+            1 if color_set_name == 'colorSet6' else\
+            1 if color_set_name == 'colorSet7' else\
+            1
+    return scale
 
 def create_color_sets(bm, mesh):
     for attribute_data in mesh.color_sets:
@@ -279,7 +292,9 @@ def create_color_sets(bm, mesh):
         for face in bm.faces:
             for loop in face.loops:
                 # Get the index of the vertex the loop contains.
-                loop[color_layer] = attribute_data.data[loop.vert.index]
+                scale = get_color_scale(attribute_data.name)
+                print('%s %s %s' % (attribute_data.name, scale, attribute_data.data[loop.vert.index]))
+                loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
 
 
 def create_armature(skel, context):
