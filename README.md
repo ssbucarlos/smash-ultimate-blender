@@ -4,6 +4,9 @@ Blender Plugin containing utilities for Smash Ultimate Models and Animations.
 # Installation
 Click the 'Code' button, download the code as a .ZIP, install that .ZIP in Blender 2.93+. Do not unzip!
 
+# Usage
+After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar.
+
 # Current Features
 1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
 
