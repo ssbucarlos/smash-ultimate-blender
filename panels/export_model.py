@@ -8,6 +8,7 @@ from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator, Panel
 import re
 from ..ssbh_data_py import ssbh_data_py
+import bmesh
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -183,6 +184,8 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
         mesh_object_copy = mesh.copy() # Copy the Mesh Object
         mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
         mesh_data_copy = mesh_object_copy.data
+        #mesh_data_copy = mesh.data.copy()
+        #mesh_object_copy = bpy.data.objects.new(mesh.name, mesh_data_copy)
         real_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
 
         # Quick Detour to file out MODL stuff
@@ -195,7 +198,7 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
         # Back to MESH stuff
         ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(real_mesh_name, ssbh_mesh_object_sub_index)
         position0 = ssbh_data_py.mesh_data.AttributeData('Postion0')
-        position0.data = [list(vertex.co[:]) for vertex in mesh_data_copy.vertices] # Thanks SMG for these one-liners
+        position0.data = [list(vertex.co[:]) for vertex in mesh_data_copy.vertices] # Thanks SMG for these one-liners 
         ssbh_mesh_object.positions = [position0]
 
         normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
@@ -210,7 +213,8 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
         ssbh_mesh_object.normals = [normal0]
 
         # Python magic to flatten the faces into a single list of vertex indices.
-        ssbh_mesh_object.vertex_indices = [index for face in mesh_data_copy.polygons for index in face.vertices]
+        #ssbh_mesh_object.vertex_indices = [index for face in mesh_data_copy.polygons for index in face.vertices]
+        ssbh_mesh_object.vertex_indices = [loop.vertex_index for loop in mesh_data_copy.loops]
 
         # Export Weights
         blender_weight_layer = 0 # TODO: Research weight layers
@@ -233,9 +237,8 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
         BoneInfluence = ssbh_data_py.mesh_data.BoneInfluence
         ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in bone_name_to_vertex_weights.items()]
 
-            
-        # Export color sets
         '''
+        # Export color sets
         for vertex_color_layer in mesh_data_copy.vertex_colors:
             ssbh_color_set = ssbh_data_py.mesh_data.AttributeData(vertex_color_layer.name)
             scale = get_color_scale(vertex_color_layer.name)
@@ -247,6 +250,7 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
             
             ssbh_mesh_object.color_sets.append(ssbh_color_set)       
         '''
+        '''
         for vertex_color_layer in mesh_data_copy.vertex_colors:
             ssbh_color_set = ssbh_data_py.mesh_data.AttributeData(vertex_color_layer.name)
             vertex_index_to_vertex_color = {loop.vertex_index : vertex_color_layer.data[loop.index].color[:] for loop in mesh_data_copy.loops}
@@ -255,7 +259,49 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
             ssbh_mesh_object.color_sets.append(ssbh_color_set) 
         
         # Export UV maps
+        for uv_layer in mesh_data_copy.uv_layers:
+            ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
+            vertex_index_to_vertex_uv = {loop.vertex_index : uv_layer.data[loop.index].uv for loop in mesh_data_copy.loops}
+            ssbh_uv_layer.data = [[val[0], 1 - val[1]] for val in vertex_index_to_vertex_uv.values()]            
+            if real_mesh_name == 'TopN_1_Shape1' and ssbh_mesh_object_sub_index == 0:
+                print('%s %s' % (ssbh_uv_layer.name, len(ssbh_uv_layer.data)))
+                #print('%s %s' % (ssbh_uv_layer.name, ssbh_uv_layer.data))
+                for index, val in enumerate(ssbh_uv_layer.data):
+                    print('%s  %s' % (index, val))
+            ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
+        '''
+        '''
+        So it seems like the issue is that i can't produce a reliable mapping between vertex_index to vertex,
+        but with bmesh i can avoid the issue
+        '''
+        context.collection.objects.link(mesh_object_copy)
+        context.view_layer.update()
+        context.view_layer.objects.active = mesh_object_copy
+        bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(mesh_object_copy.data)
+        # Export UV Maps
+        for uv_layer in bm.loops.layers.uv.values():
+            ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
+            v_to_uvs = {}
+            for v in bm.verts:
+                for l in v.link_loops:
+                    uv_data = l[uv_layer]
+                    v_to_uvs[v] = uv_data.uv
+            fixed = [[uv[0], 1 - uv[1]] for uv in v_to_uvs.values()]
+            ssbh_uv_layer.data = fixed
+            ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
+        # Export Color Set 
+        for color_set_layer in bm.loops.layers.color.values():
+            ssbh_color_set = ssbh_data_py.mesh_data.AttributeData(color_set_layer.name)
+            v_to_color_set = {v : l[color_set_layer] for v in bm.verts for l in v.link_loops}
+            scale = get_color_scale(color_set_layer.name)
+            fixed = [[i / scale for i in col] for col in v_to_color_set.values()]
+            ssbh_color_set.data = fixed
+            ssbh_mesh_object.color_sets.append(ssbh_color_set)
 
+
+        bm.free()
+        bpy.ops.object.mode_set(mode='OBJECT')
 
         bpy.data.meshes.remove(mesh_data_copy)
         #bpy.data.objects.remove(mesh_object_copy)
