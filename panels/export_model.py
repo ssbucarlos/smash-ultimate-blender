@@ -1,4 +1,5 @@
 import os
+from .import_model import get_color_scale
 import bpy
 import os.path
 
@@ -233,11 +234,29 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
         ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in bone_name_to_vertex_weights.items()]
 
             
-        # Export Maps
+        # Export color sets
+        '''
+        for vertex_color_layer in mesh_data_copy.vertex_colors:
+            ssbh_color_set = ssbh_data_py.mesh_data.AttributeData(vertex_color_layer.name)
+            scale = get_color_scale(vertex_color_layer.name)
+            ssbh_color_set.data = [list(val / scale for val in vc.color[:]) for vc in vertex_color_layer.data.values()]
+            if real_mesh_name == 'TopN_1_Shape1' and ssbh_mesh_object_sub_index == 0:
+                print('%s %s' % (ssbh_color_set.name, len(ssbh_color_set.data)))
+                print('%s %s' % (ssbh_color_set.name, ssbh_color_set.data))
+
+            
+            ssbh_mesh_object.color_sets.append(ssbh_color_set)       
+        '''
+        for vertex_color_layer in mesh_data_copy.vertex_colors:
+            ssbh_color_set = ssbh_data_py.mesh_data.AttributeData(vertex_color_layer.name)
+            vertex_index_to_vertex_color = {loop.vertex_index : vertex_color_layer.data[loop.index].color[:] for loop in mesh_data_copy.loops}
+            scale = get_color_scale(vertex_color_layer.name)       
+            ssbh_color_set.data = [[index / scale for index in val] for val in vertex_index_to_vertex_color.values()]
+            ssbh_mesh_object.color_sets.append(ssbh_color_set) 
+        
+        # Export UV maps
 
 
-        
-        
         bpy.data.meshes.remove(mesh_data_copy)
         #bpy.data.objects.remove(mesh_object_copy)
         ssbh_mesh_data.objects.append(ssbh_mesh_object)
