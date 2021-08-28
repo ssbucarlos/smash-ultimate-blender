@@ -1,13 +1,19 @@
 import os
-import bpy
 import os.path
-from bpy.props import StringProperty
-
-from bpy_extras.io_utils import ImportHelper
-
+import subprocess
+import bpy
 import mathutils
 import time
 import bmesh
+import json
+
+from bpy.props import StringProperty
+from bpy_extras.io_utils import ImportHelper
+from bpy_extras import image_utils
+
+from ..operators import master_shader
+
+
 
 class ImportModelPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
@@ -145,19 +151,42 @@ class ModelImporter(bpy.types.Operator):
 def import_model(self, context):
     from ..ssbh_data_py import ssbh_data_py
     dir = context.scene.sub_model_folder_path
-    mumdlb_name = context.scene.sub_model_numdlb_file_name
+    numdlb_name = context.scene.sub_model_numdlb_file_name
     numshb_name = context.scene.sub_model_numshb_file_name
     nusktb_name = context.scene.sub_model_nusktb_file_name
     numatb_name = context.scene.sub_model_numatb_file_name
     
-    mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name)
-    skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name)
+    ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
+    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name) if numshb_name != '' else None
+    ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
+    ssbh_material_json = load_numatb_json(dir + numatb_name) if numshb_name != '' else None
 
-    armature = create_armature(skel, context)
-    create_mesh(mesh, skel, armature, context)
+    armature = create_armature(ssbh_skel, context)
+    create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
 
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
+
+def get_ssbh_lib_json_exe_path():
+    print('this_file_path = %s' % (__file__))
+    this_file_path = __file__
+    return this_file_path + '/../../ssbh_lib_json/ssbh_lib_json.exe'
+
+def load_numatb_json(numatb_path):
+    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
+    print('ssbh_lib_json_exe_path = %s' % ssbh_lib_json_exe_path)
+    output_json_path = numatb_path + '.json'
+
+    # Run ssbh_lib_json
+    subprocess.run([ssbh_lib_json_exe_path, numatb_path, output_json_path])
+
+    # Load Outputted Json
+    numatb_json = None
+    with open(output_json_path) as f:
+        numatb_json = json.load(f)
+
+    return numatb_json
+
 
 
 '''
@@ -240,8 +269,21 @@ def create_uvs(bm, mesh):
         for face in bm.faces:
             for loop in face.loops:
                 # Get the index of the vertex the loop contains.
-                loop[uv_layer].uv = attribute_data.data[loop.vert.index][:2]
+                loop[uv_layer].uv = [attribute_data.data[loop.vert.index][0], 1 - attribute_data.data[loop.vert.index][1]] # This 'Flips' the imported UVs
 
+def get_color_scale(color_set_name):
+    scale = 2 if color_set_name == 'colorSet1' else\
+            7 if color_set_name == 'colorSet2' else\
+            7 if color_set_name == 'colorSet2_1' else\
+            7 if color_set_name == 'colorSet2_2' else\
+            7 if color_set_name == 'colorSet2_3' else\
+            2 if color_set_name == 'colorSet3' else\
+            2 if color_set_name == 'colorSet4' else\
+            3 if color_set_name == 'colorSet5' else\
+            1 if color_set_name == 'colorSet6' else\
+            1 if color_set_name == 'colorSet7' else\
+            1
+    return scale
 
 def create_color_sets(bm, mesh):
     for attribute_data in mesh.color_sets:
@@ -250,7 +292,12 @@ def create_color_sets(bm, mesh):
         for face in bm.faces:
             for loop in face.loops:
                 # Get the index of the vertex the loop contains.
-                loop[color_layer] = attribute_data.data[loop.vert.index]
+                # For ease of use and to meet user expectations, vertex colors will be scaled on import
+                # For instance this will let users paint vertex colors for colorset1 without needing the user to scale
+                # This scaling will be compensated for on export in this plugin.
+                # Sadly this might break the vertex colors in external apps if exported via .FBX or .DAE
+                scale = get_color_scale(attribute_data.name)
+                loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
 
 
 def create_armature(skel, context):
@@ -336,32 +383,262 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, parent_bone_n
         modifier.object = armature
 
 
-def create_blender_mesh(mesh_object, skel):
-    blender_mesh = bpy.data.meshes.new(mesh_object.name)
+def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
+    blender_mesh = bpy.data.meshes.new(ssbh_mesh_object.name)
 
     # Using bmesh is faster than from_pydata and setting additional vertex parameters.
     bm = bmesh.new()
 
-    create_verts(bm, mesh_object, skel)
-    create_faces(bm, mesh_object)
-    create_uvs(bm, mesh_object)
-    create_color_sets(bm, mesh_object)
+    create_verts(bm, ssbh_mesh_object, skel)
+    create_faces(bm, ssbh_mesh_object)
+    create_uvs(bm, ssbh_mesh_object)
+    create_color_sets(bm, ssbh_mesh_object)
 
     bm.to_mesh(blender_mesh)
     bm.free()
 
     # Now that the mesh is created, now we can assign split custom normals
     blender_mesh.use_auto_smooth = True # Required to use custom normals
-    vertex_normals = mesh_object.normals[0].data
+    vertex_normals = ssbh_mesh_object.normals[0].data
     blender_mesh.normals_split_custom_set_from_vertices([(vn[0], vn[1], vn[2]) for vn in vertex_normals])
+
+    # Assign Tangents?
+    # Tangents are read only??
+    # Ok i spend way too much time googling this, not sure why i can't find how to assign
+    # tangents, maybe theyre just something that gets calculated....
+    
+
+
+    # Assign Material
+    material = name_index_mat_dict[ssbh_mesh_object.name][ssbh_mesh_object.sub_index]
+    blender_mesh.materials.append(material)
+    for polygon in blender_mesh.polygons:
+        polygon.material_index = blender_mesh.materials.find(material.name)
+
+
     return blender_mesh
 
+def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context):
+    '''
+    So the goal here is to create a set of materials to share among the meshes for this model.
+    But, other previously created models can have materials of the same name.
+    Gonna make sure not to conflict.
+    example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
+    '''
+    numdlb_material_labels = {e.material_label for e in ssbh_model.entries} # {blah} creates a set aka a list with no duplicates. {} creates an empty dictionary tho
+    label_to_material_dict = {} # This creates an empty Dictionary
+    
+    # Make Master Shader if its not already made
+    master_shader.create_master_shader()
 
-def create_mesh(mesh, skel, armature, context):
-    for mesh_object in mesh.objects:
-        blender_mesh = create_blender_mesh(mesh_object, skel)
-        mesh_obj = bpy.data.objects.new(blender_mesh.name, blender_mesh)
+    texture_name_to_image_dict = {}
+    texture_name_to_image_dict = import_material_images(ssbh_material_json, context)
+
+    for label in numdlb_material_labels:
+        blender_mat = bpy.data.materials.new(label)
+
+        setup_blender_mat(blender_mat, label, ssbh_material_json, texture_name_to_image_dict)
+        label_to_material_dict[label] = blender_mat
         
-        attach_armature_create_vertex_groups(mesh_obj, skel, armature, mesh_object.parent_bone_name)
+    
+    name_index_mat_dict = {}
+    for e in ssbh_model.entries:
+	    name_index_mat_dict[e.mesh_object_name] = {}
+    for e in ssbh_model.entries:
+        name_index_mat_dict[e.mesh_object_name][e.mesh_object_sub_index] = label_to_material_dict[e.material_label]
+
+    for ssbh_mesh_object in ssbh_mesh.objects:
+        blender_mesh = create_blender_mesh(ssbh_mesh_object, ssbh_skel, name_index_mat_dict)
+        mesh_obj = bpy.data.objects.new(blender_mesh.name, blender_mesh)
+
+        attach_armature_create_vertex_groups(mesh_obj, ssbh_skel, armature, ssbh_mesh_object.parent_bone_name)
 
         context.collection.objects.link(mesh_obj)
+
+def import_material_images(ssbh_material_json, context):
+    texture_name_to_image_dict = {}
+    texture_name_set = set()
+
+    ssbh_mat_entries = ssbh_material_json['data']['Matl']['entries']
+    for ssbh_mat_entry in ssbh_mat_entries:
+        attributes = ssbh_mat_entry['attributes']['Attributes16']
+        for attribute in attributes:
+            if 'Texture' in attribute['param_id']:
+                texture_name_set.add(attribute['param']['data']['MatlString'])
+
+    print('texture_name_set = %s' % texture_name_set)
+
+    for texture_name in texture_name_set:
+        dir = context.scene.sub_model_folder_path
+        image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
+        texture_name_to_image_dict[texture_name] = image
+
+    return texture_name_to_image_dict
+
+def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_name_to_image_dict):
+    ssbh_mat_entries = ssbh_material_json['data']['Matl']['entries']
+
+    entry = None
+    for ssbh_mat_entry in ssbh_mat_entries:
+        if ssbh_mat_entry['material_label'] == material_label:
+            entry = ssbh_mat_entry
+
+    # Change Mat Settings
+    # Change Transparency Stuff Later
+    blender_mat.blend_method = 'CLIP'
+    blender_mat.use_backface_culling = True
+    blender_mat.show_transparent_back = False
+    alpha_blend_suffixes = ['_far', '_sort', '_near']
+    if any(suffix in entry['shader_label'] for suffix in alpha_blend_suffixes):
+        blender_mat.blend_method = 'BLEND'
+        
+    # Clone Master Shader
+    master_shader_name = master_shader.get_master_shader_name()
+    master_node_group = bpy.data.node_groups.get(master_shader_name)
+    clone_group = master_node_group.copy()
+
+    # Setup Clone
+    clone_group.name = entry['shader_label']
+
+    # Add our new Nodes
+    blender_mat.use_nodes = True
+    nodes = blender_mat.node_tree.nodes
+    links = blender_mat.node_tree.links
+
+    # Cleanse Node Tree
+    nodes.clear()
+    
+    material_output_node = nodes.new('ShaderNodeOutputMaterial')
+    material_output_node.location = (900,0)
+    node_group_node = nodes.new('ShaderNodeGroup')
+    node_group_node.name = 'smash_ultimate_shader'
+    node_group_node.width = 600
+    node_group_node.location = (-300, 300)
+    node_group_node.node_tree = clone_group
+    for input in node_group_node.inputs:
+        input.hide = True
+    shader_label = node_group_node.inputs['Shader Label']
+    shader_label.hide = False
+    shader_label.default_value = entry['shader_label']
+    material_label = node_group_node.inputs['Material Name']
+    material_label.hide = False
+    material_label.default_value = entry['material_label']
+
+    attributes = entry['attributes']['Attributes16']
+    for attribute in attributes:
+        param_id = attribute['param_id']
+        for input in node_group_node.inputs:
+            if input.name.split(' ')[0] == param_id:
+                input.hide = False
+        if 'BlendState0' in param_id:
+            blend_state = attribute['param']['data']['BlendState']
+            source_color = blend_state['source_color']
+            unk2 = blend_state['unk2']
+            destination_color = blend_state['destination_color']
+            unk4 = blend_state['unk4']
+            unk5 = blend_state['unk5']
+            unk6 = blend_state['unk6']
+            unk7 = blend_state['unk7']
+            unk8 = blend_state['unk8']
+            unk9 = blend_state['unk9']
+            unk10 = blend_state['unk10']
+            blend_state_inputs = []
+            for input in node_group_node.inputs:
+                if input.name.split(' ')[0] == 'BlendState0':
+                    blend_state_inputs.append(input)
+            for input in blend_state_inputs:
+                field_name = input.name.split(' ')[1]
+                if field_name == 'Field1':
+                    input.default_value = source_color
+                if field_name == 'Field2':
+                    input.default_value = unk2
+                if field_name == 'Field3':
+                    input.default_value = destination_color
+                if field_name == 'Field4':
+                    input.default_value = unk4
+                if field_name == 'Field5':
+                    input.default_value = unk5
+                if field_name == 'Field6':
+                    input.default_value = unk6
+                if field_name == 'Field7':
+                    input.default_value = unk7
+                if field_name == 'Field8':
+                    input.default_value = unk8
+                if field_name == 'Field9':
+                    input.default_value = unk9
+                if field_name == 'Field10':
+                    input.default_value = unk10
+
+        if 'CustomBoolean' in param_id:
+            bool_value = attribute['param']['data']['Boolean']
+            input = node_group_node.inputs.get(param_id)
+            input.default_value = bool_value
+
+        if 'CustomFloat' in param_id:
+            float_value = attribute['param']['data']['Float']
+            input = node_group_node.inputs.get(param_id)
+            input.default_value = float_value
+        
+        if 'CustomVector' in param_id:
+            vector4 = attribute['param']['data']['Vector4']
+            x = vector4['x']
+            y = vector4['y']
+            z = vector4['z']
+            w = vector4['w']
+            inputs = []
+            for input in node_group_node.inputs:
+                if input.name.split(' ')[0] == param_id:
+                    inputs.append(input)
+            if len(inputs) == 1:
+                inputs[0].default_value = (x,y,z,w)
+            elif len(inputs) == 2:
+                for input in inputs:
+                    field = input.name.split(' ')[1]
+                    if field == 'RGB':
+                        input.default_value = (x,y,z,1)
+                    if field == 'Alpha':
+                        input.default_value = w
+            else:
+                for input in inputs:
+                    axis = input.name.split(' ')[1]
+                    if axis == 'X':
+                        input.default_value = x
+                    if axis == 'Y':
+                        input.default_value = y
+                    if axis == 'Z':
+                        input.default_value = z
+                    if axis == 'W':
+                        input.default_value = w 
+
+    links.new(material_output_node.inputs[0], node_group_node.outputs[0])
+
+    # Add image texture nodes
+    node_count = 0
+    for attribute in attributes:
+        param_id = attribute['param_id']
+        if 'Texture' in param_id:
+            texture_node = nodes.new('ShaderNodeTexImage')
+            texture_node.location = (-800, -275 * node_count + 300)
+            texture_file_name = attribute['param']['data']['MatlString']
+            texture_node.name = texture_file_name
+            texture_node.label = texture_file_name
+            texture_node.image = texture_name_to_image_dict[texture_file_name]
+            #texture_node.image = texture_file_name + '.png', context.scene.sub_model_folder_path, place_holder=True, check_existing=False, force_reload=True)
+            matched_rgb_input = None
+            matched_alpha_input = None
+            for input in node_group_node.inputs:
+                if param_id == input.name.split(' ')[0]:
+                    if 'RGB' == input.name.split(' ')[1]:
+                        matched_rgb_input = input
+                    else:
+                        matched_alpha_input = input
+            # For now, manually set the colorspace types....
+            linear_textures = ['Texture6', 'Texture4']
+            if param_id in linear_textures:
+                texture_node.image.colorspace_settings.name = 'Linear'
+
+            links.new(matched_rgb_input, texture_node.outputs['Color'])
+            links.new(matched_alpha_input, texture_node.outputs['Alpha'])
+            node_count = node_count + 1
+
+    return

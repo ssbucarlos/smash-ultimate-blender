@@ -4,10 +4,12 @@ bl_info = {
     'category': 'All',
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
-    'version': (0, 2, 0),
-    'blender': (2, 91, 0),
+    'version': (0, 9, 0),
+    'blender': (2, 93, 0),
+    'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'special thanks': 'The rokoko plugin for being the reference used to make this UI'
 }
+
 import bpy, sys
 
 from . import panels
@@ -24,6 +26,9 @@ classes = [
     panels.import_model.ImportModelPanel,
     panels.import_model.ModelFolderSelector,
     panels.import_model.ModelImporter,
+    panels.export_model.ExportModelPanel,
+    panels.export_model.ModelExporterOperator,
+    panels.export_model.VanillaNusktbSelector,
     panels.io_matl.MaterialPanel,
     panels.io_matl.SsbhLibJsonFileSelector,
     panels.io_matl.NumatbFileSelector,
@@ -55,7 +60,7 @@ def register():
 def unregister():
     print('Unloading Smash Ultimate Blender Tools')
 
-    for cls in classes:
+    for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
         except RuntimeError:

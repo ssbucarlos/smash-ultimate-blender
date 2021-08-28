@@ -264,7 +264,7 @@ class ExportSkelJson(bpy.types.Operator):
                 nullBones.append(eb[key])
             elif 'H_' in key:
                 helperBones.append(eb[key])
-            elif any(ss in key for ss in ['Mouth', 'Finger']) or key == 'Have':
+            elif any(ss in key for ss in ['Mouth', 'Finger', 'Face']) or key == 'Have':
                 miscBones.append(eb[key])
                 for child in eb[key].children_recursive:
                     if any(ss in child.name for ss in ['_eff', '_offset']):
@@ -439,7 +439,8 @@ class ExportHelperBoneJson(bpy.types.Operator):
         text = bpy.data.texts.new('SUB_HELPER_BONE_JSON')
         text.write(json.dumps(output, indent = 2))
         return {'FINISHED'}       
-        
+
+
 class SUB_UL_BoneList(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         #other_armature = get_other_armature()
@@ -500,7 +501,7 @@ class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
         row.operator(ExportHelperBoneJson.bl_idname, text='Create Helper Bone JSON Text')
         
         row = layout.row(align=True)
-        row.operator(ExportSkelJson.bl_idname, text='Create Skel Json')
+        row.label(text='To export the .NUSKTB, use the Model Exporter. Make sure to link a vanilla nusktb!!!')
 '''
 class ExoSkelProperties(bpy.types.PropertyGroup):
     smash_armature = PointerProperty(

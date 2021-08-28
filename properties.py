@@ -84,3 +84,16 @@ def register():
         type=Object,
         poll=exo_skel.poll_armatures,
     )
+
+    Scene.sub_model_export_armature = PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,
+    )
+
+    Scene.sub_vanilla_nusktb = StringProperty(
+        name='Vanilla .NUSKTB file path',
+        description='The path to the vanilla nusktb file',
+        default='',
+    )
