@@ -4,6 +4,9 @@ Blender Plugin containing utilities for Smash Ultimate Models and Animations.
 # Installation
 Click the 'Code' button, download the code as a .ZIP, install that .ZIP in Blender 2.93+. Do not unzip!
 
+# Un-Installation (Please Read!)
+TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall.
+
 # Usage
 After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar.
 
