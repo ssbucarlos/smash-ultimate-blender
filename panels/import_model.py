@@ -402,6 +402,13 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     vertex_normals = ssbh_mesh_object.normals[0].data
     blender_mesh.normals_split_custom_set_from_vertices([(vn[0], vn[1], vn[2]) for vn in vertex_normals])
 
+    # Assign Tangents?
+    # Tangents are read only??
+    # Ok i spend way too much time googling this, not sure why i can't find how to assign
+    # tangents, maybe theyre just something that gets calculated....
+    
+
+
     # Assign Material
     material = name_index_mat_dict[ssbh_mesh_object.name][ssbh_mesh_object.sub_index]
     blender_mesh.materials.append(material)

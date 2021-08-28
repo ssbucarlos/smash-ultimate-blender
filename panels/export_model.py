@@ -9,6 +9,7 @@ from bpy.types import Operator, Panel
 import re
 from ..ssbh_data_py import ssbh_data_py
 import bmesh
+import sys
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -180,7 +181,11 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
         list of potential issues that need to validate
         1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials
         '''
-        
+
+        if len(mesh.data.vertices) == 0:
+            print(f'Mesh {mesh.name} has no vertices! Skipping, but in general this should probably be deleted')
+            continue
+
         mesh_object_copy = mesh.copy() # Copy the Mesh Object
         mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
         mesh_data_copy = mesh_object_copy.data
@@ -197,7 +202,7 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
 
         # Back to MESH stuff
         ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(real_mesh_name, ssbh_mesh_object_sub_index)
-        position0 = ssbh_data_py.mesh_data.AttributeData('Postion0')
+        position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
         position0.data = [list(vertex.co[:]) for vertex in mesh_data_copy.vertices] # Thanks SMG for these one-liners 
         ssbh_mesh_object.positions = [position0]
 
@@ -211,10 +216,32 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
             index_to_normals_dict[loop.vertex_index] = loop.normal[:]
         normal0.data = [list(index_to_normals_dict[key]) for key in sorted(index_to_normals_dict.keys())]
         ssbh_mesh_object.normals = [normal0]
+        
+
+        # Calculate Tangents
+        # it is so hard to find examples of this online pls if you know how to better calculate tangents
+        # please let me know
+        tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
+        try:
+            mesh_data_copy.calc_tangents()
+        except RuntimeError as err:
+            print(f'Could Not Calculate Tangents for mesh {mesh.name}, skipping for now, err = {err}')
+            print(f'For reference, this is the meshs uvmaps{mesh.data.uv_layers.items()}')
+            print(f'and now the copies {mesh_data_copy.uv_layers.items()}')
+        else:
+            index_to_tangents_dict = {l.vertex_index : [l.tangent[0], l.tangent[1], l.tangent[2], l.bitangent_sign] for l in mesh_data_copy.loops}
+            sorted_dict = sorted(index_to_tangents_dict.items())
+            tangent0.data = [val for index, val in sorted_dict]
+            ssbh_mesh_object.tangents = [tangent0]
+
+            mesh_data_copy.free_normals_split()
+            mesh_data_copy.free_tangents()
 
         # Python magic to flatten the faces into a single list of vertex indices.
         #ssbh_mesh_object.vertex_indices = [index for face in mesh_data_copy.polygons for index in face.vertices]
         ssbh_mesh_object.vertex_indices = [loop.vertex_index for loop in mesh_data_copy.loops]
+
+
 
         # Export Weights
         blender_weight_layer = 0 # TODO: Research weight layers
