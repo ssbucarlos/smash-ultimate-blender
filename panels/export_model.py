@@ -229,7 +229,7 @@ def make_modl_and_mesh_data(context, ssbh_skel_data):
             print(f'For reference, this is the meshs uvmaps{mesh.data.uv_layers.items()}')
             print(f'and now the copies {mesh_data_copy.uv_layers.items()}')
         else:
-            index_to_tangents_dict = {l.vertex_index : [l.tangent[0], l.tangent[1], l.tangent[2], l.bitangent_sign] for l in mesh_data_copy.loops}
+            index_to_tangents_dict = {l.vertex_index : [l.tangent[0], l.tangent[1], l.tangent[2], -1.0 * l.bitangent_sign] for l in mesh_data_copy.loops}
             sorted_dict = sorted(index_to_tangents_dict.items())
             tangent0.data = [val for index, val in sorted_dict]
             ssbh_mesh_object.tangents = [tangent0]
