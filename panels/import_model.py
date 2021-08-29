@@ -6,8 +6,9 @@ import mathutils
 import time
 import bmesh
 import json
+import re
 
-from bpy.props import StringProperty
+from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
 from bpy_extras import image_utils
 
@@ -117,12 +118,19 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
         default='',
         options={'HIDDEN'}
     )
+
+    merge_same_name_meshes: BoolProperty(
+        name="Merge Same Name Meshes",
+        description="Merge Same Name Meshes",
+        default=True,
+    )
     def execute(self, context):
         context.scene.sub_model_numshb_file_name = '' 
         context.scene.sub_model_nusktb_file_name = '' 
         context.scene.sub_model_numdlb_file_name = '' 
         context.scene.sub_model_numatb_file_name = ''  
-        print(self.filepath)
+        context.scene.sub_merge_same_name_meshes = self.merge_same_name_meshes
+        #print(self.filepath)
         context.scene.sub_model_folder_path = self.filepath
         all_files = os.listdir(context.scene.sub_model_folder_path)
         model_files = [file for file in all_files if 'model' in file]
@@ -162,7 +170,24 @@ def import_model(self, context):
     ssbh_material_json = load_numatb_json(dir + numatb_name) if numshb_name != '' else None
 
     armature = create_armature(ssbh_skel, context)
-    create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
+    created_meshes = create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
+    
+    '''
+    # TODO So merging meshes in blenders and then seperating them is terrible for UV and color layer management.
+            Can't split a mesh after joining, or else all meshes will have all uv layers.
+    
+    if context.scene.sub_merge_same_name_meshes == True:
+        real_names = {re.split(r'.\d\d\d', mesh.name)[0] for mesh in created_meshes} 
+        real_name_to_meshes = {real_name: [mesh for mesh in created_meshes if real_name == re.split(r'.\d\d\d', mesh.name)[0]] for real_name in real_names}
+        for mesh_list in real_name_to_meshes.values():
+            if len(mesh_list) == 1:
+                continue
+            context.view_layer.objects.active = mesh_list[0]
+            c = {}
+            c['object'] = c['active_object'] = context.object
+            c['selected_objects'] = c['selected_editable_objects'] = mesh_list
+            bpy.ops.object.join(c)  
+    '''
 
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
@@ -425,6 +450,8 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
     Gonna make sure not to conflict.
     example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
     '''
+    created_meshes = []
+    
     numdlb_material_labels = {e.material_label for e in ssbh_model.entries} # {blah} creates a set aka a list with no duplicates. {} creates an empty dictionary tho
     label_to_material_dict = {} # This creates an empty Dictionary
     
@@ -454,6 +481,9 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
         attach_armature_create_vertex_groups(mesh_obj, ssbh_skel, armature, ssbh_mesh_object.parent_bone_name)
 
         context.collection.objects.link(mesh_obj)
+        created_meshes.append(mesh_obj)
+    
+    return created_meshes
 
 def import_material_images(ssbh_material_json, context):
     texture_name_to_image_dict = {}

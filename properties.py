@@ -97,3 +97,9 @@ def register():
         description='The path to the vanilla nusktb file',
         default='',
     )
+
+    Scene.sub_merge_same_name_meshes = BoolProperty(
+        name='merge_same_name_meshes',
+        description='Wether to merge same name meshes',
+        default=True,
+    )

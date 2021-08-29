@@ -126,7 +126,8 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     
     ssbh_modl_data = None
     ssbh_mesh_data = None
-    ssbh_modl_data, ssbh_mesh_data = make_modl_and_mesh_data(context, ssbh_skel_data)
+    ssbh_matl_json = None
+    ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json= make_modl_mesh_matl_data(context, ssbh_skel_data)
 
     if include_numdlb:
         ssbh_modl_data.save(filepath + 'model.numdlb')
@@ -134,6 +135,11 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
         ssbh_mesh_data.save(filepath + 'model.numshb')
     if include_nusktb:
         ssbh_skel_data.save(filepath + 'model.nusktb')
+    if include_numatb:
+        save_matl_json(ssbh_matl_json)
+
+def save_matl_json(ssbh_matl_json):
+    return
 
 '''
 def export_numdlb(context, filepath):
@@ -159,21 +165,33 @@ def find_bone_index(skel, name):
 
     return None
 
-def make_modl_and_mesh_data(context, ssbh_skel_data):
+def make_modl_mesh_matl_data(context, ssbh_skel_data):
 
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
+    ssbh_matl_data = None
 
-    arma = context.scene.sub_model_export_armature
-    export_meshes = [child for child in arma.children if child.type == 'MESH']
-    
     ssbh_modl_data.model_name = 'model'
     ssbh_modl_data.skeleton_file_name = 'model.nusktb'
     ssbh_modl_data.material_file_names = ['model.numatb']
     ssbh_modl_data.animation_file_name = None
     ssbh_modl_data.mesh_file_name = 'model.numshb'
 
+    arma = context.scene.sub_model_export_armature
+    export_meshes = [child for child in arma.children if child.type == 'MESH']
+    export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
+    
+    '''
+    # TODO split meshes
+    Potential uv_layer clean_up code?
+    remove = [uv_layer for uv_layer in mesh.data.uv_layers if all([uv == 0.0 for data in uv_layer.data for uv in data.uv])]
+    for l in remove:
+        mesh.data.uv_layers.remove(l)
+    '''
+    
     real_mesh_name_list = []
+
+    
     for mesh in export_meshes:
         '''
         Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
