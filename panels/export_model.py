@@ -180,7 +180,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
-    
+
     '''
     # TODO split meshes
     Potential uv_layer clean_up code?
@@ -188,10 +188,10 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
     for l in remove:
         mesh.data.uv_layers.remove(l)
     '''
+    #  Gather Material Info
     
-    real_mesh_name_list = []
 
-    
+    real_mesh_name_list = []
     for mesh in export_meshes:
         '''
         Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
@@ -199,11 +199,6 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
         list of potential issues that need to validate
         1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials
         '''
-
-        if len(mesh.data.vertices) == 0:
-            print(f'Mesh {mesh.name} has no vertices! Skipping, but in general this should probably be deleted')
-            continue
-
         mesh_object_copy = mesh.copy() # Copy the Mesh Object
         mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
         mesh_data_copy = mesh_object_copy.data
