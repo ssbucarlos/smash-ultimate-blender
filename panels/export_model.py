@@ -165,11 +165,15 @@ def find_bone_index(skel, name):
 
     return None
 
+def make_matl_json(materials):
+    matl_json = None
+    return matl_json
+
 def make_modl_mesh_matl_data(context, ssbh_skel_data):
 
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
-    ssbh_matl_data = None
+    ssbh_matl_json = None
 
     ssbh_modl_data.model_name = 'model'
     ssbh_modl_data.skeleton_file_name = 'model.nusktb'
@@ -189,7 +193,8 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
         mesh.data.uv_layers.remove(l)
     '''
     #  Gather Material Info
-    
+    materials = {mesh.data.materials[0] for mesh in export_meshes}
+    ssbh_matl_json = make_matl_json(materials)
 
     real_mesh_name_list = []
     for mesh in export_meshes:
@@ -349,7 +354,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
 
     #ssbh_mesh_data.save(filepath + 'model.numshb')
     #ssbh_model_data.save(filepath + 'model.numdlb')
-    return ssbh_modl_data, ssbh_mesh_data
+    return ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json
 
 def make_skel_no_link(context):
     arma = context.scene.sub_model_export_armature

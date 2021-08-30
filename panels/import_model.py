@@ -118,12 +118,15 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
         default='',
         options={'HIDDEN'}
     )
-
+    """
+    Cancelled until further notice.
     merge_same_name_meshes: BoolProperty(
         name="Merge Same Name Meshes",
         description="Merge Same Name Meshes",
         default=True,
-    )
+    )   
+    """
+
     def execute(self, context):
         context.scene.sub_model_numshb_file_name = '' 
         context.scene.sub_model_nusktb_file_name = '' 
