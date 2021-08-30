@@ -5,7 +5,7 @@ Blender Plugin that (will eventually contatin) utilities for Smash Ultimate Mode
 Click the 'Code' button, download the code as a .ZIP, install that .ZIP in Blender 2.93+. Do not unzip!
 
 # Un-Installation / Updating (Please Read!)
-TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then u can install the newest version
+TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then u can install the newest version.
 
 # Usage
 1. Before you import a model, make sure all the textures have been converted to .PNGs. The recommended tool for this is 'Switch Toolbox' (https://github.com/KillzXGaming/Switch-Toolbox)
