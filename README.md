@@ -8,8 +8,8 @@ Click the 'Code' button, download the code as a .ZIP, install that .ZIP in Blend
 TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall.
 
 # Usage
-Before you import a model, make sure all the textures have been converted to .PNGs. The recommended tool for this is 'Switch Toolbox' (https://github.com/KillzXGaming/Switch-Toolbox)
-After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar.
+1. Before you import a model, make sure all the textures have been converted to .PNGs. The recommended tool for this is 'Switch Toolbox' (https://github.com/KillzXGaming/Switch-Toolbox)
+2. After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar.
 
 
 # Current Features
