@@ -33,6 +33,7 @@ def create_master_shader():
     input = node_group_node.inputs.new('NodeSocketString', 'Shader Label')
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture0 RGB (Col Map Layer 1)')
     input = node_group_node.inputs.new('NodeSocketFloat', 'Texture0 Alpha (Col Map Layer 1)')
+    input.default_value = 1.0
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture1 RGB (Col Map Layer 2)')
     input = node_group_node.inputs.new('NodeSocketFloat', 'Texture1 Alpha (Col Map Layer 2)')
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture2 RGB (Irradiance Cube Map)')
