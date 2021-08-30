@@ -4,7 +4,7 @@ Blender Plugin that (will eventually contatin) utilities for Smash Ultimate Mode
 # Installation
 Click the 'Code' button, download the code as a .ZIP, install that .ZIP in Blender 2.93+. Do not unzip!
 
-# Un-Installation (Please Read!)
+# Un-Installation / Updating (Please Read!)
 TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall.
 
 # Usage
