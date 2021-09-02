@@ -166,7 +166,122 @@ def find_bone_index(skel, name):
     return None
 
 def make_matl_json(materials):
-    matl_json = None
+    matl_json = {}
+    matl_json['data'] = {}
+    matl_json['data']['Matl'] = {}
+    matl_json['data']['Matl']['major_version'] = 1
+    matl_json['data']['Matl']['minor_version'] = 6
+    matl_json['data']['Matl']['entries'] = []
+    entries = matl_json['data']['Matl']['entries']
+
+    for material in materials:
+        node = material.node_tree.nodes.get(material.node_tree.nodes.get('smash_ultimate_shader'), None)
+        if node is None:
+            raise RuntimeError(f'The material {material.name} does not have the smash ultimate shader, cannot export materials!')
+        entry = {}
+        entry['material_label'] = node.inputs['Material Name'].default_value
+        entry['attributes'] = {}
+        entry['attributes']['Attributes16'] = []
+        attributes16 = entry['attributes']['Attributes16']
+        inputs = [input for input in node.inputs if node.input.hide == False]
+        skip = ['Material Name', 'Shader Label']
+
+        for input in inputs:
+            attribute = {}
+            name = input.name
+            if name in skip:
+                continue
+            elif 'BlendState0 Field1 (Source Color)' == name:
+                attribute['param_id'] = 'BlendState0'
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['BlendState'] = {}
+                attribute['param']['data']['BlendState']['source_color'] = node.inputs['BlendState0 Field1 (Source Color)'].default_value
+                attribute['param']['data']['BlendState']['unk2'] = node.inputs['BlendState0 Field2 (Unk2)'].default_value
+                attribute['param']['data']['BlendState']['destination_color'] = node.inputs['BlendState0 Field3 (Destination Color)'].default_value
+                attribute['param']['data']['BlendState']['unk4'] = node.inputs['BlendState0 Field4 (Unk4)'].default_value
+                attribute['param']['data']['BlendState']['unk5'] = node.inputs['BlendState0 Field5 (Unk5)'].default_value
+                attribute['param']['data']['BlendState']['unk6'] = node.inputs['BlendState0 Field6 (Unk6)'].default_value
+                attribute['param']['data']['BlendState']['unk7'] = node.inputs['BlendState0 Field7 (Alpha To Coverage)'].default_value
+                attribute['param']['data']['BlendState']['unk8'] = node.inputs['BlendState0 Field8 (Unk8)'].default_value
+                attribute['param']['data']['BlendState']['unk9'] = node.inputs['BlendState0 Field9 (Unk9)'].default_value
+                attribute['param']['data']['BlendState']['unk10'] = node.inputs['BlendState0 Field10 (Unk10)'].default_value
+                attribute['param']['data_type'] = 17
+                
+            elif 'RasterizerState' in name:
+                attribute['param_id'] = 'RasterizerState0'
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['RasterizerState'] = {}
+                attribute['param']['data']['RasterizerState']['fill_mode'] = node.inputs['RasterizerState0 Field1 (Polygon Fill)'].default_value
+                attribute['param']['data']['RasterizerState']['cull_mode'] = node.inputs['RasterizerState0 Field2 (Cull Mode)'].default_value
+                attribute['param']['data']['RasterizerState']['depth_bias'] = node.inputs['RasterizerState0 Field3 (Depth Bias)'].default_value
+                attribute['param']['data']['RasterizerState']['unk4'] = node.inputs['RasterizerState0 Field4 (Unk4)'].default_value
+                attribute['param']['data']['RasterizerState']['unk5'] = node.inputs['RasterizerState0 Field5 (Unk5)'].default_value
+                attribute['param']['data']['RasterizerState']['unk6'] = node.inputs['RasterizerState0 Field6 (Unk6)'].default_value
+                attribute['param']['data_type'] = 18
+
+            elif 'Texture' in name.split(' ')[0]:
+                sampler_number = name.split(' ')[0].split('Texture')[1]
+                texture_and_number = name.split(' ')[0]
+                attribute['param_id'] = texture_and_number
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                texture_node = input.links[0].from_node
+                texture_name = texture_node.label
+                attribute['param']['data']['MatlString'] = texture_name
+                attribute['param']['data_type'] = 11
+                # Sampler Hack for now....
+                sampler_attribute = {}
+                sampler_attribute['param_id'] = f'Sampler{sampler_number}'
+                sampler_attribute['param'] = {}
+                sampler_attribute['param']['data'] = {}
+                sampler_attribute['param']['data']['Sampler'] = {}
+                sampler_attribute['param']['data']['Sampler']['wraps'] = 'Repeat'
+                sampler_attribute['param']['data']['Sampler']['wrapt'] = 'Repeat'
+                sampler_attribute['param']['data']['Sampler']['wrapr'] = 'Repeat'
+                sampler_attribute['param']['data']['Sampler']['min_filter'] = 'LinearMipmapLinear'
+                sampler_attribute['param']['data']['Sampler']['mag_filter'] = 'Linear'
+                sampler_attribute['param']['data']['Sampler']['texture_filtering_type'] = 'AnisotropicFiltering'
+                sampler_attribute['param']['data']['Sampler']['border_color'] = {}
+                sampler_attribute['param']['data']['Sampler']['border_color']['r'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['border_color']['g'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['border_color']['b'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['border_color']['a'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['unk11'] = 0
+                sampler_attribute['param']['data']['Sampler']['unk12'] = 2139095022
+                sampler_attribute['param']['data']['Sampler']['lod_bias'] = -2.0
+                sampler_attribute['param']['data']['Sampler']['max_anisotropy'] = 4
+                sampler_attribute['param']['data_type'] = 14
+                attributes16.append(sampler_attribute)
+
+            elif 'Sampler' in name.split(' ')[0]:
+                # Theres no sampler input nodes or anything like that atm....
+                pass
+            elif 'Boolean' in name.split(' ')[0]:
+                attribute['param_id'] = name.split(' ')[0]
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['Boolean'] = 1 if input.default_value == True else 0
+                attribute['param']['data_type'] = 11
+                
+            elif 'Float' in name.split(' ')[0]:
+                pass
+            elif 'Vector' in name.split(' ')[0]:
+                attribute['param_id'] = name.split(' ')[0]
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['Vector4'] = {}
+                attribute['param']['data_type'] = 11
+                if name == 'CustomVector0 X (Min Texture Alpha)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
+            attributes16.append(attribute)
+        
+        entry['shader_label'] = node.inputs['Shader Label'].default_value
+        entries.append(entry)
     return matl_json
 
 def make_modl_mesh_matl_data(context, ssbh_skel_data):

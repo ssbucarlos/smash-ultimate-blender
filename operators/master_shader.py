@@ -235,9 +235,9 @@ def create_master_shader():
     input.default_value = 0
     input = node_group_node.inputs.new('NodeSocketInt', 'RasterizerState0 Field4 (Unk4)')
     input.default_value = 0
-    input = node_group_node.inputs.new('NodeSocketInt', 'RasterizerState0 Field1 (Unk5)')
+    input = node_group_node.inputs.new('NodeSocketInt', 'RasterizerState0 Field5 (Unk5)')
     input.default_value = 0
-    input = node_group_node.inputs.new('NodeSocketInt', 'RasterizerState0 Field1 (Unk6)')
+    input = node_group_node.inputs.new('NodeSocketInt', 'RasterizerState0 Field6 (Unk6)')
     input.default_value = 16777217
 
 
