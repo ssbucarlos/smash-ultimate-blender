@@ -1,5 +1,5 @@
 # smash-ultimate-blender
-Blender Plugin that (will eventually contatin) utilities for Smash Ultimate Models and Animations.
+Blender Plugin that (will eventually contain) utilities for Smash Ultimate Models and Animations.
 
 # Installation
 Click the 'Code' button, download the code as a .ZIP, install that .ZIP in Blender 2.93+. Do not unzip!
