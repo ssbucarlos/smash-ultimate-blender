@@ -130,7 +130,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     ssbh_modl_data = None
     ssbh_mesh_data = None
     ssbh_matl_json = None
-    ssbh_modl_data, ssbh_mesh_data = make_modl_mesh_matl_data(context, ssbh_skel_data)
+    ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json = make_modl_mesh_matl_data(context, ssbh_skel_data)
 
     if include_numdlb:
         ssbh_modl_data.save(filepath + 'model.numdlb')
