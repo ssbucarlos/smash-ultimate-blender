@@ -288,11 +288,11 @@ def create_master_shader():
     color_map_mix_node = inner_nodes.new('ShaderNodeMixRGB')
     color_map_mix_node.name = 'ColorMapLayerMixer'
     color_map_mix_node.label = 'ColorMapLayerMixer'
-    color_map_mix_node.location = (-900,0)
+    color_map_mix_node.location = (-650,0)
     color_map_mix_node.parent = diffuse_frame
     inner_links.new(color_map_mix_node.inputs['Color1'], diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
     inner_links.new(color_map_mix_node.inputs['Color2'], diffuse_input_node.outputs['Texture1 RGB (Col Map Layer 2)'])
-    inner_links.new(color_map_mix_node.inputs['Fac'], diffuse_input_node.outputs['Texture1 Alpha (Col Map Layer 2)'])
+    #inner_links.new(color_map_mix_node.inputs['Fac'], diffuse_input_node.outputs['Texture1 Alpha (Col Map Layer 2)'])
     inner_links.new(fake_sss_color_node.inputs['Color1'], color_map_mix_node.outputs['Color'])
     df_separate_prm_rgb_node = inner_nodes.new('ShaderNodeSeparateRGB')
     df_separate_prm_rgb_node.name = 'df_separate_prm_rgb_node'
@@ -301,6 +301,37 @@ def create_master_shader():
     df_separate_prm_rgb_node.location = (-900, -200)
     inner_links.new(fake_sss_factor_node.inputs[0], df_separate_prm_rgb_node.outputs['R'])
     inner_links.new(df_separate_prm_rgb_node.inputs['Image'], diffuse_input_node.outputs['Texture6 RGB (PRM Map)'])
+    color_set_5_node = inner_nodes.new('ShaderNodeVertexColor')
+    color_set_5_node.name = 'color_set_5_node'
+    color_set_5_node.label = 'Color Set 5'
+    color_set_5_node.parent = diffuse_frame
+    color_set_5_node.location = (-1200, 300)
+    color_set_5_node.layer_name = 'colorSet5'
+    
+    one_minus_color_set_5_node = inner_nodes.new('ShaderNodeMath')
+    one_minus_color_set_5_node.name = 'one_minus_color_set_5_node'
+    one_minus_color_set_5_node.label = '1 - Alpha'
+    one_minus_color_set_5_node.parent = diffuse_frame
+    one_minus_color_set_5_node.location = (-1000, 200)
+    one_minus_color_set_5_node.operation = 'SUBTRACT'
+    one_minus_color_set_5_node.inputs[0].default_value = 1.0
+    one_minus_color_set_5_node.use_clamp = True
+
+    layer_2_alpha_minus_col_set_5 = inner_nodes.new('ShaderNodeMath')
+    layer_2_alpha_minus_col_set_5.name = 'layer_2_alpha_minus_col_set_5'
+    layer_2_alpha_minus_col_set_5.label = 'Texture Blend'
+    layer_2_alpha_minus_col_set_5.parent = diffuse_frame
+    layer_2_alpha_minus_col_set_5.location = (-800, 100)
+    layer_2_alpha_minus_col_set_5.operation = 'SUBTRACT'
+    layer_2_alpha_minus_col_set_5.use_clamp = True
+
+    inner_links.new(one_minus_color_set_5_node.inputs[1], color_set_5_node.outputs['Alpha'])
+    inner_links.new(layer_2_alpha_minus_col_set_5.inputs[0], diffuse_input_node.outputs['Texture1 Alpha (Col Map Layer 2)'])
+    inner_links.new(layer_2_alpha_minus_col_set_5.inputs[1], one_minus_color_set_5_node.outputs[0])
+    inner_links.new(color_map_mix_node.inputs['Fac'], layer_2_alpha_minus_col_set_5.outputs[0])
+
+
+
     for output in diffuse_input_node.outputs:
         if output.is_linked is False:
             output.hide = True
@@ -433,9 +464,18 @@ def create_master_shader():
     emission_multiply.location = (-600, -400)
     emission_multiply.blend_type = 'MULTIPLY'
     emission_multiply.inputs[0].default_value = 1.0
-    inner_links.new(emission_multiply.inputs['Color1'], emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
+    #inner_links.new(emission_multiply.inputs['Color1'], emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
     inner_links.new(emission_multiply.inputs['Color2'], emission_group_input.outputs['CustomVector3 (Emission Color Multiplier)'] )
     inner_links.new(shader_node.inputs['Emission'], emission_multiply.outputs['Color'])
+    emission_mix_rgb = inner_nodes.new('ShaderNodeMixRGB')
+    emission_mix_rgb.name = 'emission_mix_rgb'
+    emission_mix_rgb.label = 'Emission Layer Mixer'
+    emission_mix_rgb.parent = emission_frame
+    emission_mix_rgb.location = (-900, -400)
+    inner_links.new(emission_mix_rgb.inputs['Fac'], emission_group_input.outputs['Texture14 Alpha (Emissive Map Layer 2)'])
+    inner_links.new(emission_mix_rgb.inputs['Color1'], emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
+    inner_links.new(emission_mix_rgb.inputs['Color2'], emission_group_input.outputs['Texture14 RGB (Emissive Map Layer 2)'])
+    inner_links.new(emission_multiply.inputs['Color1'], emission_mix_rgb.outputs[0])
     for output in emission_group_input.outputs:
         if output.is_linked is False:
             output.hide = True
