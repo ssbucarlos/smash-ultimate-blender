@@ -1,5 +1,5 @@
 import os
-from .import_model import get_color_scale
+from .import_model import get_color_scale, get_ssbh_lib_json_exe_path
 import bpy
 import os.path
 
@@ -10,6 +10,9 @@ import re
 from ..ssbh_data_py import ssbh_data_py
 import bmesh
 import sys
+import json
+import subprocess
+
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -136,9 +139,15 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     if include_nusktb:
         ssbh_skel_data.save(filepath + 'model.nusktb')
     if include_numatb:
-        save_matl_json(ssbh_matl_json)
+        save_matl_json(ssbh_matl_json, filepath + 'model.numatb')
 
-def save_matl_json(ssbh_matl_json):
+def save_matl_json(ssbh_matl_json, output_file_path):
+    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
+    dumped_json_file_path = output_file_path + '.tmp.json'
+    with open(dumped_json_file_path, 'w') as f:
+        json.dump(ssbh_matl_json, f, indent=2)
+    subprocess.run([ssbh_lib_json_exe_path, dumped_json_file_path, output_file_path])
+    os.remove(dumped_json_file_path)
     return
 
 '''
@@ -165,11 +174,443 @@ def find_bone_index(skel, name):
 
     return None
 
+def make_matl_json(materials):
+    matl_json = {}
+    matl_json['data'] = {}
+    matl_json['data']['Matl'] = {}
+    matl_json['data']['Matl']['major_version'] = 1
+    matl_json['data']['Matl']['minor_version'] = 6
+    matl_json['data']['Matl']['entries'] = []
+    entries = matl_json['data']['Matl']['entries']
+
+    for material in materials:
+        node = material.node_tree.nodes.get('smash_ultimate_shader', None)
+        if node is None:
+            raise RuntimeError(f'The material {material.name} does not have the smash ultimate shader, cannot export materials!')
+        entry = {}
+        entry['material_label'] = node.inputs['Material Name'].default_value
+        entry['attributes'] = {}
+        entry['attributes']['Attributes16'] = []
+        attributes16 = entry['attributes']['Attributes16']
+        inputs = [input for input in node.inputs if input.hide == False]
+        skip = ['Material Name', 'Shader Label']
+
+        for input in inputs:
+            attribute = {}
+            name = input.name
+            if name in skip:
+                continue
+            elif 'BlendState0 Field1 (Source Color)' == name:
+                attribute['param_id'] = 'BlendState0'
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['BlendState'] = {}
+                attribute['param']['data']['BlendState']['source_color'] = node.inputs['BlendState0 Field1 (Source Color)'].default_value
+                attribute['param']['data']['BlendState']['unk2'] = node.inputs['BlendState0 Field2 (Unk2)'].default_value
+                attribute['param']['data']['BlendState']['destination_color'] = node.inputs['BlendState0 Field3 (Destination Color)'].default_value
+                attribute['param']['data']['BlendState']['unk4'] = node.inputs['BlendState0 Field4 (Unk4)'].default_value
+                attribute['param']['data']['BlendState']['unk5'] = node.inputs['BlendState0 Field5 (Unk5)'].default_value
+                attribute['param']['data']['BlendState']['unk6'] = node.inputs['BlendState0 Field6 (Unk6)'].default_value
+                attribute['param']['data']['BlendState']['unk7'] = node.inputs['BlendState0 Field7 (Alpha to Coverage)'].default_value
+                attribute['param']['data']['BlendState']['unk8'] = node.inputs['BlendState0 Field8 (Unk8)'].default_value
+                attribute['param']['data']['BlendState']['unk9'] = node.inputs['BlendState0 Field9 (Unk9)'].default_value
+                attribute['param']['data']['BlendState']['unk10'] = node.inputs['BlendState0 Field10 (Unk10)'].default_value
+                attribute['param']['data_type'] = 17
+                
+            elif 'RasterizerState0 Field1 (Polygon Fill)' == name:
+                attribute['param_id'] = 'RasterizerState0'
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['RasterizerState'] = {}
+                attribute['param']['data']['RasterizerState']['fill_mode'] = 'Line' if node.inputs['RasterizerState0 Field1 (Polygon Fill)'].default_value == 0 else 'Solid'
+                attribute['param']['data']['RasterizerState']['cull_mode'] = 'Back' if node.inputs['RasterizerState0 Field2 (Cull Mode)'].default_value == 0 else\
+                                                                             'Front' if node.inputs['RasterizerState0 Field2 (Cull Mode)'].default_value == 1 else\
+                                                                             'FrontAndBack'  
+                attribute['param']['data']['RasterizerState']['depth_bias'] = node.inputs['RasterizerState0 Field3 (Depth Bias)'].default_value
+                attribute['param']['data']['RasterizerState']['unk4'] = node.inputs['RasterizerState0 Field4 (Unk4)'].default_value
+                attribute['param']['data']['RasterizerState']['unk5'] = node.inputs['RasterizerState0 Field5 (Unk5)'].default_value
+                attribute['param']['data']['RasterizerState']['unk6'] = node.inputs['RasterizerState0 Field6 (Unk6)'].default_value
+                attribute['param']['data_type'] = 18
+
+            elif 'Texture' in name.split(' ')[0] and 'RGB' in name.split(' ')[1]:
+                sampler_number = name.split(' ')[0].split('Texture')[1]
+                texture_and_number = name.split(' ')[0]
+                attribute['param_id'] = texture_and_number
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                texture_node = input.links[0].from_node
+                texture_name = texture_node.label
+                attribute['param']['data']['MatlString'] = texture_name
+                attribute['param']['data_type'] = 11
+                # Sampler Hack for now....
+                sampler_attribute = {}
+                sampler_attribute['param_id'] = f'Sampler{sampler_number}'
+                sampler_attribute['param'] = {}
+                sampler_attribute['param']['data'] = {}
+                sampler_attribute['param']['data']['Sampler'] = {}
+                sampler_attribute['param']['data']['Sampler']['wraps'] = 'Repeat'
+                sampler_attribute['param']['data']['Sampler']['wrapt'] = 'Repeat'
+                sampler_attribute['param']['data']['Sampler']['wrapr'] = 'Repeat'
+                sampler_attribute['param']['data']['Sampler']['min_filter'] = 'LinearMipmapLinear'
+                sampler_attribute['param']['data']['Sampler']['mag_filter'] = 'Linear'
+                sampler_attribute['param']['data']['Sampler']['texture_filtering_type'] = 'AnisotropicFiltering'
+                sampler_attribute['param']['data']['Sampler']['border_color'] = {}
+                sampler_attribute['param']['data']['Sampler']['border_color']['r'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['border_color']['g'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['border_color']['b'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['border_color']['a'] = 0.0
+                sampler_attribute['param']['data']['Sampler']['unk11'] = 0
+                sampler_attribute['param']['data']['Sampler']['unk12'] = 2139095022
+                sampler_attribute['param']['data']['Sampler']['lod_bias'] = -2.0
+                sampler_attribute['param']['data']['Sampler']['max_anisotropy'] = 4
+                sampler_attribute['param']['data_type'] = 14
+                attributes16.append(sampler_attribute)
+
+            elif 'Sampler' in name.split(' ')[0]:
+                # Theres no sampler input nodes or anything like that atm....
+                pass
+            elif 'Boolean' in name.split(' ')[0]:
+                attribute['param_id'] = name.split(' ')[0]
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['Boolean'] = 1 if input.default_value == True else 0
+                attribute['param']['data_type'] = 2
+                
+            elif 'Float' in name.split(' ')[0]:
+                attribute['param_id'] = name.split(' ')[0]
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['Float'] = input.default_value
+                attribute['param']['data_type'] = 1
+
+            elif 'Vector' in name.split(' ')[0]:
+                attribute['param_id'] = name.split(' ')[0]
+                attribute['param'] = {}
+                attribute['param']['data'] = {}
+                attribute['param']['data']['Vector4'] = {}
+                attribute['param']['data_type'] = 5
+                # Im sorry
+                print(f'Name = {name}') # DEBUG
+                if name == 'CustomVector0 X (Min Texture Alpha)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector0 Y (???)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector0 Z (???)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector0 W (???)'].default_value
+                elif name == 'CustomVector1':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector1'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector1'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector1'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector1'].default_value[3]
+                elif name == 'CustomVector2':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector2'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector2'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector2'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector2'].default_value[3]
+                elif name == 'CustomVector3 (Emission Color Multiplier)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[3]
+                elif name == 'CustomVector4':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector4'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector4'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector4'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector4'].default_value[3]
+                elif name == 'CustomVector5':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector5'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector5'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector5'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector5'].default_value[3]
+                elif name == 'CustomVector6 X (UV Transform Layer 1)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector6 X (UV Transform Layer 1)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector6 Y (UV Transform Layer 1)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector6 Z (UV Transform Layer 1)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector6 W (UV Transform Layer 1)'].default_value
+                elif name == 'CustomVector7':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector7'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector7'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector7'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector7'].default_value[3]
+                elif name == 'CustomVector8 (Final Color Multipler)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[3]
+                elif name == 'CustomVector9':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector9'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector9'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector9'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector9'].default_value[3]
+                elif name == 'CustomVector10':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector10'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector10'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector10'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector10'].default_value[3]
+                elif name == 'CustomVector11 (Fake SSS Color)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[3]
+                elif name == 'CustomVector12':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector12'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector12'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector12'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector12'].default_value[3]
+                elif name == 'CustomVector13 (Diffuse Color Multiplier)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[3]
+                elif name == 'CustomVector14 RGB (Rim Lighting Color)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector14 Alpha (Rim Lighting Blend Factor)'].default_value
+                elif name == 'CustomVector15 RGB':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector15 RGB'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector15 RGB'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector15 RGB'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector15 Alpha'].default_value
+                elif name == 'CustomVector16':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector16'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector16'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector16'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector16'].default_value[3]
+                elif name == 'CustomVector17':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector17'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector17'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector17'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector17'].default_value[3]
+                elif name == 'CustomVector18 X (Sprite Sheet Column Count)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector18 X (Sprite Sheet Column Count)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector18 Y (Sprite Sheet Row Count)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector18 Z (Sprite Sheet Frames Per Sprite)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector18 W (Sprite Sheet Sprite Count)'].default_value
+                elif name == 'CustomVector19':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector19'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector19'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector19'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector19'].default_value[3]
+                elif name == 'CustomVector20':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector20'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector20'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector20'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector20'].default_value[3]
+                elif name == 'CustomVector21':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector21'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector21'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector21'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector21'].default_value[3]
+                elif name == 'CustomVector22':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector22'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector22'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector22'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector22'].default_value[3]
+                elif name == 'CustomVector23':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector23'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector23'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector23'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector23'].default_value[3]
+                elif name == 'CustomVector24':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector24'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector24'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector24'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector24'].default_value[3]
+                elif name == 'CustomVector25':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector25'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector25'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector25'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector25'].default_value[3]
+                elif name == 'CustomVector26':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector26'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector26'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector26'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector26'].default_value[3]
+                elif name == 'CustomVector27 (Controls Distant Fog, X = Intensity)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[3]
+                elif name == 'CustomVector28':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector28'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector28'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector28'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector28'].default_value[3]
+                elif name == 'CustomVector29':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector29'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector29'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector29'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector29'].default_value[3]
+                elif name == 'CustomVector30 X (SSS Blend Factor)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector30 X (SSS Blend Factor)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector30 Y (SSS Diffuse Shading Smooth Factor)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector30 Z (Unused)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector30 W (Unused)'].default_value
+                elif name == 'CustomVector31 X (UV Transform Layer 2)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector31 X (UV Transform Layer 2)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector31 Y (UV Transform Layer 2)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector31 Z (UV Transform Layer 2)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector31 W (UV Transform Layer 2)'].default_value
+                elif name == 'CustomVector32 X (UV Transform Layer 3)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector32 X (UV Transform Layer 3)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector32 Y (UV Transform Layer 3)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector32 Z (UV Transform Layer 3)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector32 W (UV Transform Layer 3)'].default_value
+                elif name == 'CustomVector33 X (UV Transform ?)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector33 X (UV Transform ?)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector33 Y (UV Transform ?)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector33 Z (UV Transform ?)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector33 W (UV Transform ?)'].default_value
+                elif name == 'CustomVector34 X (UV Transform ?)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector34 X (UV Transform ?)'].default_value
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector34 Y (UV Transform ?)'].default_value
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector34 Z (UV Transform ?)'].default_value
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector34 W (UV Transform ?)'].default_value
+                elif name == 'CustomVector35':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector35'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector35'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector35'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector35'].default_value[3]
+                elif name == 'CustomVector36':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector36'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector36'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector36'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector36'].default_value[3]
+                elif name == 'CustomVector37':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector37'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector37'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector37'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector37'].default_value[3]
+                elif name == 'CustomVector38':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector38'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector38'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector38'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector38'].default_value[3]
+                elif name == 'CustomVector39':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector39'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector39'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector39'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector39'].default_value[3]
+                elif name == 'CustomVector40':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector40'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector40'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector40'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector40'].default_value[3]
+                elif name == 'CustomVector41':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector41'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector41'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector41'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector41'].default_value[3]
+                elif name == 'CustomVector42':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector42'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector42'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector42'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector42'].default_value[3]
+                elif name == 'CustomVector43':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector43'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector43'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector43'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector43'].default_value[3]
+                elif name == 'CustomVector44':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector44'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector44'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector44'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector44'].default_value[3]
+                elif name == 'CustomVector45':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector45'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector45'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector45'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector45'].default_value[3]
+                elif name == 'CustomVector46':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector46'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector46'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector46'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector46'].default_value[3]
+                elif name == 'CustomVector47':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector47'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector47'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector47'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector47'].default_value[3]
+                elif name == 'CustomVector48':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector48'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector48'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector48'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector48'].default_value[3]
+                elif name == 'CustomVector49':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector49'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector49'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector49'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector49'].default_value[3]
+                elif name == 'CustomVector50':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector50'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector50'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector50'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector50'].default_value[3]
+                elif name == 'CustomVector51':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector51'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector51'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector51'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector51'].default_value[3]
+                elif name == 'CustomVector52':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector52'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector52'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector52'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector52'].default_value[3]
+                elif name == 'CustomVector53':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector53'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector53'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector53'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector53'].default_value[3]
+                elif name == 'CustomVector54':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector54'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector54'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector54'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector54'].default_value[3]
+                elif name == 'CustomVector55':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector55'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector55'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector55'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector55'].default_value[3]
+                elif name == 'CustomVector56':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector56'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector56'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector56'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector56'].default_value[3]
+                elif name == 'CustomVector57':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector57'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector57'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector57'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector57'].default_value[3]
+                elif name == 'CustomVector58':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector58'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector58'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector58'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector58'].default_value[3]
+                elif name == 'CustomVector59':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector59'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector59'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector59'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector59'].default_value[3]
+                elif name == 'CustomVector60':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector60'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector60'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector60'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector60'].default_value[3]
+                else:
+                    continue
+            else:
+                continue
+            attributes16.append(attribute)
+        
+        entry['shader_label'] = node.inputs['Shader Label'].default_value
+        entries.append(entry)
+    return matl_json
+
 def make_modl_mesh_matl_data(context, ssbh_skel_data):
 
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
-    ssbh_matl_data = None
+    ssbh_matl_json = None
 
     ssbh_modl_data.model_name = 'model'
     ssbh_modl_data.skeleton_file_name = 'model.nusktb'
@@ -180,7 +621,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
-    
+
     '''
     # TODO split meshes
     Potential uv_layer clean_up code?
@@ -188,10 +629,11 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
     for l in remove:
         mesh.data.uv_layers.remove(l)
     '''
-    
-    real_mesh_name_list = []
+    #  Gather Material Info
+    materials = {mesh.data.materials[0] for mesh in export_meshes}
+    ssbh_matl_json = make_matl_json(materials)
 
-    
+    real_mesh_name_list = []
     for mesh in export_meshes:
         '''
         Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
@@ -199,11 +641,6 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
         list of potential issues that need to validate
         1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials
         '''
-
-        if len(mesh.data.vertices) == 0:
-            print(f'Mesh {mesh.name} has no vertices! Skipping, but in general this should probably be deleted')
-            continue
-
         mesh_object_copy = mesh.copy() # Copy the Mesh Object
         mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
         mesh_data_copy = mesh_object_copy.data
@@ -354,7 +791,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
 
     #ssbh_mesh_data.save(filepath + 'model.numshb')
     #ssbh_model_data.save(filepath + 'model.numdlb')
-    return ssbh_modl_data, ssbh_mesh_data
+    return ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json
 
 def make_skel_no_link(context):
     arma = context.scene.sub_model_export_armature

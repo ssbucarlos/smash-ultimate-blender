@@ -118,18 +118,21 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
         default='',
         options={'HIDDEN'}
     )
-
+    """
+    Cancelled until further notice.
     merge_same_name_meshes: BoolProperty(
         name="Merge Same Name Meshes",
         description="Merge Same Name Meshes",
         default=True,
-    )
+    )   
+    """
+
     def execute(self, context):
         context.scene.sub_model_numshb_file_name = '' 
         context.scene.sub_model_nusktb_file_name = '' 
         context.scene.sub_model_numdlb_file_name = '' 
         context.scene.sub_model_numatb_file_name = ''  
-        context.scene.sub_merge_same_name_meshes = self.merge_same_name_meshes
+        #context.scene.sub_merge_same_name_meshes = self.merge_same_name_meshes
         #print(self.filepath)
         context.scene.sub_model_folder_path = self.filepath
         all_files = os.listdir(context.scene.sub_model_folder_path)
@@ -203,7 +206,10 @@ def load_numatb_json(numatb_path):
     output_json_path = numatb_path + '.json'
 
     # Run ssbh_lib_json
-    subprocess.run([ssbh_lib_json_exe_path, numatb_path, output_json_path])
+    try:
+        subprocess.run([ssbh_lib_json_exe_path, numatb_path, output_json_path], capture_output=True, check=True)
+    except:
+        pass
 
     # Load Outputted Json
     numatb_json = None
@@ -598,6 +604,31 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
                     input.default_value = unk9
                 if field_name == 'Field10':
                     input.default_value = unk10
+        if 'RasterizerState0' in param_id:
+            rasterizer_state = attribute['param']['data']['RasterizerState']
+            fill_mode = rasterizer_state['fill_mode']
+            cull_mode = rasterizer_state['cull_mode']
+            depth_bias = rasterizer_state['depth_bias']
+            unk4 = rasterizer_state['unk4']
+            unk5 = rasterizer_state['unk5']
+            unk6 = rasterizer_state['unk6']
+            rasterizer_state_inputs = [input for input in node_group_node.inputs if input.name.split(' ')[0] == 'RasterizerState0']
+            for input in rasterizer_state_inputs:
+                field_name = input.name.split(' ')[1]
+                if field_name == 'Field1':
+                    input.default_value = 0 if fill_mode == 'Line' else 1
+                if field_name == 'Field2':
+                    input.default_value = 0 if cull_mode == 'Back' else\
+                                          1 if cull_mode == 'Front' else\
+                                          2  
+                if field_name == 'Field3':
+                    input.default_value = depth_bias
+                if field_name == 'Field4':
+                    input.default_value = unk4
+                if field_name == 'Field5':
+                    input.default_value = unk5
+                if field_name == 'Field6':
+                    input.default_value = unk6
 
         if 'CustomBoolean' in param_id:
             bool_value = attribute['param']['data']['Boolean']
