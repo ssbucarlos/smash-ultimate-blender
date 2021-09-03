@@ -341,6 +341,7 @@ def create_master_shader():
     prm_separate_prm_rgb.location = (-600,-200)
     prm_separate_prm_rgb.parent = prm_frame
     inner_links.new(prm_separate_prm_rgb.inputs['Image'], prm_group_input.outputs['Texture6 RGB (PRM Map)'])
+    inner_links.new(prm_metal_minimum.inputs[1], prm_separate_prm_rgb.outputs['R'])
     inner_links.new(shader_node.inputs['Roughness'], prm_separate_prm_rgb.outputs['G'])
     prm_multiply_prm_alpha = inner_nodes.new('ShaderNodeMath')
     prm_multiply_prm_alpha.name = 'prm_multiply_prm_alpha'
