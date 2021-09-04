@@ -56,6 +56,7 @@ def create_master_shader():
     input = node_group_node.inputs.new('NodeSocketFloat', 'Texture8 Alpha (Diffuse Cube Map)')
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture9 RGB (Baked Lighting Map)')
     input = node_group_node.inputs.new('NodeSocketFloat', 'Texture9 Alpha (Baked Lighting Map)')
+    input.default_value = 1.0
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture10 RGB (Diffuse Map Layer 1)')
     input = node_group_node.inputs.new('NodeSocketFloat', 'Texture10 Alpha (Diffuse Map Layer 1)')
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture11 RGB (Diffuse Map Layer 2)')
@@ -268,7 +269,7 @@ def create_master_shader():
     cv13_node.blend_type = 'MULTIPLY'
     cv13_node.inputs['Fac'].default_value = 1.0
     cv13_node.parent = diffuse_frame
-    inner_links.new(shader_node.inputs['Base Color'], cv13_node.outputs['Color'])
+    #inner_links.new(shader_node.inputs['Base Color'], cv13_node.outputs['Color'])
     inner_links.new(cv13_node.inputs['Color1'], diffuse_input_node.outputs['CustomVector13 (Diffuse Color Multiplier)'])
     fake_sss_color_node = inner_nodes.new('ShaderNodeMixRGB')
     fake_sss_color_node.name = 'Fake SSS Color'
@@ -330,8 +331,50 @@ def create_master_shader():
     inner_links.new(layer_2_alpha_minus_col_set_5.inputs[1], one_minus_color_set_5_node.outputs[0])
     inner_links.new(color_map_mix_node.inputs['Fac'], layer_2_alpha_minus_col_set_5.outputs[0])
 
+    # Baked Lighting
+    baked_lighting_frame = inner_nodes.new('NodeFrame')
+    baked_lighting_frame.name = 'baked_lighting_frame'
+    baked_lighting_frame.label = 'Baked Lighting'
+    baked_lighting_frame.parent = diffuse_frame
+    
 
+    baked_lighting_texture_boost = inner_nodes.new('ShaderNodeMixRGB')
+    baked_lighting_texture_boost.name = 'baked_lighting_texture_boost'
+    baked_lighting_texture_boost.label = 'Bake Lighting Texture Boost'
+    baked_lighting_texture_boost.parent = baked_lighting_frame
+    baked_lighting_texture_boost.blend_type = 'MULTIPLY'
+    baked_lighting_texture_boost.inputs['Color2'].default_value = (8.0, 8.0, 8.0, 1.0)
+    baked_lighting_texture_boost.inputs['Fac'].default_value = 1.0
 
+    baked_lighting_alpha_invert = inner_nodes.new('ShaderNodeInvert')
+    baked_lighting_alpha_invert.name = 'baked_lighting_alpha_invert'
+    baked_lighting_alpha_invert.label = 'Bake Lighting Alpha Invert'
+    baked_lighting_alpha_invert.parent = baked_lighting_frame
+    baked_lighting_alpha_invert.location = (-200, 0)
+
+    baked_lighting_mix = inner_nodes.new('ShaderNodeMixRGB')
+    baked_lighting_mix.name = 'baked_lighting_mix'
+    baked_lighting_mix.label = 'Baked Lighting Mix'
+    baked_lighting_mix.parent = diffuse_frame
+    baked_lighting_mix.blend_type = 'MULTIPLY'
+
+    baked_lighting_input_node = inner_nodes.new('NodeGroupInput')
+    baked_lighting_input_node.parent = baked_lighting_frame
+    baked_lighting_input_node.location = (-400, 0)
+
+    inner_links.new(baked_lighting_texture_boost.inputs['Color1'], baked_lighting_input_node.outputs['Texture9 RGB (Baked Lighting Map)'])
+    inner_links.new(baked_lighting_alpha_invert.inputs['Color'], baked_lighting_input_node.outputs['Texture9 Alpha (Baked Lighting Map)'])
+    inner_links.new(baked_lighting_mix.inputs['Fac'], baked_lighting_alpha_invert.outputs[0])
+    inner_links.new(baked_lighting_mix.inputs['Color1'], cv13_node.outputs[0])
+    inner_links.new(baked_lighting_mix.inputs['Color2'], baked_lighting_texture_boost.outputs[0])
+    inner_links.new(shader_node.inputs['Base Color'], baked_lighting_mix.outputs[0])
+
+    baked_lighting_frame.location = (0, 300)
+
+    for output in baked_lighting_input_node.outputs:
+        if output.is_linked is False:
+            output.hide = True
+    
     for output in diffuse_input_node.outputs:
         if output.is_linked is False:
             output.hide = True
