@@ -14,8 +14,9 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 
 
 # In case of problems?
-1. Please read the wiki to see if it that issue is mentioned in the 'List of Known Issues' wiki page, if not...
-2. Please go add a new issue in the Issues page so i can track the problem
+1. Export Issues? Please go read the wiki page and see if your issue gets fixed, if not...
+2. Please read the wiki to see if that issue is mentioned in the 'List of Known Issues' wiki page, if not...
+3. Please go add a new issue in the Issues page so i can track the problem
 
 # Current Features
 1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
