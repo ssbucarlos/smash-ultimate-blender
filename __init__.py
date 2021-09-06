@@ -7,7 +7,7 @@ bl_info = {
     'version': (0, 9, 0),
     'blender': (2, 93, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
-    'special thanks': 'The rokoko plugin for being the reference used to make this UI'
+    'special thanks': 'SMG for making SSBH_DATA_PY, which none of this would be possible without. and also the rokoko plugin for being the reference used to make this UI'
 }
 
 import bpy, sys
@@ -17,10 +17,10 @@ from . import operators
 from . import properties
 
 def check_unsupported_blender_versions():
-    if bpy.app.version < (2, 80):
+    if bpy.app.version < (2, 93):
         unregister()
         sys.tracebacklimit = 0 # TODO: research what this does
-        raise ImportError('Cant use a Blender version older than 2.80, please use 2.80 or later')
+        raise ImportError('Cant use a Blender version older than 2.93, please use 2.93 or later')
          
 classes = [
     panels.import_model.ImportModelPanel,
