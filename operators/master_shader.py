@@ -241,7 +241,7 @@ def create_master_shader():
     input.default_value = 0
     input = node_group_node.inputs.new('NodeSocketInt', 'RasterizerState0 Field6 (Unk6)')
     input.default_value = 16777217
-
+    input = node_group_node.inputs.new('NodeSocketFloat', 'use_color_set_1') # Wont be shown to users, should always be hidden
 
     # Allow for wider node
     node_group_node.bl_width_max = 1000
@@ -345,7 +345,7 @@ def create_master_shader():
     diffuse_color_set_1_node.name = 'diffuse_color_set_1_node'
     diffuse_color_set_1_node.label = 'Color Set 1'
     diffuse_color_set_1_node.parent = diffuse_frame
-    diffuse_color_set_1_node.location = (-1500, 300)
+    diffuse_color_set_1_node.location = (-1500, 400)
     diffuse_color_set_1_node.layer_name = 'colorSet1'
 
     diffuse_color_set_1_scale_node = inner_nodes.new('ShaderNodeMixRGB')
@@ -364,7 +364,8 @@ def create_master_shader():
     diffuse_color_set_1_mix_node.location = (-900, 100)
     diffuse_color_set_1_mix_node.blend_type = 'MULTIPLY'
     diffuse_color_set_1_mix_node.inputs['Fac'].default_value = 1.0
-    
+
+    inner_links.new(diffuse_color_set_1_mix_node.inputs['Fac'], diffuse_input_node.outputs['use_color_set_1'])
     inner_links.new(diffuse_color_set_1_scale_node.inputs['Color2'], diffuse_color_set_1_node.outputs[0])
     inner_links.new(diffuse_color_set_1_mix_node.inputs['Color2'], diffuse_color_set_1_scale_node.outputs[0])
     inner_links.new(diffuse_color_set_1_mix_node.inputs['Color1'], diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
@@ -581,6 +582,7 @@ def create_master_shader():
     emission_color_set_1_mixer.location = (-1500, -400)
 
     inner_links.new(emission_color_set_1_scale.inputs['Color2'],emission_color_set_1.outputs[0])
+    inner_links.new(emission_color_set_1_mixer.inputs['Fac'], emission_group_input.outputs['use_color_set_1'])
     inner_links.new(emission_color_set_1_mixer.inputs['Color2'],emission_color_set_1_scale.outputs[0])
     inner_links.new(emission_color_set_1_mixer.inputs['Color1'],emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
     inner_links.new(emission_mix_rgb.inputs['Color1'], emission_color_set_1_mixer.outputs[0])
