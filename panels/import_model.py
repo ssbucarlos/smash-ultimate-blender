@@ -327,8 +327,10 @@ def create_color_sets(bm, mesh):
                 # For instance this will let users paint vertex colors for colorset1 without needing the user to scale
                 # This scaling will be compensated for on export in this plugin.
                 # Sadly this might break the vertex colors in external apps if exported via .FBX or .DAE
-                scale = get_color_scale(attribute_data.name)
-                loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
+                # Update: So blender clamps vertex colors to 1.0, so scaling on import is not viable, will address scaling in shader
+                # scale = get_color_scale(attribute_data.name)
+                # loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
+                loop[color_layer] = [value for value in attribute_data.data[loop.vert.index]]
 
 
 def create_armature(skel, context):

@@ -260,7 +260,7 @@ def create_master_shader():
     diffuse_frame.name = 'Diffuse Frame'
     diffuse_frame.label = 'Diffuse Color Stuff'
     diffuse_input_node = inner_nodes.new('NodeGroupInput')
-    diffuse_input_node.location = (-1200, 0)
+    diffuse_input_node.location = (-1500, 0)
     diffuse_input_node.parent = diffuse_frame
     cv13_node = inner_nodes.new('ShaderNodeMixRGB')
     cv13_node.name = 'CustomVector13 Multiply'
@@ -291,7 +291,7 @@ def create_master_shader():
     color_map_mix_node.label = 'ColorMapLayerMixer'
     color_map_mix_node.location = (-650,0)
     color_map_mix_node.parent = diffuse_frame
-    inner_links.new(color_map_mix_node.inputs['Color1'], diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
+    #inner_links.new(color_map_mix_node.inputs['Color1'], diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
     inner_links.new(color_map_mix_node.inputs['Color2'], diffuse_input_node.outputs['Texture1 RGB (Col Map Layer 2)'])
     #inner_links.new(color_map_mix_node.inputs['Fac'], diffuse_input_node.outputs['Texture1 Alpha (Col Map Layer 2)'])
     inner_links.new(fake_sss_color_node.inputs['Color1'], color_map_mix_node.outputs['Color'])
@@ -306,14 +306,22 @@ def create_master_shader():
     color_set_5_node.name = 'color_set_5_node'
     color_set_5_node.label = 'Color Set 5'
     color_set_5_node.parent = diffuse_frame
-    color_set_5_node.location = (-1200, 300)
+    color_set_5_node.location = (-1500, 600)
     color_set_5_node.layer_name = 'colorSet5'
     
+    color_set_5_scale_node = inner_nodes.new('ShaderNodeMath')
+    color_set_5_scale_node.name = 'color_set_5_scale_node'
+    color_set_5_scale_node.label = 'Color Set 5 Scale'
+    color_set_5_scale_node.location = (-1200, 500)
+    color_set_5_scale_node.parent = diffuse_frame
+    color_set_5_scale_node.operation = 'MULTIPLY'
+    color_set_5_scale_node.inputs[0].default_value = 3.0
+
     one_minus_color_set_5_node = inner_nodes.new('ShaderNodeMath')
     one_minus_color_set_5_node.name = 'one_minus_color_set_5_node'
     one_minus_color_set_5_node.label = '1 - Alpha'
     one_minus_color_set_5_node.parent = diffuse_frame
-    one_minus_color_set_5_node.location = (-1000, 200)
+    one_minus_color_set_5_node.location = (-1000, 400)
     one_minus_color_set_5_node.operation = 'SUBTRACT'
     one_minus_color_set_5_node.inputs[0].default_value = 1.0
     one_minus_color_set_5_node.use_clamp = True
@@ -322,14 +330,45 @@ def create_master_shader():
     layer_2_alpha_minus_col_set_5.name = 'layer_2_alpha_minus_col_set_5'
     layer_2_alpha_minus_col_set_5.label = 'Texture Blend'
     layer_2_alpha_minus_col_set_5.parent = diffuse_frame
-    layer_2_alpha_minus_col_set_5.location = (-800, 100)
+    layer_2_alpha_minus_col_set_5.location = (-800, 300)
     layer_2_alpha_minus_col_set_5.operation = 'SUBTRACT'
     layer_2_alpha_minus_col_set_5.use_clamp = True
 
-    inner_links.new(one_minus_color_set_5_node.inputs[1], color_set_5_node.outputs['Alpha'])
+    inner_links.new(color_set_5_scale_node.inputs[1], color_set_5_node.outputs['Alpha'])
+    inner_links.new(one_minus_color_set_5_node.inputs[1], color_set_5_scale_node.outputs[0])
     inner_links.new(layer_2_alpha_minus_col_set_5.inputs[0], diffuse_input_node.outputs['Texture1 Alpha (Col Map Layer 2)'])
     inner_links.new(layer_2_alpha_minus_col_set_5.inputs[1], one_minus_color_set_5_node.outputs[0])
     inner_links.new(color_map_mix_node.inputs['Fac'], layer_2_alpha_minus_col_set_5.outputs[0])
+
+    # Color Set 1
+    diffuse_color_set_1_node = inner_nodes.new('ShaderNodeVertexColor')
+    diffuse_color_set_1_node.name = 'diffuse_color_set_1_node'
+    diffuse_color_set_1_node.label = 'Color Set 1'
+    diffuse_color_set_1_node.parent = diffuse_frame
+    diffuse_color_set_1_node.location = (-1500, 300)
+    diffuse_color_set_1_node.layer_name = 'colorSet1'
+
+    diffuse_color_set_1_scale_node = inner_nodes.new('ShaderNodeMixRGB')
+    diffuse_color_set_1_scale_node.name = 'diffuse_color_set_1_scale_node'
+    diffuse_color_set_1_scale_node.label = 'Color Set 1 Scale'
+    diffuse_color_set_1_scale_node.parent = diffuse_frame
+    diffuse_color_set_1_scale_node.blend_type = 'MULTIPLY'
+    diffuse_color_set_1_scale_node.location = (-1200, 200)
+    diffuse_color_set_1_scale_node.inputs['Fac'].default_value = 1.0
+    diffuse_color_set_1_scale_node.inputs['Color1'].default_value = (2.0,2.0,2.0,1.0)
+
+    diffuse_color_set_1_mix_node = inner_nodes.new('ShaderNodeMixRGB')
+    diffuse_color_set_1_mix_node.name = 'diffuse_color_set_1_mix_node'
+    diffuse_color_set_1_mix_node.label = 'Color Set 1 Mixer'
+    diffuse_color_set_1_mix_node.parent = diffuse_frame
+    diffuse_color_set_1_mix_node.location = (-900, 100)
+    diffuse_color_set_1_mix_node.blend_type = 'MULTIPLY'
+    diffuse_color_set_1_mix_node.inputs['Fac'].default_value = 1.0
+    
+    inner_links.new(diffuse_color_set_1_scale_node.inputs['Color2'], diffuse_color_set_1_node.outputs[0])
+    inner_links.new(diffuse_color_set_1_mix_node.inputs['Color2'], diffuse_color_set_1_scale_node.outputs[0])
+    inner_links.new(diffuse_color_set_1_mix_node.inputs['Color1'], diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
+    inner_links.new(color_map_mix_node.inputs['Color1'], diffuse_color_set_1_mix_node.outputs[0])
 
     # Baked Lighting
     baked_lighting_frame = inner_nodes.new('NodeFrame')
@@ -515,8 +554,38 @@ def create_master_shader():
     emission_mix_rgb.label = 'Emission Layer Mixer'
     emission_mix_rgb.parent = emission_frame
     emission_mix_rgb.location = (-900, -400)
+
+    # Emission colorSet1 stuff
+    emission_color_set_1 = inner_nodes.new('ShaderNodeVertexColor')
+    emission_color_set_1.name = 'emission_color_set_1'
+    emission_color_set_1.label = 'Color Set 1'
+    emission_color_set_1.parent = emission_frame
+    emission_color_set_1.layer_name = 'colorSet1'
+    emission_color_set_1.location = (-2100, -400)
+    
+    emission_color_set_1_scale = inner_nodes.new('ShaderNodeMixRGB')
+    emission_color_set_1_scale.name = 'emission_color_set_1_scale'
+    emission_color_set_1_scale.label = 'Color Set 1 Scale'
+    emission_color_set_1_scale.parent = emission_frame
+    emission_color_set_1_scale.inputs['Fac'].default_value = 1.0
+    emission_color_set_1_scale.inputs['Color1'].default_value = (2.0,2.0,2.0,2.0)
+    emission_color_set_1_scale.blend_type = 'MULTIPLY'
+    emission_color_set_1_scale.location = (-1800, -400)
+
+    emission_color_set_1_mixer = inner_nodes.new('ShaderNodeMixRGB')
+    emission_color_set_1_mixer.name = 'emission_color_set_1_mixer'
+    emission_color_set_1_mixer.label = 'Color Set 1 Mixer'
+    emission_color_set_1_mixer.parent = emission_frame
+    emission_color_set_1_mixer.inputs['Fac'].default_value = 1.0
+    emission_color_set_1_mixer.blend_type = 'MULTIPLY'
+    emission_color_set_1_mixer.location = (-1500, -400)
+
+    inner_links.new(emission_color_set_1_scale.inputs['Color2'],emission_color_set_1.outputs[0])
+    inner_links.new(emission_color_set_1_mixer.inputs['Color2'],emission_color_set_1_scale.outputs[0])
+    inner_links.new(emission_color_set_1_mixer.inputs['Color1'],emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
+    inner_links.new(emission_mix_rgb.inputs['Color1'], emission_color_set_1_mixer.outputs[0])
     inner_links.new(emission_mix_rgb.inputs['Fac'], emission_group_input.outputs['Texture14 Alpha (Emissive Map Layer 2)'])
-    inner_links.new(emission_mix_rgb.inputs['Color1'], emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
+    #inner_links.new(emission_mix_rgb.inputs['Color1'], emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
     inner_links.new(emission_mix_rgb.inputs['Color2'], emission_group_input.outputs['Texture14 RGB (Emissive Map Layer 2)'])
     inner_links.new(emission_multiply.inputs['Color1'], emission_mix_rgb.outputs[0])
     for output in emission_group_input.outputs:
