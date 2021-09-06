@@ -776,9 +776,10 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
         for color_set_layer in bm.loops.layers.color.values():
             ssbh_color_set = ssbh_data_py.mesh_data.AttributeData(color_set_layer.name)
             v_to_color_set = {v : l[color_set_layer] for v in bm.verts for l in v.link_loops}
-            scale = get_color_scale(color_set_layer.name)
-            fixed = [[i / scale for i in col] for col in v_to_color_set.values()]
-            ssbh_color_set.data = fixed
+            #scale = get_color_scale(color_set_layer.name)
+            #fixed = [[i / scale for i in col] for col in v_to_color_set.values()]
+            color_set_values = [[i for i in col] for col in v_to_color_set.values()]
+            ssbh_color_set.data = color_set_values
             ssbh_mesh_object.color_sets.append(ssbh_color_set)
 
 

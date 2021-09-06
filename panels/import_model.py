@@ -196,9 +196,13 @@ def import_model(self, context):
     return
 
 def get_ssbh_lib_json_exe_path():
-    print('this_file_path = %s' % (__file__))
+    #print('this_file_path = %s' % (__file__))
     this_file_path = __file__
     return this_file_path + '/../../ssbh_lib_json/ssbh_lib_json.exe'
+
+def get_shader_json_file_path():
+    this_file_path = __file__
+    return this_file_path + '/../../shader_file/nuc2effectlibrary.nufxlb.json'
 
 def load_numatb_json(numatb_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
@@ -327,8 +331,10 @@ def create_color_sets(bm, mesh):
                 # For instance this will let users paint vertex colors for colorset1 without needing the user to scale
                 # This scaling will be compensated for on export in this plugin.
                 # Sadly this might break the vertex colors in external apps if exported via .FBX or .DAE
-                scale = get_color_scale(attribute_data.name)
-                loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
+                # Update: So blender clamps vertex colors to 1.0, so scaling on import is not viable, will address scaling in shader
+                # scale = get_color_scale(attribute_data.name)
+                # loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
+                loop[color_layer] = [value for value in attribute_data.data[loop.vert.index]]
 
 
 def create_armature(skel, context):
@@ -555,6 +561,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
         input.hide = True
     shader_label = node_group_node.inputs['Shader Label']
     shader_label.hide = False
+    shader_name = entry['shader_label']
     shader_label.default_value = entry['shader_label']
     material_label = node_group_node.inputs['Material Name']
     material_label.hide = False
@@ -709,5 +716,32 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
             links.new(matched_rgb_input, texture_node.outputs['Color'])
             links.new(matched_alpha_input, texture_node.outputs['Alpha'])
             node_count = node_count + 1
+    
+    # Read Shader Label File
+    shader_json_path = get_shader_json_file_path()
+    shader_json = None
+    with open(shader_json_path, 'r') as f:
+        shader_json = json.load(f)
+    
+    shader_array = shader_json['data']['Nufx']['programs']['ProgramsV1']
+    found_shader = None
+    for shader in shader_array:
+        if shader['name'] == shader_name:
+            found_shader = shader
+            break
+    
+    if found_shader is None:
+        raise RuntimeError(f'did not find a matching shader for shader name "{shader_name}"')
+
+    vertex_attributes = found_shader['vertex_attributes']
+    color_set_1_found = False
+    for vertex_attribute in vertex_attributes:
+        if vertex_attribute['attribute_name'] == 'colorSet1':
+            color_set_1_found = True
+            break
+        
+    node_group_node.inputs['use_color_set_1'].default_value = 1.0 if color_set_1_found else 0.0
+    
+
 
     return
