@@ -12,7 +12,7 @@ import bmesh
 import sys
 import json
 import subprocess
-
+from mathutils import Vector
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -130,7 +130,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     ssbh_modl_data = None
     ssbh_mesh_data = None
     ssbh_matl_json = None
-    ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json = make_modl_mesh_matl_data(context, ssbh_skel_data)
+    ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json, ssbh_numshexb_json = make_modl_mesh_matl_data(context, ssbh_skel_data, filepath)
 
     if include_numdlb:
         ssbh_modl_data.save(filepath + 'model.numdlb')
@@ -139,13 +139,15 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     if include_nusktb:
         ssbh_skel_data.save(filepath + 'model.nusktb')
     if include_numatb:
-        save_matl_json(ssbh_matl_json, filepath + 'model.numatb')
+        save_ssbh_json(ssbh_matl_json, filepath + 'model.numatb')
+    if include_numshexb:
+        save_ssbh_json(ssbh_numshexb_json, filepath + 'model.numshexb')
 
-def save_matl_json(ssbh_matl_json, output_file_path):
+def save_ssbh_json(ssbh_json, output_file_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
     dumped_json_file_path = output_file_path + '.tmp.json'
     with open(dumped_json_file_path, 'w') as f:
-        json.dump(ssbh_matl_json, f, indent=2)
+        json.dump(ssbh_json, f, indent=2)
     subprocess.run([ssbh_lib_json_exe_path, dumped_json_file_path, output_file_path])
     os.remove(dumped_json_file_path)
     return
@@ -606,11 +608,89 @@ def make_matl_json(materials):
         entries.append(entry)
     return matl_json
 
-def make_modl_mesh_matl_data(context, ssbh_skel_data):
+def make_numshexb_json(true_name_to_meshes, temp_file_path):
+    numshexb_json = {}
+    numshexb_json['file_length'] = 0 # Will fill this in later
+    numshexb_json['entry_count'] = len([mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list])
+    numshexb_json['mesh_object_group_count'] = len(true_name_to_meshes.keys())
+    numshexb_json['all_data'] = []
+    
+    all_data = numshexb_json['all_data']
+    all_data_entry = {}
+    all_data_entry['bounding_sphere'] = {}
+    all_sphere_vector, all_sphere_radius = bounding_sphere([mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list], mode='GEOMETRY')
+    all_data_entry['bounding_sphere']['x'] = all_sphere_vector[0]
+    all_data_entry['bounding_sphere']['y'] = all_sphere_vector[1]
+    all_data_entry['bounding_sphere']['z'] = all_sphere_vector[2]
+    all_data_entry['bounding_sphere']['w'] = all_sphere_radius
+    all_data_entry['name'] = []
+    all_data_entry['name'].append('All')
+    all_data_entry['name'].append(None)
+    all_data.append(all_data_entry)
+    all_data.append(None)
+    
+    numshexb_json['mesh_object_group'] = []
+    mesh_object_group = numshexb_json['mesh_object_group']
+    mesh_object_group_entry = [] 
+    for true_name in true_name_to_meshes.keys():
+        true_name_entry = {}
+        full_name = re.split(r'.\d\d\d',true_name_to_meshes[true_name][0].name)[0]
+        group_sphere_vector, group_sphere_radius = bounding_sphere(true_name_to_meshes[true_name], mode='GEOMETRY')
+        true_name_entry['bounding_sphere'] = {}
+        true_name_entry['bounding_sphere']['x'] = group_sphere_vector[0]
+        true_name_entry['bounding_sphere']['y'] = group_sphere_vector[1]
+        true_name_entry['bounding_sphere']['z'] = group_sphere_vector[2]
+        true_name_entry['bounding_sphere']['w'] = group_sphere_radius
+        true_name_entry['mesh_object_full_name'] = []
+        true_name_entry['mesh_object_full_name'].append(full_name)
+        true_name_entry['mesh_object_full_name'].append(None)
+        true_name_entry['mesh_object_name'] = []
+        true_name_entry['mesh_object_name'].append(true_name)
+        true_name_entry['mesh_object_name'].append(None)
+        mesh_object_group_entry.append(true_name_entry)
+    mesh_object_group.append(mesh_object_group_entry)
+    mesh_object_group.append(None)
+    
+    numshexb_json['entries'] = []
+    entries = numshexb_json['entries']
+    entries_array = []
+    numshexb_json['entry_flags'] = []
+    entry_flags = numshexb_json['entry_flags']
+    entry_flags_array = []
+    for index, (true_name, mesh_list) in enumerate(true_name_to_meshes.items()):
+        for mesh in mesh_list:
+            entries_array_entry = {}
+            entries_array_entry['mesh_object_index'] = index
+            entries_array_entry['unk1'] = {}
+            entries_array_entry['unk1']['x'] = 0.0
+            entries_array_entry['unk1']['y'] = 1.0
+            entries_array_entry['unk1']['z'] = 0.0
+            entries_array.append(entries_array_entry)
+            entry_flags_array_entry = {}
+            entry_flags_array_entry['bytes'] = []
+            entry_flags_array_entry['bytes'].append(3) # if mesh[numshexb_flags] == 3 or something
+            entry_flags_array_entry['bytes'].append(0)
+            entry_flags_array.append(entry_flags_array_entry)
+
+    entries.append(entries_array)
+    entries.append(None)
+
+    entry_flags.append(entry_flags_array)
+    entry_flags.append(None)
+    
+    # Calculate filesize by first saving the JSON and then getting its filesize and then resending out the JSON
+    temp_file_name = temp_file_path + 'tempfile.numshexb'
+    save_ssbh_json(numshexb_json, temp_file_name)
+    numshexb_json['file_length'] = os.path.getsize(temp_file_name)
+    os.remove(temp_file_name)
+    return numshexb_json
+
+def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
 
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
     ssbh_matl_json = None
+    ssbh_numshexb_json = None
 
     ssbh_modl_data.model_name = 'model'
     ssbh_modl_data.skeleton_file_name = 'model.nusktb'
@@ -633,30 +713,37 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
     materials = {mesh.data.materials[0] for mesh in export_meshes}
     ssbh_matl_json = make_matl_json(materials)
 
-    real_mesh_name_list = []
-    for mesh in export_meshes:
+    # Gather true names for NUMSHEXB
+    true_names = {re.split('Shape|_VIS_|_O_', mesh.name)[0] for mesh in export_meshes}
+    true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split('Shape|_VIS_|_O_', mesh.name)[0]] for true_name in true_names}
+    
+    # Make NUMMSHEXB
+    ssbh_numshexb_json = make_numshexb_json(true_name_to_meshes, temp_file_path)
+
+    pruned_mesh_name_list = []
+    for mesh in [mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list]:
         '''
         Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
 
         list of potential issues that need to validate
-        1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials
+        1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
         '''
         mesh_object_copy = mesh.copy() # Copy the Mesh Object
         mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
         mesh_data_copy = mesh_object_copy.data
         #mesh_data_copy = mesh.data.copy()
         #mesh_object_copy = bpy.data.objects.new(mesh.name, mesh_data_copy)
-        real_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
+        pruned_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
 
         # Quick Detour to file out MODL stuff
-        ssbh_mesh_object_sub_index = real_mesh_name_list.count(real_mesh_name)
-        real_mesh_name_list.append(real_mesh_name)
+        ssbh_mesh_object_sub_index = pruned_mesh_name_list.count(pruned_mesh_name)
+        pruned_mesh_name_list.append(pruned_mesh_name)
         mat_label = get_material_label_from_mesh(mesh)
-        ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(real_mesh_name, ssbh_mesh_object_sub_index, mat_label)
+        ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(pruned_mesh_name, ssbh_mesh_object_sub_index, mat_label)
         ssbh_modl_data.entries.append(ssbh_modl_entry)
 
         # Back to MESH stuff
-        ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(real_mesh_name, ssbh_mesh_object_sub_index)
+        ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(pruned_mesh_name, ssbh_mesh_object_sub_index)
         position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
         position0.data = [list(vertex.co[:]) for vertex in mesh_data_copy.vertices] # Thanks SMG for these one-liners 
         ssbh_mesh_object.positions = [position0]
@@ -790,9 +877,12 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data):
         #bpy.data.objects.remove(mesh_object_copy)
         ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
+
+
+
     #ssbh_mesh_data.save(filepath + 'model.numshb')
     #ssbh_model_data.save(filepath + 'model.numdlb')
-    return ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json
+    return ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json, ssbh_numshexb_json
 
 def make_skel_no_link(context):
     arma = context.scene.sub_model_export_armature
@@ -912,4 +1002,23 @@ def make_skel(context, linked_nusktb_settings):
     return ssbh_skel
 
 
-        
+'''
+Bounding sphere calculation from https://b3d.interplanety.org/en/how-to-calculate-the-bounding-sphere-for-selected-objects/
+'''
+def bounding_sphere(objects, mode='GEOMETRY'):
+    # return the bounding sphere center and radius for objects (in global coordinates)
+    points_co_global = []
+    if mode == 'GEOMETRY':
+        # GEOMETRY - by all vertices/points - more precise, more slow
+        for obj in objects:
+            points_co_global.extend([obj.matrix_world @ vertex.co for vertex in obj.data.vertices])
+    elif mode == 'BBOX':
+        # BBOX - by object bounding boxes - less precise, quick
+        for obj in objects:
+            points_co_global.extend([obj.matrix_world @ Vector(bbox) for bbox in obj.bound_box])
+    def get_center(l):
+        return (max(l) + min(l)) / 2 if l else 0.0
+    x, y, z = [[point_co[i] for point_co in points_co_global] for i in range(3)]
+    b_sphere_center = Vector([get_center(axis) for axis in [x, y, z]]) if (x and y and z) else None
+    b_sphere_radius = max(((point - b_sphere_center) for point in points_co_global)) if b_sphere_center else None
+    return b_sphere_center, b_sphere_radius.length
