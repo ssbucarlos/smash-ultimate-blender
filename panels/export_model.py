@@ -333,11 +333,11 @@ def make_matl_json(materials):
                     attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector7'].default_value[1]
                     attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector7'].default_value[2]
                     attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector7'].default_value[3]
-                elif name == 'CustomVector8 (Final Color Multipler)':
-                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[0]
-                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[1]
-                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[2]
-                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector8 (Final Color Multipler)'].default_value[3]
+                elif name == 'CustomVector8 (Final Color Multiplier)':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[3]
                 elif name == 'CustomVector9':
                     attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector9'].default_value[0]
                     attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector9'].default_value[1]
