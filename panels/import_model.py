@@ -704,6 +704,8 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
             linear_textures = ['Texture6', 'Texture4']
             if param_id in linear_textures:
                 texture_node.image.colorspace_settings.name = 'Linear'
+                texture_node.image.alpha_mode = 'CHANNEL_PACKED'
+
 
             if param_id == 'Texture9':
                 uv_map_node = nodes.new('ShaderNodeUVMap')

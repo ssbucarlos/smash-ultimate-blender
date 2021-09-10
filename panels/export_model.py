@@ -963,7 +963,7 @@ def make_skel(context, linked_nusktb_settings):
             reordered_bones.append(linked_bone)
             del output_bones[linked_bone.name]
         
-        for remaining_bone in output_bones:
+        for remaining_bone in output_bones.values():
             reordered_bones.append(remaining_bone)
         
         ssbh_bone_name_to_bone_dict = {}
@@ -971,13 +971,23 @@ def make_skel(context, linked_nusktb_settings):
             ssbh_bone_name_to_bone_dict[ssbh_bone.name] = ssbh_bone
         
         index = 0 # Debug
+        print(f'Reordered Bones = {reordered_bones} \n')
         for blender_bone in reordered_bones:
             ssbh_bone = None
             if 'ORDER_AND_VALUES' == linked_nusktb_settings:
                 vanilla_ssbh_bone = ssbh_bone_name_to_bone_dict.get(blender_bone.name)
-                print('OV: index %s, transform= %s' % (index, vanilla_ssbh_bone.transform))
-                index = index + 1
-                ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, vanilla_ssbh_bone.transform, reordered_bones.index(blender_bone.parent) if blender_bone.parent else None)
+                if vanilla_ssbh_bone is not None:
+                    print('O&V Link Found: index %s, transform= %s' % (index, vanilla_ssbh_bone.transform))
+                    index = index + 1
+                    ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, vanilla_ssbh_bone.transform, reordered_bones.index(blender_bone.parent) if blender_bone.parent else None)
+                else:
+                    if blender_bone.parent:
+                        rel_mat = blender_bone.parent.matrix.inverted() @ blender_bone.matrix
+                        ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, rel_mat.transposed(), reordered_bones.index(blender_bone.parent))
+                        print(f'O&V No Link Found: index {index}, name {blender_bone.name}, rel_mat.transposed()= {rel_mat.transposed()}')
+                        index = index + 1
+                    else:
+                        ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, blender_bone.matrix.transposed(), None)
             else:
                 if blender_bone.parent:
                     '''
