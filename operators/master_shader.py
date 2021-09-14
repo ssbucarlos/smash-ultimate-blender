@@ -254,8 +254,8 @@ def create_master_shader():
     shader_node.name = 'Shader'
     output_node = inner_nodes.new('NodeGroupOutput')
     output_node.name = 'Output'
-    output_node.location = (277,0)
-    inner_links.new(output_node.inputs['Final Output'], shader_node.outputs['BSDF'])
+    output_node.location = (900,0)
+    #inner_links.new(output_node.inputs['Final Output'], shader_node.outputs['BSDF'])
     diffuse_frame = inner_nodes.new('NodeFrame')
     diffuse_frame.name = 'Diffuse Frame'
     diffuse_frame.label = 'Diffuse Color Stuff'
@@ -594,3 +594,55 @@ def create_master_shader():
         if output.is_linked is False:
             output.hide = True
     emission_frame.location = (0, 20)
+
+    # Post-PBR Shader Stuff
+    post_pbr_frame = inner_nodes.new('NodeFrame')
+    post_pbr_frame.name = 'post_pbr_frame'
+    post_pbr_frame.label = 'Post PBR Stuff'
+    post_pbr_frame.location = (350, 145)
+
+    post_pbr_group_input = inner_nodes.new('NodeGroupInput')
+    post_pbr_group_input.name = 'post_pbr_group_input'
+    post_pbr_group_input.label = 'Post PBR Group Input'
+    post_pbr_group_input.parent = post_pbr_frame
+    post_pbr_group_input.location = (0, 0)
+
+    post_pbr_shader_to_rgb = inner_nodes.new('ShaderNodeShaderToRGB')
+    post_pbr_shader_to_rgb.name = 'post_pbr_shader_to_rgb'
+    post_pbr_shader_to_rgb.label = 'Shader To RGB'
+    post_pbr_shader_to_rgb.parent = post_pbr_frame
+    post_pbr_shader_to_rgb.location = (0, -100)
+
+    post_pbr_transparent_bsdf = inner_nodes.new('ShaderNodeBsdfTransparent')
+    post_pbr_transparent_bsdf.name = 'post_pbr_transparent_bsdf'
+    post_pbr_transparent_bsdf.label = 'Transparency'
+    post_pbr_transparent_bsdf.parent = post_pbr_frame
+    post_pbr_transparent_bsdf.location = (0, -220)
+    post_pbr_transparent_bsdf.inputs['Color'].default_value = (1.0, 1.0, 1.0, 0.0)
+
+    post_pbr_custom_vector_8_mix_rgb = inner_nodes.new('ShaderNodeMixRGB')
+    post_pbr_custom_vector_8_mix_rgb.name = 'post_pbr_custom_vector_8_mix_rgb'
+    post_pbr_custom_vector_8_mix_rgb.label = 'Custom Vector 8'
+    post_pbr_custom_vector_8_mix_rgb.parent = post_pbr_frame
+    post_pbr_custom_vector_8_mix_rgb.location = (200, 0)
+    post_pbr_custom_vector_8_mix_rgb.blend_type = 'MULTIPLY'
+    post_pbr_custom_vector_8_mix_rgb.inputs['Fac'].default_value = 1.0
+
+    post_pbr_transparency_restorer_mix_shader = inner_nodes.new('ShaderNodeMixShader')
+    post_pbr_transparency_restorer_mix_shader.name = 'post_pbr_transparency_restorer_mix_shader'
+    post_pbr_transparency_restorer_mix_shader.label = 'Transparency Restorer'
+    post_pbr_transparency_restorer_mix_shader.parent = post_pbr_frame
+    post_pbr_transparency_restorer_mix_shader.location = (200, -180)
+
+    inner_links.new(post_pbr_shader_to_rgb.inputs['Shader'], shader_node.outputs['BSDF'])
+    inner_links.new(post_pbr_custom_vector_8_mix_rgb.inputs['Color1'], post_pbr_shader_to_rgb.outputs['Color'])
+    inner_links.new(post_pbr_custom_vector_8_mix_rgb.inputs['Color2'], post_pbr_group_input.outputs['CustomVector8 (Final Color Multiplier)'])
+    inner_links.new(post_pbr_transparency_restorer_mix_shader.inputs['Fac'], post_pbr_shader_to_rgb.outputs['Alpha'])
+    inner_links.new(post_pbr_transparency_restorer_mix_shader.inputs[1], post_pbr_transparent_bsdf.outputs['BSDF'])
+    inner_links.new(post_pbr_transparency_restorer_mix_shader.inputs[2], post_pbr_custom_vector_8_mix_rgb.outputs['Color'])
+    inner_links.new(output_node.inputs['Final Output'],post_pbr_transparency_restorer_mix_shader.outputs['Shader'])
+
+    for output in post_pbr_group_input.outputs:
+        if output.is_linked is False:
+            output.hide = True
+
