@@ -47,6 +47,7 @@ def create_master_shader():
     input.default_value = 1.0
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture5 RGB (Emissive Map Layer 1)')
     input = node_group_node.inputs.new('NodeSocketFloat', 'Texture5 Alpha (Emissive Map Layer 1)')
+    input.default_value = 1.0
     input = node_group_node.inputs.new('NodeSocketColor', 'Texture6 RGB (PRM Map)')
     input.default_value = (0.0, 1.0, 1.0, 1.0)
     input = node_group_node.inputs.new('NodeSocketFloat', 'Texture6 Alpha (PRM Map Specular)')
@@ -549,17 +550,30 @@ def create_master_shader():
     alpha_frame = inner_nodes.new('NodeFrame')
     alpha_frame.name = 'alpha_frame'
     alpha_frame.label = 'Alpha stuff'
+
     alpha_group_input = inner_nodes.new('NodeGroupInput')
     alpha_group_input.name = 'alpha_group_input'
     alpha_group_input.parent = alpha_frame
     alpha_group_input.location = (-1200, -400)
+
     alpha_maximum = inner_nodes.new('ShaderNodeMath')
     alpha_maximum.name = 'alpha_maximum'
     alpha_maximum.label = 'Max Alpha'
     alpha_maximum.parent = alpha_frame
     alpha_maximum.location = (-600, -400)
     alpha_maximum.operation = 'MAXIMUM'
-    inner_links.new(alpha_maximum.inputs[0], alpha_group_input.outputs['Texture0 Alpha (Col Map Layer 1)'])
+
+    alpha_lowest_from_textures = inner_nodes.new('ShaderNodeMath')
+    alpha_lowest_from_textures.name = 'alpha_lowest_from_textures'
+    alpha_lowest_from_textures.label = 'Lowest Alpha'
+    alpha_lowest_from_textures.parent = alpha_frame
+    alpha_lowest_from_textures.location = (-900, -400)
+    alpha_lowest_from_textures.operation = 'MINIMUM'
+
+    inner_links.new(alpha_lowest_from_textures.inputs[0], alpha_group_input.outputs['Texture0 Alpha (Col Map Layer 1)'])
+    inner_links.new(alpha_lowest_from_textures.inputs[1], alpha_group_input.outputs['Texture5 Alpha (Emissive Map Layer 1)'])
+    inner_links.new(alpha_maximum.inputs[0], alpha_lowest_from_textures.outputs[0])
+    #inner_links.new(alpha_maximum.inputs[0], alpha_group_input.outputs['Texture0 Alpha (Col Map Layer 1)'])
     inner_links.new(alpha_maximum.inputs[1], alpha_group_input.outputs['CustomVector0 X (Min Texture Alpha)'])
     inner_links.new(shader_node.inputs['Alpha'], alpha_maximum.outputs['Value'])
     for output in alpha_group_input.outputs:
