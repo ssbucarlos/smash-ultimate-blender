@@ -716,6 +716,14 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
                 uv_map_node.location = (texture_node.location[0] - 200, texture_node.location[1])
                 uv_map_node.uv_map = 'bake1'
                 links.new(texture_node.inputs['Vector'], uv_map_node.outputs[0])
+            
+            if param_id == 'Texture1':
+                uv_map_node = nodes.new('ShaderNodeUVMap')
+                uv_map_node.name = 'uv_map_node'
+                uv_map_node.label = 'Texture1 UV Map'
+                uv_map_node.location = (texture_node.location[0] - 200, texture_node.location[1])
+                uv_map_node.uv_map = 'uvSet'
+                links.new(texture_node.inputs['Vector'], uv_map_node.outputs[0])
 
             links.new(matched_rgb_input, texture_node.outputs['Color'])
             links.new(matched_alpha_input, texture_node.outputs['Alpha'])
