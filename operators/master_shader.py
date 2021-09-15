@@ -153,7 +153,8 @@ def create_master_shader():
     input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector44')
     input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector45')
     input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector46')
-    input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector47')
+    input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector47 RGB')
+    input = node_group_node.inputs.new('NodeSocketFloat', 'CustomVector47 Alpha')
     input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector48')
     input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector49')
     input = node_group_node.inputs.new('NodeSocketColor', 'CustomVector50')
@@ -243,7 +244,8 @@ def create_master_shader():
     input = node_group_node.inputs.new('NodeSocketInt', 'RasterizerState0 Field6 (Unk6)')
     input.default_value = 16777217
     input = node_group_node.inputs.new('NodeSocketFloat', 'use_color_set_1') # Wont be shown to users, should always be hidden
-
+    input = node_group_node.inputs.new('NodeSocketFloat', 'use_custom_vector_47')
+    input.default_value = 0.0
     # Allow for wider node
     node_group_node.bl_width_max = 1000
 
@@ -436,9 +438,11 @@ def create_master_shader():
     prm_frame = inner_nodes.new('NodeFrame')
     prm_frame.name = 'prm_frame'
     prm_frame.label = 'PRM Stuff'
+    
     prm_group_input = inner_nodes.new('NodeGroupInput')
     prm_group_input.location = (-1200, 0)
     prm_group_input.parent = prm_frame
+    
     prm_compare_cv30_x = inner_nodes.new('ShaderNodeMath')
     prm_compare_cv30_x.name = 'prm_compare_cv30_x'
     prm_compare_cv30_x.label = 'Compare CV30 X'
@@ -446,23 +450,20 @@ def create_master_shader():
     prm_compare_cv30_x.inputs[0].default_value = 0
     prm_compare_cv30_x.location = (-600,0)
     prm_compare_cv30_x.parent = prm_frame
-    inner_links.new(prm_compare_cv30_x.inputs[1], prm_group_input.outputs['CustomVector30 X (SSS Blend Factor)'])
+   
     prm_metal_minimum = inner_nodes.new('ShaderNodeMath')
     prm_metal_minimum.name = 'prm_metal_minimum'
     prm_metal_minimum.label = 'PRM Metal Override'
     prm_metal_minimum.operation = 'MINIMUM'
     prm_metal_minimum.location = (-300,0)
     prm_metal_minimum.parent = prm_frame
-    inner_links.new(prm_metal_minimum.inputs[0], prm_compare_cv30_x.outputs[0])
-    inner_links.new(shader_node.inputs['Metallic'], prm_metal_minimum.outputs['Value'])
+    
     prm_separate_prm_rgb = inner_nodes.new('ShaderNodeSeparateRGB')
     prm_separate_prm_rgb.name = 'prm_separate_prm_rgb'
     prm_separate_prm_rgb.label = 'Separate PRM RGB'
     prm_separate_prm_rgb.location = (-600,-200)
     prm_separate_prm_rgb.parent = prm_frame
-    inner_links.new(prm_separate_prm_rgb.inputs['Image'], prm_group_input.outputs['Texture6 RGB (PRM Map)'])
-    inner_links.new(prm_metal_minimum.inputs[1], prm_separate_prm_rgb.outputs['R'])
-    inner_links.new(shader_node.inputs['Roughness'], prm_separate_prm_rgb.outputs['G'])
+
     prm_multiply_prm_alpha = inner_nodes.new('ShaderNodeMath')
     prm_multiply_prm_alpha.name = 'prm_multiply_prm_alpha'
     prm_multiply_prm_alpha.label = 'Specular Boost'
@@ -470,8 +471,36 @@ def create_master_shader():
     prm_multiply_prm_alpha.parent = prm_frame
     prm_multiply_prm_alpha.operation = 'MULTIPLY'
     prm_multiply_prm_alpha.inputs[0].default_value = 2.5
-    inner_links.new(prm_multiply_prm_alpha.inputs[1], prm_group_input.outputs['Texture6 Alpha (PRM Map Specular)'])
+    
+    prm_custom_vector_47_rgb_override = inner_nodes.new('ShaderNodeMixRGB')
+    prm_custom_vector_47_rgb_override.name = 'prm_custom_vector_47_rgb_override'
+    prm_custom_vector_47_rgb_override.label = 'Custom Vector 47 RGB Overrider'
+    prm_custom_vector_47_rgb_override.location = (-900,-150)
+    prm_custom_vector_47_rgb_override.parent = prm_frame
+    prm_custom_vector_47_rgb_override.blend_type = 'MIX'
+
+    prm_custom_vector_47_alpha_override = inner_nodes.new('ShaderNodeMixRGB')
+    prm_custom_vector_47_alpha_override.name = 'prm_custom_vector_47_alpha_override'
+    prm_custom_vector_47_alpha_override.label = 'Custom Vector 47 Alpha Overrider'
+    prm_custom_vector_47_alpha_override.location = (-900, -300)
+    prm_custom_vector_47_alpha_override.parent = prm_frame
+    prm_custom_vector_47_alpha_override.blend_type = 'MIX'
+
+    inner_links.new(prm_custom_vector_47_rgb_override.inputs['Fac'], prm_group_input.outputs['use_custom_vector_47'])
+    inner_links.new(prm_custom_vector_47_rgb_override.inputs['Color1'], prm_group_input.outputs['Texture6 RGB (PRM Map)'])
+    inner_links.new(prm_custom_vector_47_rgb_override.inputs['Color2'], prm_group_input.outputs['CustomVector47 RGB'])
+    inner_links.new(prm_custom_vector_47_alpha_override.inputs['Fac'], prm_group_input.outputs['use_custom_vector_47'])
+    inner_links.new(prm_custom_vector_47_alpha_override.inputs['Color1'], prm_group_input.outputs['Texture6 Alpha (PRM Map Specular)'])
+    inner_links.new(prm_custom_vector_47_alpha_override.inputs['Color2'], prm_group_input.outputs['CustomVector47 Alpha'])
+    inner_links.new(prm_compare_cv30_x.inputs[1], prm_group_input.outputs['CustomVector30 X (SSS Blend Factor)'])
+    inner_links.new(prm_separate_prm_rgb.inputs['Image'], prm_custom_vector_47_rgb_override.outputs['Color'])
+    inner_links.new(prm_multiply_prm_alpha.inputs[1], prm_custom_vector_47_alpha_override.outputs['Color'])
+    inner_links.new(prm_metal_minimum.inputs[0], prm_compare_cv30_x.outputs[0])
+    inner_links.new(prm_metal_minimum.inputs[1], prm_separate_prm_rgb.outputs['R'])
+    inner_links.new(shader_node.inputs['Metallic'], prm_metal_minimum.outputs['Value'])
+    inner_links.new(shader_node.inputs['Roughness'], prm_separate_prm_rgb.outputs['G'])
     inner_links.new(shader_node.inputs['Specular'], prm_multiply_prm_alpha.outputs['Value'])
+
     for output in prm_group_input.outputs:
         if output.is_linked is False:
             output.hide = True

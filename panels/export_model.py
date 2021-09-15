@@ -528,11 +528,11 @@ def make_matl_json(materials):
                     attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector46'].default_value[1]
                     attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector46'].default_value[2]
                     attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector46'].default_value[3]
-                elif name == 'CustomVector47':
-                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector47'].default_value[0]
-                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector47'].default_value[1]
-                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector47'].default_value[2]
-                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector47'].default_value[3]
+                elif name == 'CustomVector47 RGB':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector47 RGB'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector47 RGB'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector47 RGB'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector47 Alpha'].default_value
                 elif name == 'CustomVector48':
                     attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector48'].default_value[0]
                     attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector48'].default_value[1]

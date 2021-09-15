@@ -676,7 +676,9 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
                     if axis == 'Z':
                         input.default_value = z
                     if axis == 'W':
-                        input.default_value = w 
+                        input.default_value = w
+            if 'CustomVector47' == param_id:
+                node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
 
     links.new(material_output_node.inputs[0], node_group_node.outputs[0])
 
