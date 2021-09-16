@@ -15,6 +15,7 @@ import bpy, sys
 from . import panels
 from . import operators
 from . import properties
+from . import shaders
 
 def check_unsupported_blender_versions():
     if bpy.app.version < (2, 93):
@@ -54,7 +55,7 @@ def register():
         bpy.utils.register_class(cls)
 
     properties.register()
-    
+    shaders.custom_sampler_node.register()
     print('Loaded Smash Ultimate Blender Tools!')
 
 def unregister():
