@@ -31,7 +31,7 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 2. Switch Toolbox (to convert .NUTEXBS to .PNGS) https://github.com/KillzXGaming/Switch-Toolbox
 
 # Special Thanks
-SMG for creating SSBH_DATA_PY, which without it none of this would be possible https://github.com/ScanMountGoat/ssbh_data_py
+* SMG for creating SSBH_DATA_PY, which without it none of this would be possible https://github.com/ScanMountGoat/ssbh_data_py
 (and also for providing alot of the reference code for how to use the library, most of which was shamelessly stolen and implemented here)
 (and also for making CrossMod which was a great reference for how smash ultimate shaders work, from the CrossMod render code certain details such as which step of the shading process do vertex colors get factored in was used)
-The Rokoko plugin https://github.com/Rokoko/rokoko-studio-live-blender for being the reference used for the UI code used in this project.
+* The Rokoko plugin https://github.com/Rokoko/rokoko-studio-live-blender for being the reference used for the UI code used in this project.
