@@ -11,17 +11,15 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 1. Before you import a model, make sure all the textures have been converted to .PNGs. The recommended tool for this is 'Switch Toolbox' (https://github.com/KillzXGaming/Switch-Toolbox)
 2. After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar 
 * ![image](https://user-images.githubusercontent.com/77519735/131579719-3bf859ac-40ad-4661-8b4c-0d0d0e34da8a.png)
-3. At the moment, .NUMSHEXB is not exported. If you need a new .numshexb, you can simply open the outputted files in StudioSB and export a .NUMSHEXB
-
 
 # In case of problems?
 1. Export Issues? Please go read the wiki page and see if your issue gets fixed, if not...
 2. Please read the wiki to see if that issue is mentioned in the 'List of Known Issues' wiki page, if not...
-3. Please go add a new issue in the Issues page so i can track the problem
+3. Please go add a new issue in the Issues page so i can track the problem, or message me about it.
 
 # Current Features
 1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
-2.  .NUMDLB, .NUMSHB, .NUSKTB, .NUMATB Import And Export
+2.  .NUMDLB, .NUMSHB, .NUSKTB, .NUMATB, .NUMSHEXB Import And Export
 
 # Planned Features
 1. Complete Import - Export of Models, Materials, Animations
