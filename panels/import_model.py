@@ -280,7 +280,7 @@ def create_helper_bone_constraints(armature, ssbh_helper_bone_json, context):
                             aoi['z']
             crc.use_x = True if axis is x else False
             crc.use_y = True if axis is y else False
-            crc.use_z = True if axis is y else False
+            crc.use_z = True if axis is z else False
 
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
         
