@@ -160,7 +160,7 @@ class ModelImporter(bpy.types.Operator):
         return {'FINISHED'}
 
 def import_model(self, context):
-    from ..ssbh_data_py import ssbh_data_py
+    from .. import ssbh_data_py
     dir = context.scene.sub_model_folder_path
     numdlb_name = context.scene.sub_model_numdlb_file_name
     numshb_name = context.scene.sub_model_numshb_file_name

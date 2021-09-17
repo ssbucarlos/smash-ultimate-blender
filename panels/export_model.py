@@ -7,7 +7,7 @@ from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator, Panel
 import re
-from ..ssbh_data_py import ssbh_data_py
+from .. import ssbh_data_py
 import bmesh
 import sys
 import json
