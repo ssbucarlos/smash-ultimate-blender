@@ -72,6 +72,12 @@ def register():
         default='',
     )
 
+    Scene.sub_model_nuhlpb_file_name = StringProperty(
+        name='.nuhlpb file path',
+        description='The Path to the model.nuhlpb file',
+        default='',
+    )
+
     Scene.sub_model_folder_path = StringProperty(
         name='Model folder path',
         description='The path to the model folder',

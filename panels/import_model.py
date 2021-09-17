@@ -132,6 +132,7 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
         context.scene.sub_model_nusktb_file_name = '' 
         context.scene.sub_model_numdlb_file_name = '' 
         context.scene.sub_model_numatb_file_name = ''  
+        context.scene.sub_model_nuhlpb_file_name = ''
         #context.scene.sub_merge_same_name_meshes = self.merge_same_name_meshes
         #print(self.filepath)
         context.scene.sub_model_folder_path = self.filepath
@@ -149,6 +150,8 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
                 context.scene.sub_model_numdlb_file_name = model_file
             elif '.numatb' == extension:
                 context.scene.sub_model_numatb_file_name = model_file
+            elif '.nuhlpb' == extension:
+                context.scene.sub_model_nuhlpb_file_name = model_file
         return {'FINISHED'}
 
 class ModelImporter(bpy.types.Operator):
@@ -166,15 +169,21 @@ def import_model(self, context):
     numshb_name = context.scene.sub_model_numshb_file_name
     nusktb_name = context.scene.sub_model_nusktb_file_name
     numatb_name = context.scene.sub_model_numatb_file_name
-    
+    nuhlpb_name = context.scene.sub_model_nuhlpb_file_name
+
     ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
     ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name) if numshb_name != '' else None
     ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
-    ssbh_material_json = load_numatb_json(dir + numatb_name) if numshb_name != '' else None
-
+    ssbh_material_json = load_ssbh_file_as_json(dir + numatb_name) if numshb_name != '' else None
+    ssbh_helper_bone_json = load_ssbh_file_as_json(dir + nuhlpb_name) if nuhlpb_name != '' else None
     armature = create_armature(ssbh_skel, context)
-    created_meshes = create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
     
+    created_meshes = create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
+    if ssbh_helper_bone_json is not None:
+        create_helper_bone_constraints(armature, ssbh_helper_bone_json, context)
+    else:
+        print('Did not find a .nuhlpb, so wont create helper bone constraints')
+
     '''
     # TODO So merging meshes in blenders and then seperating them is terrible for UV and color layer management.
             Can't split a mesh after joining, or else all meshes will have all uv layers.
@@ -204,6 +213,7 @@ def get_shader_json_file_path():
     this_file_path = __file__
     return this_file_path + '/../../shader_file/nuc2effectlibrary.nufxlb.json'
 
+'''
 def load_numatb_json(numatb_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
     print('ssbh_lib_json_exe_path = %s' % ssbh_lib_json_exe_path)
@@ -221,7 +231,59 @@ def load_numatb_json(numatb_path):
         numatb_json = json.load(f)
 
     return numatb_json
+'''
 
+def load_ssbh_file_as_json(ssbh_file_path):
+    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
+    print('ssbh_lib_json_exe_path = %s' % ssbh_lib_json_exe_path)
+    output_json_path = ssbh_file_path + '.json'
+
+    # Run ssbh_lib_json
+    try:
+        subprocess.run([ssbh_lib_json_exe_path, ssbh_file_path, output_json_path], capture_output=True, check=True)
+    except:
+        pass
+
+    # Load Outputted Json
+    ssbh_json = None
+    with open(output_json_path) as f:
+        ssbh_json = json.load(f)
+
+    return ssbh_json
+
+def create_helper_bone_constraints(armature, ssbh_helper_bone_json, context):
+    ''' Currently only interpolation entries are somewhat understood'''
+
+    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+    context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    interpolation_entries = ssbh_helper_bone_json['data']['Hlpb']['interpolation_entries']
+    for entry in interpolation_entries:
+        name = entry['name']
+        bone_name = entry['bone_name']
+        root_bone_name = entry['root_bone_name']
+        parent_bone_name = entry['parent_bone_name']
+        driver_bone_name = entry['driver_bone_name']
+        aoi = entry['aoi']
+        x, y, z = 'X', 'Y', 'Z'
+        target_bone = armature.pose.bones.get(parent_bone_name)
+        owner_bone = armature.pose.bones.get(driver_bone_name)
+        for axis in [x, y, z]:
+            crc = owner_bone.constraints.new('COPY_ROTATION')
+            crc.name = f'SUB CRC {axis}'
+            crc.target = armature
+            crc.subtarget = target_bone.name
+            crc.target_space = 'POSE'
+            crc.owner_space = 'POSE'
+            crc.influence = aoi['x'] if axis is x else\
+                            aoi['y'] if axis is y else\
+                            aoi['z']
+            crc.use_x = True if axis is x else False
+            crc.use_y = True if axis is y else False
+            crc.use_z = True if axis is y else False
+
+    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+        
 
 
 '''
