@@ -676,17 +676,22 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
                     if axis == 'Z':
                         input.default_value = z
                     if axis == 'W':
-                        input.default_value = w 
+                        input.default_value = w
+            if 'CustomVector47' == param_id:
+                node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
 
     links.new(material_output_node.inputs[0], node_group_node.outputs[0])
 
     # Add image texture nodes
+    samplers = [a for a in attributes if 'Sampler' in a['param_id']]
+    textures = [a for a in attributes if 'Texture' in a['param_id']]
+    texture_name_to_sampler_entry = {t['param_id']:s for t in textures for s in samplers if t['param_id'].split('Texture')[1] == s['param_id'].split('Sampler')[1]}
     node_count = 0
     for attribute in attributes:
         param_id = attribute['param_id']
         if 'Texture' in param_id:
             texture_node = nodes.new('ShaderNodeTexImage')
-            texture_node.location = (-800, -275 * node_count + 300)
+            texture_node.location = (-800, -500 * node_count + 1000)
             texture_file_name = attribute['param']['data']['MatlString']
             texture_node.name = texture_file_name
             texture_node.label = texture_file_name
@@ -704,15 +709,69 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
             linear_textures = ['Texture6', 'Texture4']
             if param_id in linear_textures:
                 texture_node.image.colorspace_settings.name = 'Linear'
+                texture_node.image.alpha_mode = 'CHANNEL_PACKED'
+            
+            uv_map_node = nodes.new('ShaderNodeUVMap')
+            uv_map_node.name = 'uv_map_node'
+            uv_map_node.location = (texture_node.location[0] - 900, texture_node.location[1])
+            uv_map_node.label = param_id + ' UV Map'
 
             if param_id == 'Texture9':
-                uv_map_node = nodes.new('ShaderNodeUVMap')
-                uv_map_node.name = 'uv_map_node'
-                uv_map_node.label = 'bake1 UV Map'
-                uv_map_node.location = (texture_node.location[0] - 200, texture_node.location[1])
                 uv_map_node.uv_map = 'bake1'
-                links.new(texture_node.inputs['Vector'], uv_map_node.outputs[0])
+            elif param_id == 'Texture1':
+                uv_map_node.uv_map = 'uvSet'
+            else:
+                uv_map_node.uv_map = 'map1'
 
+            # Create Sampler Node
+            sampler_node = nodes.new('CustomNodeUltimateSampler')
+            sampler_node.name = 'sampler_node'
+            sampler_node.label = 'Sampler' + param_id.split('Texture')[1]
+            sampler_node.location = (texture_node.location[0] - 600, texture_node.location[1])
+            sampler_node.width = 500
+
+            sampler_entry = texture_name_to_sampler_entry[param_id]
+            sampler_data = sampler_entry['param']['data']['Sampler']
+            sampler_node.wrap_s = 'REPEAT' if sampler_data['wraps'] == 'Repeat' else\
+                                  'CLAMP_TO_BORDER' if sampler_data['wraps'] == 'ClampToBorder' else\
+                                  'CLAMP_TO_EDGE' if sampler_data['wraps'] == 'ClampToEdge' else\
+                                  'MIRRORED_REPEAT'
+            sampler_node.wrap_t = 'REPEAT' if sampler_data['wrapt'] == 'Repeat' else\
+                                  'CLAMP_TO_BORDER' if sampler_data['wrapt'] == 'ClampToBorder' else\
+                                  'CLAMP_TO_EDGE' if sampler_data['wrapt'] == 'ClampToEdge' else\
+                                  'MIRRORED_REPEAT'
+
+            sampler_node.wrap_r = 'REPEAT' if sampler_data['wrapr'] == 'Repeat' else\
+                                  'CLAMP_TO_BORDER' if sampler_data['wrapr'] == 'ClampToBorder' else\
+                                  'CLAMP_TO_EDGE' if sampler_data['wrapr'] == 'ClampToEdge' else\
+                                  'MIRRORED_REPEAT'
+            sampler_node.min_filter = 'NEAREST' if sampler_data['min_filter'] == 'Nearest' else\
+                                      'LINEAR_MIPMAP_LINEAR' if sampler_data['min_filter'] == 'LinearMipmapLinear' else\
+                                      'LINEAR_MIPMAP_LINEAR_2' 
+            sampler_node.mag_filter = 'NEAREST' if sampler_data['mag_filter'] == 'Nearest' else\
+                                      'LINEAR' if sampler_data['mag_filter'] == 'Linear' else\
+                                      'LINEAR_2'
+            sampler_node.texture_filter = 'DEFAULT' if sampler_data['texture_filtering_type'] == 'Default' else\
+                                          'DEFAULT_2' if sampler_data['texture_filtering_type'] == 'Default2' else\
+                                          'ANISOTROPIC_FILTERING'
+            r = sampler_data['border_color']['r']
+            g = sampler_data['border_color']['g']
+            b = sampler_data['border_color']['b']
+            a = sampler_data['border_color']['a']
+
+            sampler_node.border_color = (r,g,b,a)
+
+            sampler_node.unk11 = sampler_data['unk11']
+            sampler_node.unk12 = sampler_data['unk12']
+            sampler_node.lod_bias = sampler_data['lod_bias']
+            sampler_node.max_anisotropy = '1X' if sampler_data['max_anisotropy'] == 0 else\
+                                          '2X' if sampler_data['max_anisotropy'] == 2 else\
+                                          '4X' if sampler_data['max_anisotropy'] == 4 else\
+                                          '16X' if sampler_data['max_anisotropy'] == 8 else\
+                                          '128X'                               
+
+            links.new(sampler_node.inputs['UV Input'], uv_map_node.outputs[0])
+            links.new(texture_node.inputs[0], sampler_node.outputs[0])
             links.new(matched_rgb_input, texture_node.outputs['Color'])
             links.new(matched_alpha_input, texture_node.outputs['Alpha'])
             node_count = node_count + 1

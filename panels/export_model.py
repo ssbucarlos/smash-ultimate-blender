@@ -244,32 +244,53 @@ def make_matl_json(materials):
                 texture_name = texture_node.label
                 attribute['param']['data']['MatlString'] = texture_name
                 attribute['param']['data_type'] = 11
-                # Sampler Hack for now....
+                # Sampler Data
+                sampler_node = texture_node.inputs[0].links[0].from_node
                 sampler_attribute = {}
                 sampler_attribute['param_id'] = f'Sampler{sampler_number}'
                 sampler_attribute['param'] = {}
                 sampler_attribute['param']['data'] = {}
                 sampler_attribute['param']['data']['Sampler'] = {}
-                sampler_attribute['param']['data']['Sampler']['wraps'] = 'Repeat'
-                sampler_attribute['param']['data']['Sampler']['wrapt'] = 'Repeat'
-                sampler_attribute['param']['data']['Sampler']['wrapr'] = 'Repeat'
-                sampler_attribute['param']['data']['Sampler']['min_filter'] = 'LinearMipmapLinear'
-                sampler_attribute['param']['data']['Sampler']['mag_filter'] = 'Linear'
-                sampler_attribute['param']['data']['Sampler']['texture_filtering_type'] = 'AnisotropicFiltering'
+                sampler_attribute['param']['data']['Sampler']['wraps'] = 'Repeat' if sampler_node.wrap_s == 'REPEAT' else\
+                                                                         'ClampToBorder' if sampler_node.wrap_s == 'CLAMP_TO_BORDER' else\
+                                                                         'ClampToEdge' if sampler_node.wrap_s == 'CLAMP_TO_EDGE' else\
+                                                                         'MirroredRepeat'
+                sampler_attribute['param']['data']['Sampler']['wrapt'] = 'Repeat' if sampler_node.wrap_t == 'REPEAT' else\
+                                                                         'ClampToBorder' if sampler_node.wrap_t == 'CLAMP_TO_BORDER' else\
+                                                                         'ClampToEdge' if sampler_node.wrap_t == 'CLAMP_TO_EDGE' else\
+                                                                         'MirroredRepeat'
+                sampler_attribute['param']['data']['Sampler']['wrapr'] = 'Repeat' if sampler_node.wrap_r == 'REPEAT' else\
+                                                                         'ClampToBorder' if sampler_node.wrap_r == 'CLAMP_TO_BORDER' else\
+                                                                         'ClampToEdge' if sampler_node.wrap_r == 'CLAMP_TO_EDGE' else\
+                                                                         'MirroredRepeat'
+                sampler_attribute['param']['data']['Sampler']['min_filter'] = 'Nearest' if sampler_node.min_filter == 'NEAREST' else\
+                                                                              'LinearMipmapLinear' if sampler_node.min_filter == 'LINEAR_MIPMAP_LINEAR' else\
+                                                                              'LinearMipmapLinear2'
+                sampler_attribute['param']['data']['Sampler']['mag_filter'] = 'Nearest' if sampler_node.mag_filter == 'NEAREST' else\
+                                                                              'Linear' if sampler_node.mag_filter == 'LINEAR' else\
+                                                                              'Linear2'
+                sampler_attribute['param']['data']['Sampler']['texture_filtering_type'] = 'AnisotropicFiltering' if sampler_node.texture_filter == 'ANISOTROPIC_FILTERING' else\
+                                                                                          'Default' if sampler_node.texture_filter == 'DEFAULT' else\
+                                                                                          'Default2'
                 sampler_attribute['param']['data']['Sampler']['border_color'] = {}
-                sampler_attribute['param']['data']['Sampler']['border_color']['r'] = 0.0
-                sampler_attribute['param']['data']['Sampler']['border_color']['g'] = 0.0
-                sampler_attribute['param']['data']['Sampler']['border_color']['b'] = 0.0
-                sampler_attribute['param']['data']['Sampler']['border_color']['a'] = 0.0
-                sampler_attribute['param']['data']['Sampler']['unk11'] = 0
-                sampler_attribute['param']['data']['Sampler']['unk12'] = 2139095022
-                sampler_attribute['param']['data']['Sampler']['lod_bias'] = -2.0
-                sampler_attribute['param']['data']['Sampler']['max_anisotropy'] = 4
+                sampler_attribute['param']['data']['Sampler']['border_color']['r'] = sampler_node.border_color[0]
+                sampler_attribute['param']['data']['Sampler']['border_color']['g'] = sampler_node.border_color[1]
+                sampler_attribute['param']['data']['Sampler']['border_color']['b'] = sampler_node.border_color[2]
+                sampler_attribute['param']['data']['Sampler']['border_color']['a'] = sampler_node.border_color[3]
+                sampler_attribute['param']['data']['Sampler']['unk11'] = sampler_node.unk11
+                sampler_attribute['param']['data']['Sampler']['unk12'] = sampler_node.unk12
+                sampler_attribute['param']['data']['Sampler']['lod_bias'] = sampler_node.lod_bias
+                sampler_attribute['param']['data']['Sampler']['max_anisotropy'] = 0 if sampler_node.max_anisotropy == '1X' else\
+                                                                                  2 if sampler_node.max_anisotropy == '2X' else\
+                                                                                  4 if sampler_node.max_anisotropy == '4X' else\
+                                                                                  8 if sampler_node.max_anisotropy == '16X' else\
+                                                                                  16
+                                                                               
                 sampler_attribute['param']['data_type'] = 14
                 attributes16.append(sampler_attribute)
 
             elif 'Sampler' in name.split(' ')[0]:
-                # Theres no sampler input nodes or anything like that atm....
+                # Samplers are not thier own input in the master node, rather they are a seperate node entirely
                 pass
             elif 'Boolean' in name.split(' ')[0]:
                 attribute['param_id'] = name.split(' ')[0]
@@ -528,11 +549,11 @@ def make_matl_json(materials):
                     attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector46'].default_value[1]
                     attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector46'].default_value[2]
                     attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector46'].default_value[3]
-                elif name == 'CustomVector47':
-                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector47'].default_value[0]
-                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector47'].default_value[1]
-                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector47'].default_value[2]
-                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector47'].default_value[3]
+                elif name == 'CustomVector47 RGB':
+                    attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector47 RGB'].default_value[0]
+                    attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector47 RGB'].default_value[1]
+                    attribute['param']['data']['Vector4']['z'] = node.inputs['CustomVector47 RGB'].default_value[2]
+                    attribute['param']['data']['Vector4']['w'] = node.inputs['CustomVector47 Alpha'].default_value
                 elif name == 'CustomVector48':
                     attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector48'].default_value[0]
                     attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector48'].default_value[1]
@@ -963,7 +984,7 @@ def make_skel(context, linked_nusktb_settings):
             reordered_bones.append(linked_bone)
             del output_bones[linked_bone.name]
         
-        for remaining_bone in output_bones:
+        for remaining_bone in output_bones.values():
             reordered_bones.append(remaining_bone)
         
         ssbh_bone_name_to_bone_dict = {}
@@ -971,13 +992,23 @@ def make_skel(context, linked_nusktb_settings):
             ssbh_bone_name_to_bone_dict[ssbh_bone.name] = ssbh_bone
         
         index = 0 # Debug
+        print(f'Reordered Bones = {reordered_bones} \n')
         for blender_bone in reordered_bones:
             ssbh_bone = None
             if 'ORDER_AND_VALUES' == linked_nusktb_settings:
                 vanilla_ssbh_bone = ssbh_bone_name_to_bone_dict.get(blender_bone.name)
-                print('OV: index %s, transform= %s' % (index, vanilla_ssbh_bone.transform))
-                index = index + 1
-                ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, vanilla_ssbh_bone.transform, reordered_bones.index(blender_bone.parent) if blender_bone.parent else None)
+                if vanilla_ssbh_bone is not None:
+                    print('O&V Link Found: index %s, transform= %s' % (index, vanilla_ssbh_bone.transform))
+                    index = index + 1
+                    ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, vanilla_ssbh_bone.transform, reordered_bones.index(blender_bone.parent) if blender_bone.parent else None)
+                else:
+                    if blender_bone.parent:
+                        rel_mat = blender_bone.parent.matrix.inverted() @ blender_bone.matrix
+                        ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, rel_mat.transposed(), reordered_bones.index(blender_bone.parent))
+                        print(f'O&V No Link Found: index {index}, name {blender_bone.name}, rel_mat.transposed()= {rel_mat.transposed()}')
+                        index = index + 1
+                    else:
+                        ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, blender_bone.matrix.transposed(), None)
             else:
                 if blender_bone.parent:
                     '''
