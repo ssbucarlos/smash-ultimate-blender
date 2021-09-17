@@ -42,7 +42,10 @@ classes = [
     panels.exo_skel.MakeCombinedSkeleton,
     panels.exo_skel.ExportHelperBoneJson,
     panels.exo_skel.ExportSkelJson,
-
+    panels.import_anim.ImportAnimPanel,
+    panels.import_anim.AnimArmatureClearOperator,
+    panels.import_anim.AnimCameraClearOperator,
+    panels.import_anim.AnimModelImporterOperator,
     #panels.exo_skel.ExoSkelProperties,
 ]
 
