@@ -481,15 +481,29 @@ def create_armature(skel, context):
             clavicle_c = armature.data.edit_bones.get('ClavicleC', None)
             if clavicle_c is not None:
                 current_bone.tail = clavicle_c.head
-        for side in ['L', 'R']:
-            finger_bones = [bone for bone in armature.data.edit_bones if f'Finger{side}' in bone.name]
-            for fb in finger_bones:
-                index_and_sub_index = fb.name.split(f'Finger{side}')[1]
-                index = int(index_and_sub_index[0])
-                sub_index = int(index_and_sub_index[1])
-                next_finger_bone = armature.data.edit_bones.get(f'Finger{side}{index}{sub_index + 1}', None)
-                if next_finger_bone is not None:
-                    fb.tail = next_finger_bone.head
+    
+    # Special Finger Logic
+    for side in ['L', 'R']:
+        finger_bones = [bone for bone in armature.data.edit_bones if f'Finger{side}' in bone.name]
+        for fb in finger_bones:
+            index_and_sub_index = fb.name.split(f'Finger{side}')[1]
+            index = int(index_and_sub_index[0])
+            sub_index = int(index_and_sub_index[1])
+            next_finger_bone = armature.data.edit_bones.get(f'Finger{side}{index}{sub_index + 1}', None)
+            if next_finger_bone is not None:
+                fb.tail = next_finger_bone.head
+
+    # Now do something for 'leaf' bones
+    for bone_data in skel.bones:
+        current_bone = armature.data.edit_bones[bone_data.name]
+        if len(current_bone.children) != 0: # Not a Leaf Bone
+            continue
+        if current_bone.parent is None:
+            continue
+        # time to calculate the slope in 3D space to pick a nice spot for the new tail
+        slope = current_bone.parent.head - current_bone.head
+        current_bone.tail = current_bone.head - slope
+        current_bone.length = current_bone.parent.length # TODO: Maybe push this bone out to bounding box? 
 
     # Experimental Helper Bone Tail Stuff
     for bone_data in skel.bones:
