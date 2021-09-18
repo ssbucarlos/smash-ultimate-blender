@@ -117,8 +117,12 @@ def import_model_anim(context, filepath,
     scene = context.scene
     scene.frame_start = first_blender_frame
     scene.frame_end = scene.frame_start + frame_count - 1
+    scene.frame_set(scene.frame_start)
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
     context.view_layer.objects.active = context.scene.sub_anim_armature
+    bpy.ops.object.mode_set(mode='EDIT', toggle=False) 
+    bone_name_to_edit_bone_matrix = {bone.name:bone.matrix.copy() for bone in context.scene.sub_anim_armature.data.edit_bones}
+    print(bone_name_to_edit_bone_matrix) # DEBUG, remove for release
     bpy.ops.object.mode_set(mode='POSE', toggle=False) # put our armature in pose mode
     
     if include_transform_track:
@@ -134,7 +138,7 @@ def import_model_anim(context, filepath,
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
         scene.frame_set(frame)
         if include_transform_track:
-            do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node)
+            do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node, bone_name_to_edit_bone_matrix)
         if include_material_track:
             do_material_stuff(context, material_group, index, frame)
         if include_visibility_track:
@@ -144,7 +148,7 @@ def import_model_anim(context, filepath,
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
     
 
-def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node):
+def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node, bone_name_to_edit_bone_matrix):
     bones = context.scene.sub_anim_armature.pose.bones
     for bone in bones: # Traverses the bone array in heirarchy order, starting from the root
         node = bone_to_node.get(bone, None)
@@ -169,10 +173,28 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         sz = scale_matrix_z = mathutils.Matrix.Scale(s[2], 4, (0,1,0))
         nm = new_matrix = mathutils.Matrix(tm @ rm @ sx @ sy @ sz)
 
+        row_0 = bone.bone['row_0'][:]
+        row_1 = bone.bone['row_1'][:]
+        row_2 = bone.bone['row_2'][:]
+        row_3 = bone.bone['row_3'][:]
+
+        if bone.parent is not None:
+            p_row_0 = bone.parent.bone['row_0'][:]
+            p_row_1 = bone.parent.bone['row_1'][:]
+            p_row_2 = bone.parent.bone['row_2'][:]
+            p_row_3 = bone.parent.bone['row_3'][:]
+            m_p_true = matrix_parent_true = mathutils.Matrix([p_row_0, p_row_1, p_row_2, p_row_3])
+            m_p_edit = matrix_parent_edit_bone_matrix = bone_name_to_edit_bone_matrix[bone.parent.name]
+            m_p_off = matrix_parent_offset = m_p_true.inverted() @ m_p_edit
+
+        m_true = matrix_true = mathutils.Matrix([row_0, row_1, row_2, row_3])
+        m_edit = matrix_edit_bone_matrix = bone_name_to_edit_bone_matrix[bone.name]
+        m_off = matrix_offset = m_true.inverted() @ m_edit
+
         if bone.parent is None:
-            bone.matrix = new_matrix
+            bone.matrix = new_matrix @ m_off
         else:
-            bone.matrix = bone.parent.matrix @ new_matrix
+            bone.matrix = bone.parent.matrix @ m_p_off.inverted() @ new_matrix @ m_off
         '''
         Turns out this wasn't correct, still dont know what "compensate scale" even does.
         Its not set for any of sonics main bones, so i still have no idea what im missing

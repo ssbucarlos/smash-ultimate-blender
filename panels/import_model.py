@@ -275,9 +275,12 @@ def create_helper_bone_constraints(armature, ssbh_helper_bone_json, context):
             crc.subtarget = target_bone.name
             crc.target_space = 'POSE'
             crc.owner_space = 'POSE'
+            '''
             crc.influence = aoi['x'] if axis is x else\
                             aoi['y'] if axis is y else\
                             aoi['z']
+            '''
+            crc.influence = 1.0 # Use 1.0 for now as a naive fix, but need to figure out a more permanent solution
             crc.use_x = True if axis is x else False
             crc.use_y = True if axis is y else False
             crc.use_z = True if axis is z else False
@@ -454,6 +457,33 @@ def create_armature(skel, context):
         matrix = bone_to_matrix_dict[current_bone]
         current_bone.matrix = matrix
         print ('current_bone=%s:\n\t matrix=%s\n\t current_bone.matrix = %s' % (current_bone.name, matrix, current_bone.matrix))
+        '''
+        TEST: Try to change bone orientation while allowing anim import
+        '''
+        # Store the True Matrix
+        current_bone['row_0'] = matrix.row[0]
+        current_bone['row_1'] = matrix.row[1]
+        current_bone['row_2'] = matrix.row[2]
+        current_bone['row_3'] = matrix.row[3]
+
+        current_bone.use_connect = False
+        
+        non_helper_children = [child for child in current_bone.children if 'H_' not in child.name]
+        helper_children = [child for child in current_bone.children if 'H_' in child.name]
+        if len(non_helper_children) == 1:
+            current_bone.tail = non_helper_children[0].head
+    # Experimental Helper Bone Tail Stuff
+    for bone_data in skel.bones:
+        current_bone = armature.data.edit_bones[bone_data.name]
+        if current_bone.parent is None:
+            continue
+        if 'H_' not in bone_data.name:
+            continue
+
+        non_helper_siblings = [sibling for sibling in current_bone.parent.children if 'H_' not in sibling.name]
+        if len(non_helper_siblings) == 1:
+            current_bone.tail = non_helper_siblings[0].tail
+    
 
     end = time.time()
     print(f'Created armature in {end - start} seconds')
