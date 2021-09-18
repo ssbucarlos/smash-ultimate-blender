@@ -472,6 +472,25 @@ def create_armature(skel, context):
         helper_children = [child for child in current_bone.children if 'H_' in child.name]
         if len(non_helper_children) == 1:
             current_bone.tail = non_helper_children[0].head
+        # Hardcoded bone chain logic, dont judge ok
+        if current_bone.name == 'Hip':
+            waist = armature.data.edit_bones.get('Waist', None)
+            if waist is not None:
+                current_bone.tail = waist.head
+        elif current_bone.name == 'Bust':
+            clavicle_c = armature.data.edit_bones.get('ClavicleC', None)
+            if clavicle_c is not None:
+                current_bone.tail = clavicle_c.head
+        for side in ['L', 'R']:
+            finger_bones = [bone for bone in armature.data.edit_bones if f'Finger{side}' in bone.name]
+            for fb in finger_bones:
+                index_and_sub_index = fb.name.split(f'Finger{side}')[1]
+                index = int(index_and_sub_index[0])
+                sub_index = int(index_and_sub_index[1])
+                next_finger_bone = armature.data.edit_bones.get(f'Finger{side}{index}{sub_index + 1}', None)
+                if next_finger_bone is not None:
+                    fb.tail = next_finger_bone.head
+
     # Experimental Helper Bone Tail Stuff
     for bone_data in skel.bones:
         current_bone = armature.data.edit_bones[bone_data.name]
