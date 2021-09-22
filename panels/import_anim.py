@@ -153,7 +153,7 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
     for bone in bones: # Traverses the bone array in heirarchy order, starting from the root
         node = bone_to_node.get(bone, None)
         if node is None: # Not all bones will have a transform node. For example, helper bones never have transforms in the anim.
-            print(f'Skipping bone "{bone.name}", no associated node')
+            #print(f'Skipping bone "{bone.name}", no associated node')
             continue   
         try:
             node.tracks[0].values[index]
@@ -162,6 +162,11 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
 
         t = translation = node.tracks[0].values[index].translation
         r = rotation = node.tracks[0].values[index].rotation
+        '''
+         for i in [0,1,2,3]:
+            if math.isnan(r[i]):
+                #print(f'bone="{bone.name}", index = "{index}", rotation ={r}')
+        '''
         s = scale = node.tracks[0].values[index].scale
         cs = compensate_scale = node.tracks[0].values[index].compensate_scale
         
@@ -173,24 +178,33 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         sz = scale_matrix_z = mathutils.Matrix.Scale(s[2], 4, (0,1,0))
         nm = new_matrix = mathutils.Matrix(tm @ rm @ sx @ sy @ sz)
 
-        row_0 = bone.bone['row_0'][:]
-        row_1 = bone.bone['row_1'][:]
-        row_2 = bone.bone['row_2'][:]
-        row_3 = bone.bone['row_3'][:]
+        true_row_0 = bone.bone['row_0'][:]
+        true_row_1 = bone.bone['row_1'][:]
+        true_row_2 = bone.bone['row_2'][:]
+        true_row_3 = bone.bone['row_3'][:]
 
         if bone.parent is not None:
-            p_row_0 = bone.parent.bone['row_0'][:]
-            p_row_1 = bone.parent.bone['row_1'][:]
-            p_row_2 = bone.parent.bone['row_2'][:]
-            p_row_3 = bone.parent.bone['row_3'][:]
-            m_p_true = matrix_parent_true = mathutils.Matrix([p_row_0, p_row_1, p_row_2, p_row_3])
+            p_true_row_0 = bone.parent.bone['row_0'][:]
+            p_true_row_1 = bone.parent.bone['row_1'][:]
+            p_true_row_2 = bone.parent.bone['row_2'][:]
+            p_true_row_3 = bone.parent.bone['row_3'][:]
+            p_offset_row_0 = bone.parent.bone['offset_row_0'][:]
+            p_offset_row_1 = bone.parent.bone['offset_row_1'][:]
+            p_offset_row_2 = bone.parent.bone['offset_row_2'][:]
+            p_offset_row_3 = bone.parent.bone['offset_row_3'][:]
+            m_p_true = matrix_parent_true = mathutils.Matrix([p_true_row_0, p_true_row_1, p_true_row_2, p_true_row_3])
             m_p_edit = matrix_parent_edit_bone_matrix = bone_name_to_edit_bone_matrix[bone.parent.name]
-            m_p_off = matrix_parent_offset = m_p_true.inverted() @ m_p_edit
+            #m_p_off = matrix_parent_offset = m_p_true.inverted() @ m_p_edit
+            m_p_off = matrix_parent_offset = mathutils.Matrix([p_offset_row_0, p_offset_row_1, p_offset_row_2, p_offset_row_3])
 
-        m_true = matrix_true = mathutils.Matrix([row_0, row_1, row_2, row_3])
+        m_true = matrix_true = mathutils.Matrix([true_row_0, true_row_1, true_row_2, true_row_3])
         m_edit = matrix_edit_bone_matrix = bone_name_to_edit_bone_matrix[bone.name]
-        m_off = matrix_offset = m_true.inverted() @ m_edit
-
+        #m_off = matrix_offset = m_true.inverted() @ m_edit
+        offset_row_0 = bone.bone['offset_row_0'][:]
+        offset_row_1 = bone.bone['offset_row_1'][:]
+        offset_row_2 = bone.bone['offset_row_2'][:]
+        offset_row_3 = bone.bone['offset_row_3'][:]
+        m_off = mathutils.Matrix([offset_row_0, offset_row_1, offset_row_2, offset_row_3])
         if bone.parent is None:
             bone.matrix = new_matrix @ m_off
         else:

@@ -440,12 +440,18 @@ def create_armature(skel, context):
         new_bone.use_inherit_scale = True
 
     # Associate each bone with its parent.
+    ssbh_bone_list = [bone for bone in skel.bones]
+    print('Printing SSBH_DATA_PY bone list')
+    for bone in ssbh_bone_list:
+        print(f'bone.name="{bone.name}"   bone.parent_index="{bone.parent_index}"')
     for bone_data in skel.bones: 
         current_bone = armature.data.edit_bones[bone_data.name]
         if bone_data.parent_index is not None:
             try:
-                current_bone.parent = armature.data.edit_bones[bone_data.parent_index]
+                parent_bone = ssbh_bone_list[bone_data.parent_index]
+                current_bone.parent = armature.data.edit_bones.get(parent_bone.name)
             except:
+                print(f'An exception happened parenting the child bone{current_bone.name} to parent bone{parent_bone.name}')
                 continue
         else:
             # HACK: Prevent root bones from being removed
@@ -469,9 +475,33 @@ def create_armature(skel, context):
         current_bone.use_connect = False
         
         non_helper_children = [child for child in current_bone.children if 'H_' not in child.name]
+        non_helper_non_finger_children = [child for child in current_bone.children if 'H_' not in child.name and 'Finger' not in child.name]
         helper_children = [child for child in current_bone.children if 'H_' in child.name]
-        if len(non_helper_children) == 1:
-            current_bone.tail = non_helper_children[0].head
+        null_bone_children = [child for child in current_bone.children if '_eff' in child.name]
+        if len(non_helper_children) == 0:
+            pass
+        elif 'H_' in current_bone.name:
+            pass 
+        elif len(non_helper_children) == 1:
+            if current_bone.head != non_helper_children[0].head:
+                current_bone.tail = non_helper_children[0].head
+        elif len(null_bone_children) == 1:
+            if current_bone.head != null_bone_children[0].head:
+                current_bone.tail = null_bone_children[0].head
+        elif len(non_helper_non_finger_children) > 0:
+            from statistics import mean
+            old_tail = current_bone.tail.copy()
+            for index in [0,1,2]:
+                current_bone.tail[index] = mean([c.head[index] for c in non_helper_non_finger_children])
+            if current_bone.tail == current_bone.head:
+                current_bone.tail = old_tail
+        else:
+            from statistics import mean
+            old_tail = current_bone.tail.copy()
+            for index in [0,1,2]:
+                current_bone.tail[index] = mean([c.head[index] for c in current_bone.children])
+            if current_bone.tail == current_bone.head:
+                current_bone.tail = old_tail
         # Hardcoded bone chain logic, dont judge ok
         if current_bone.name == 'Hip':
             waist = armature.data.edit_bones.get('Waist', None)
@@ -517,6 +547,22 @@ def create_armature(skel, context):
         if len(non_helper_siblings) == 1:
             current_bone.tail = non_helper_siblings[0].tail
     
+    # Final check to make sure 0-length bones didn't happen
+
+
+    # All bones have had their matrixes modified. Store the offset matrix for anim use
+    for bone_data in skel.bones:
+        current_bone = armature.data.edit_bones[bone_data.name]
+        true_row_0 = current_bone['row_0']
+        true_row_1 = current_bone['row_1']
+        true_row_2 = current_bone['row_2']
+        true_row_3 = current_bone['row_3']
+        matrix_true = mathutils.Matrix([true_row_0, true_row_1, true_row_2, true_row_3])
+        matrix_offset = matrix_true.inverted() @ current_bone.matrix
+        current_bone['offset_row_0'] = matrix_offset.row[0]
+        current_bone['offset_row_1'] = matrix_offset.row[1]
+        current_bone['offset_row_2'] = matrix_offset.row[2]
+        current_bone['offset_row_3'] = matrix_offset.row[3]
 
     end = time.time()
     print(f'Created armature in {end - start} seconds')
@@ -649,6 +695,9 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
     for ssbh_mat_entry in ssbh_mat_entries:
         if ssbh_mat_entry['material_label'] == material_label:
             entry = ssbh_mat_entry
+
+    if entry is None:
+        raise RuntimeError(f'Did not find a matching material entry for the material label "{material_label}". Please check that you are using the correct .NUMATB for this model')
 
     # Change Mat Settings
     # Change Transparency Stuff Later
