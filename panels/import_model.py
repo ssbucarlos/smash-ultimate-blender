@@ -156,7 +156,12 @@ class ModelImporter(bpy.types.Operator):
     bl_label = 'Model Importer'
 
     def execute(self, context):
+        start = time.time()
+
         import_model(self,context)
+
+        end = time.time()
+        print(f'Imported model in {end - start} seconds')
         return {'FINISHED'}
 
 def import_model(self, context):
@@ -167,10 +172,13 @@ def import_model(self, context):
     nusktb_name = context.scene.sub_model_nusktb_file_name
     numatb_name = context.scene.sub_model_numatb_file_name
     
+    start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
     ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name) if numshb_name != '' else None
     ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
     ssbh_material_json = load_numatb_json(dir + numatb_name) if numshb_name != '' else None
+    end = time.time()
+    print(f'Read files in {end - start} seconds')
 
     armature = create_armature(ssbh_skel, context)
     created_meshes = create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
@@ -248,15 +256,11 @@ def find_bone_index(skel, name):
 
 
 def create_verts(bm, mesh_object, skel):
-    for (index, (pos, nrm)) in enumerate(zip(mesh_object.positions[0].data, mesh_object.normals[0].data)):
+    for (index, pos) in enumerate(mesh_object.positions[0].data):
         # Vertex attributes
-        # TODO: Tangents/bitangents?
-        # Ok but fr need to figure out tangents/bitangents in blender
         vert = bm.verts.new()
         vert.co = pos[:3]
-        vert.normal = nrm[:3] # <--- Funny prank, this doesn't actually set the custom normals in blender
         vert.index = index
-
 
     # Make sure the indices are set to make faces.
     bm.verts.ensure_lookup_table()
@@ -333,7 +337,6 @@ def create_color_sets(bm, mesh):
                 # Sadly this might break the vertex colors in external apps if exported via .FBX or .DAE
                 # Update: So blender clamps vertex colors to 1.0, so scaling on import is not viable, will address scaling in shader
                 # scale = get_color_scale(attribute_data.name)
-                # loop[color_layer] = [value * scale for value in attribute_data.data[loop.vert.index]]
                 loop[color_layer] = [value for value in attribute_data.data[loop.vert.index]]
 
 
@@ -363,12 +366,12 @@ def create_armature(skel, context):
 
            
         matrix_world = get_matrix4x4_blender(world_transform)
-        print('bone name =%s: \n\tworld_transform = %s,\n\t matrix_world = %s' % (bone_data.name, world_transform, matrix_world)) 
+        # print('bone name =%s: \n\tworld_transform = %s,\n\t matrix_world = %s' % (bone_data.name, world_transform, matrix_world)) 
         # Assign transform pre-parenting
         new_bone.transform(matrix_world, scale=True, roll=False)
         #new_bone.matrix = matrix_world <--- Doesnt actually do anything here lol
         bone_to_matrix_dict[new_bone] = matrix_world
-        print('bone name = %s: \n\tnew_bone.matrix= %s' % (bone_data.name, new_bone.matrix))
+        # print('bone name = %s: \n\tnew_bone.matrix= %s' % (bone_data.name, new_bone.matrix))
         new_bone.length = 1
         new_bone.use_deform = True
         new_bone.use_inherit_rotation = True
@@ -391,7 +394,7 @@ def create_armature(skel, context):
         current_bone = armature.data.edit_bones[bone_data.name]
         matrix = bone_to_matrix_dict[current_bone]
         current_bone.matrix = matrix
-        print ('current_bone=%s:\n\t matrix=%s\n\t current_bone.matrix = %s' % (current_bone.name, matrix, current_bone.matrix))
+        # print ('current_bone=%s:\n\t matrix=%s\n\t current_bone.matrix = %s' % (current_bone.name, matrix, current_bone.matrix))
 
     end = time.time()
     print(f'Created armature in {end - start} seconds')
@@ -423,11 +426,13 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, parent_bone_n
 def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     blender_mesh = bpy.data.meshes.new(ssbh_mesh_object.name)
 
-    # Using bmesh is faster than from_pydata and setting additional vertex parameters.
+    # Using bmesh is faster than from_pydata.
     bm = bmesh.new()
 
     create_verts(bm, ssbh_mesh_object, skel)
     create_faces(bm, ssbh_mesh_object)
+    # TODO: We can't assume the component count.
+    # TODO: This needs vector padding for this to be safe.
     create_uvs(bm, ssbh_mesh_object)
     create_color_sets(bm, ssbh_mesh_object)
 
@@ -439,13 +444,6 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     vertex_normals = ssbh_mesh_object.normals[0].data
     blender_mesh.normals_split_custom_set_from_vertices([(vn[0], vn[1], vn[2]) for vn in vertex_normals])
 
-    # Assign Tangents?
-    # Tangents are read only??
-    # Ok i spend way too much time googling this, not sure why i can't find how to assign
-    # tangents, maybe theyre just something that gets calculated....
-    
-
-
     # Assign Material
     material = name_index_mat_dict[ssbh_mesh_object.name][ssbh_mesh_object.sub_index]
     blender_mesh.materials.append(material)
@@ -455,6 +453,7 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
 
     return blender_mesh
 
+
 def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context):
     '''
     So the goal here is to create a set of materials to share among the meshes for this model.
@@ -462,6 +461,7 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
     Gonna make sure not to conflict.
     example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
     '''
+
     created_meshes = []
     
     numdlb_material_labels = {e.material_label for e in ssbh_model.entries} # {blah} creates a set aka a list with no duplicates. {} creates an empty dictionary tho
@@ -479,12 +479,15 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
         setup_blender_mat(blender_mat, label, ssbh_material_json, texture_name_to_image_dict)
         label_to_material_dict[label] = blender_mat
         
-    
+    # TODO: Comprehension here?
     name_index_mat_dict = {}
     for e in ssbh_model.entries:
 	    name_index_mat_dict[e.mesh_object_name] = {}
     for e in ssbh_model.entries:
         name_index_mat_dict[e.mesh_object_name][e.mesh_object_sub_index] = label_to_material_dict[e.material_label]
+
+
+    start = time.time()
 
     for ssbh_mesh_object in ssbh_mesh.objects:
         blender_mesh = create_blender_mesh(ssbh_mesh_object, ssbh_skel, name_index_mat_dict)
@@ -495,6 +498,9 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
         context.collection.objects.link(mesh_obj)
         created_meshes.append(mesh_obj)
     
+    end = time.time()
+    print(f'Created meshes in {end - start} seconds')
+
     return created_meshes
 
 def import_material_images(ssbh_material_json, context):
@@ -777,6 +783,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
             node_count = node_count + 1
     
     # Read Shader Label File
+    # TODO: This is very slow to run and will probably be faster with SQLite.
     shader_json_path = get_shader_json_file_path()
     shader_json = None
     with open(shader_json_path, 'r') as f:
