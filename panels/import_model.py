@@ -14,7 +14,7 @@ from bpy_extras import image_utils
 
 from ..operators import master_shader
 
-
+import sqlite3
 
 class ImportModelPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
@@ -782,32 +782,18 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
             links.new(matched_alpha_input, texture_node.outputs['Alpha'])
             node_count = node_count + 1
     
-    # Read Shader Label File
-    # TODO: This is very slow to run and will probably be faster with SQLite.
-    shader_json_path = get_shader_json_file_path()
-    shader_json = None
-    with open(shader_json_path, 'r') as f:
-        shader_json = json.load(f)
-    
-    shader_array = shader_json['data']['Nufx']['programs']['ProgramsV1']
-    found_shader = None
-    for shader in shader_array:
-        if shader['name'] == shader_name:
-            found_shader = shader
-            break
-    
-    if found_shader is None:
-        raise RuntimeError(f'did not find a matching shader for shader name "{shader_name}"')
-
-    vertex_attributes = found_shader['vertex_attributes']
-    color_set_1_found = False
-    for vertex_attribute in vertex_attributes:
-        if vertex_attribute['attribute_name'] == 'colorSet1':
-            color_set_1_found = True
-            break
-        
-    node_group_node.inputs['use_color_set_1'].default_value = 1.0 if color_set_1_found else 0.0
-    
-
-
-    return
+    # Query the shader database for attribute information.
+    # Using SQLite is much faster than iterating through the JSON dump.
+    with sqlite3.connect(__file__ + '/../../shader_file/Nufx.db') as con:
+        # Construct a query to find all the vertex attributes for this shader.
+        # Invalid shaders will return an empty list.
+        # TODO(SMG): It's possible to use a smaller shader DB file by removing the tag (ex: '_opaque').
+        # TODO: It's probably not necessary to also  use the shader JSON dump.
+        sql = """
+            SELECT v.AttributeName 
+            FROM VertexAttribute v 
+            INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
+            WHERE s.Name = ?
+            """
+        attributes = [row[0] for row in con.execute(sql, (shader_name,)).fetchall()]
+        node_group_node.inputs['use_color_set_1'].default_value = 1.0 if 'colorSet1' in attributes else 0.0
