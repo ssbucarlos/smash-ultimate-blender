@@ -208,9 +208,11 @@ def get_ssbh_lib_json_exe_path():
     this_file_path = __file__
     return this_file_path + '/../../ssbh_lib_json/ssbh_lib_json.exe'
 
-def get_shader_json_file_path():
+def get_shader_db_file_path():
+    # This file was generated with duplicates removed to optimize space.
+    # https://github.com/ScanMountGoat/Smush-Material-Research#shader-database
     this_file_path = __file__
-    return this_file_path + '/../../shader_file/nuc2effectlibrary.nufxlb.json'
+    return this_file_path + '/../../shader_file/nufx.db'
 
 def load_numatb_json(numatb_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
@@ -784,16 +786,15 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
     
     # Query the shader database for attribute information.
     # Using SQLite is much faster than iterating through the JSON dump.
-    with sqlite3.connect(__file__ + '/../../shader_file/Nufx.db') as con:
+    with sqlite3.connect(get_shader_db_file_path()) as con:
         # Construct a query to find all the vertex attributes for this shader.
         # Invalid shaders will return an empty list.
-        # TODO(SMG): It's possible to use a smaller shader DB file by removing the tag (ex: '_opaque').
-        # TODO: It's probably not necessary to also  use the shader JSON dump.
         sql = """
             SELECT v.AttributeName 
             FROM VertexAttribute v 
             INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
             WHERE s.Name = ?
             """
-        attributes = [row[0] for row in con.execute(sql, (shader_name,)).fetchall()]
+        # The database has a single entry for each program, so don't include the render pass tag.
+        attributes = [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
         node_group_node.inputs['use_color_set_1'].default_value = 1.0 if 'colorSet1' in attributes else 0.0
