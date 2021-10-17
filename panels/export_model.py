@@ -780,26 +780,6 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
         normal0.data = [list(index_to_normals_dict[key]) for key in sorted(index_to_normals_dict.keys())]
         ssbh_mesh_object.normals = [normal0]
         
-
-        # Calculate Tangents
-        # it is so hard to find examples of this online pls if you know how to better calculate tangents
-        # please let me know
-        tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
-        try:
-            mesh_data_copy.calc_tangents()
-        except RuntimeError as err:
-            print(f'Could Not Calculate Tangents for mesh {mesh.name}, skipping for now, err = {err}')
-            print(f'For reference, this is the meshs uvmaps{mesh.data.uv_layers.items()}')
-            print(f'and now the copies {mesh_data_copy.uv_layers.items()}')
-        else:
-            index_to_tangents_dict = {l.vertex_index : [l.tangent[0], l.tangent[1], l.tangent[2], -1.0 * l.bitangent_sign] for l in mesh_data_copy.loops}
-            sorted_dict = sorted(index_to_tangents_dict.items())
-            tangent0.data = [val for index, val in sorted_dict]
-            ssbh_mesh_object.tangents = [tangent0]
-
-            mesh_data_copy.free_normals_split()
-            mesh_data_copy.free_tangents()
-
         # Python magic to flatten the faces into a single list of vertex indices.
         #ssbh_mesh_object.vertex_indices = [index for face in mesh_data_copy.polygons for index in face.vertices]
         ssbh_mesh_object.vertex_indices = [loop.vertex_index for loop in mesh_data_copy.loops]
@@ -891,6 +871,15 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
             ssbh_mesh_object.color_sets.append(ssbh_color_set)
 
 
+        # Calculate tangents now that the necessary attributes are initialized.
+        # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
+        tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
+        tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
+            ssbh_mesh_object.normals[0].data, 
+            ssbh_mesh_object.texture_coordinates[0].data,
+            ssbh_mesh_object.vertex_indices)
+        ssbh_mesh_object.tangents = [tangent0]
+        
         bm.free()
         bpy.ops.object.mode_set(mode='OBJECT')
 
