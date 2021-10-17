@@ -4,6 +4,22 @@ from typing import List, Tuple, Any
 def read_mesh(path: str) -> MeshData: ...
 
 
+def transform_points(
+    points: list[list[float]], transform: list[list[float]]) -> list[list[float]]: ...
+
+
+def transform_vectors(
+    points: list[list[float]], transform: list[list[float]]) -> list[list[float]]: ...
+
+
+def calculate_smooth_normals(
+    positions: list[list[float]], vertex_indices: list[int]) -> list[list[float]]: ...
+
+
+def calculate_tangents_vec4(
+    positions: list[list[float]], normals: list[list[float]], uvs: list[list[float]], vertex_indices: list[int]) -> list[list[float]]: ...
+
+
 class MeshData:
     major_version: int
     minor_version: int
