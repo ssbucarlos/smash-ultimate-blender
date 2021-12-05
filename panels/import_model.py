@@ -523,6 +523,28 @@ def create_armature(skel, context):
             if next_finger_bone is not None:
                 fb.tail = next_finger_bone.head
 
+    # Special Leg Logic
+    for side in ['L', 'R']:
+        leg = armature.data.edit_bones.get(f'Leg{side}', None)
+        knee = armature.data.edit_bones.get(f'Knee{side}', None)
+        foot = armature.data.edit_bones.get(f'Foot{side}', None)
+        toe = armature.data.edit_bones.get(f'Toe{side}', None)
+        if all(b is not None for b in [leg, knee, foot, toe]):
+            leg.tail = knee.head
+            knee.tail = foot.head
+            foot.tail = toe.head
+
+    #Special Arm Logic
+    for side in ['L', 'R']:
+        clavicle = armature.data.edit_bones.get(f'Clavicle{side}', None)
+        shoulder = armature.data.edit_bones.get(f'Shoulder{side}', None)
+        arm = armature.data.edit_bones.get(f'Arm{side}', None)
+        hand = armature.data.edit_bones.get(f'Hand{side}', None)
+        if all(b is not None for b in [clavicle, shoulder, arm, hand]):
+            clavicle.tail = shoulder.head
+            shoulder.tail = arm.head
+            arm.tail = hand.head     
+
     # Now do something for 'leaf' bones
     for bone_data in skel.bones:
         current_bone = armature.data.edit_bones[bone_data.name]
