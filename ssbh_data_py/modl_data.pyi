@@ -4,10 +4,6 @@ from typing import List, Tuple, Any, Optional
 def read_modl(path: str) -> ModlData: ...
 
 
-def calculate_relative_transform(
-    world_transform: list[list[float]], parent_world_transform: list[list[float]]) -> list[list[float]]: ...
-
-
 class ModlData:
     major_version: int
     minor_version: int
