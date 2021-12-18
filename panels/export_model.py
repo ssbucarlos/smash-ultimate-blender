@@ -1,4 +1,5 @@
 import os
+import time
 from .import_model import get_color_scale, get_ssbh_lib_json_exe_path
 import bpy
 import os.path
@@ -127,10 +128,12 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     else:
         ssbh_skel_data = make_skel(context, linked_nusktb_settings)
     
-    ssbh_modl_data = None
-    ssbh_mesh_data = None
-    ssbh_matl_json = None
+    start = time.time()
+
     ssbh_modl_data, ssbh_mesh_data, ssbh_matl_json, ssbh_numshexb_json = make_modl_mesh_matl_data(context, ssbh_skel_data, filepath)
+    
+    end = time.time()
+    print(f'Created export files in {end - start} seconds')
 
     if include_numdlb:
         ssbh_modl_data.save(filepath + 'model.numdlb')
@@ -313,7 +316,7 @@ def make_matl_json(materials):
                 attribute['param']['data']['Vector4'] = {}
                 attribute['param']['data_type'] = 5
                 # Im sorry
-                print(f'Name = {name}') # DEBUG
+                # print(f'Name = {name}') # DEBUG
                 if name == 'CustomVector0 X (Min Texture Alpha)':
                     attribute['param']['data']['Vector4']['x'] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
                     attribute['param']['data']['Vector4']['y'] = node.inputs['CustomVector0 Y (???)'].default_value
