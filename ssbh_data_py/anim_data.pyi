@@ -53,25 +53,31 @@ class TrackData:
     name: str
     values: Union[list[UvTransform], list[Transform],
                   list[float], list[bool], list[int], list[list[float]]]
-
+    scale_options: ScaleOptions
+    
     def __init__(
         self,
         name: str,
     ) -> None: ...
 
 
+class ScaleOptions:
+    inherit_scale: bool
+    compensate_scale: bool
+
+    def __init__(self) -> None: ...
+
+
 class Transform:
     scale: list[float]
     rotation: list[float]
     translation: list[float]
-    compensate_scale: int
 
     def __init__(
         self,
         scale: list[float],
         rotation: list[float],
         translation: list[float],
-        compensate_scale: int
     ) -> None: ...
 
 

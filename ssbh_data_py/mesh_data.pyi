@@ -38,6 +38,9 @@ class MeshObjectData:
     name: str
     sub_index: int
     parent_bone_name: str
+    disable_depth_test: bool
+    disable_depth_write: bool
+    sort_bias: int
     vertex_indices: list[int]
     positions: list[AttributeData]
     normals: list[AttributeData]
