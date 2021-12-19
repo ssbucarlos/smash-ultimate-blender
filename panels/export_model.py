@@ -4,6 +4,7 @@ from .import_model import get_color_scale, get_ssbh_lib_json_exe_path
 import bpy
 import os.path
 import numpy as np
+import numpy.linalg as la
 
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
@@ -648,7 +649,7 @@ def make_numshexb_json(true_name_to_meshes, temp_file_path):
     all_data = numshexb_json['all_data']
     all_data_entry = {}
     all_data_entry['bounding_sphere'] = {}
-    all_sphere_vector, all_sphere_radius = bounding_sphere([mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list], mode='GEOMETRY')
+    all_sphere_vector, all_sphere_radius = bounding_sphere([mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list])
     all_data_entry['bounding_sphere']['x'] = all_sphere_vector[0]
     all_data_entry['bounding_sphere']['y'] = all_sphere_vector[1]
     all_data_entry['bounding_sphere']['z'] = all_sphere_vector[2]
@@ -665,7 +666,7 @@ def make_numshexb_json(true_name_to_meshes, temp_file_path):
     for true_name in true_name_to_meshes.keys():
         true_name_entry = {}
         full_name = re.split(r'.\d\d\d',true_name_to_meshes[true_name][0].name)[0]
-        group_sphere_vector, group_sphere_radius = bounding_sphere(true_name_to_meshes[true_name], mode='GEOMETRY')
+        group_sphere_vector, group_sphere_radius = bounding_sphere(true_name_to_meshes[true_name])
         true_name_entry['bounding_sphere'] = {}
         true_name_entry['bounding_sphere']['x'] = group_sphere_vector[0]
         true_name_entry['bounding_sphere']['y'] = group_sphere_vector[1]
@@ -840,7 +841,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
 
         for uv_layer in mesh.data.uv_layers:
             ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
-            loop_uvs = np.zeros(len(uv_layer.data) * 2, dtype=np.float32)
+            loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
             uv_layer.data.foreach_get("uv", loop_uvs)
             
             uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
@@ -854,7 +855,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
         for color_layer in mesh.data.vertex_colors:
             ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
 
-            loop_colors = np.zeros(len(color_layer.data) * 4, dtype=np.float32)
+            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
             color_layer.data.foreach_get("color", loop_colors)
             ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
 
@@ -1010,23 +1011,27 @@ def make_skel(context, linked_nusktb_settings):
     return ssbh_skel
 
 
-'''
-Bounding sphere calculation from https://b3d.interplanety.org/en/how-to-calculate-the-bounding-sphere-for-selected-objects/
-'''
-def bounding_sphere(objects, mode='GEOMETRY'):
-    # return the bounding sphere center and radius for objects (in global coordinates)
-    points_co_global = []
-    if mode == 'GEOMETRY':
-        # GEOMETRY - by all vertices/points - more precise, more slow
-        for obj in objects:
-            points_co_global.extend([obj.matrix_world @ vertex.co for vertex in obj.data.vertices])
-    elif mode == 'BBOX':
-        # BBOX - by object bounding boxes - less precise, quick
-        for obj in objects:
-            points_co_global.extend([obj.matrix_world @ Vector(bbox) for bbox in obj.bound_box])
-    def get_center(l):
-        return (max(l) + min(l)) / 2 if l else 0.0
-    x, y, z = [[point_co[i] for point_co in points_co_global] for i in range(3)]
-    b_sphere_center = Vector([get_center(axis) for axis in [x, y, z]]) if (x and y and z) else None
-    b_sphere_radius = max(((point - b_sphere_center) for point in points_co_global)) if b_sphere_center else None
-    return b_sphere_center, b_sphere_radius.length
+
+# TODO: This will eventually be replaced by ssbh_data_py.
+def bounding_sphere(objects):
+    # A fast to compute bounding sphere that will contain all points.
+    # We don't need an optimal solution for visibility tests and depth sorting.
+    # Create a single numpy array for better performance.
+    vertex_count = sum([len(obj.data.vertices) for obj in objects])
+    positions_world_all = np.ones((vertex_count, 4))
+
+    offset = 0
+    for obj in objects:
+        count = len(obj.data.vertices)
+
+        positions = np.zeros(count * 3, dtype=np.float32)
+        obj.data.vertices.foreach_get("co", positions)
+        # TODO: Find a more elegant way to account for world position.
+        positions_world_all[offset:offset+count,:3] = positions.reshape((-1,3)) 
+        positions_world_all[offset:offset+count,:] = positions_world_all[offset:offset+count,:] @ obj.matrix_world
+
+        offset += count
+
+    center = positions_world_all[:,:3].mean(axis=0)
+    radius = np.max(la.norm(positions_world_all[:,:3] - center, 2, axis=1))
+    return center, radius
