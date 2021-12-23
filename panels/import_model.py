@@ -484,7 +484,7 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
     # TODO: Comprehension here?
     name_index_mat_dict = {}
     for e in ssbh_model.entries:
-	    name_index_mat_dict[e.mesh_object_name] = {}
+        name_index_mat_dict[e.mesh_object_name] = {}
     for e in ssbh_model.entries:
         name_index_mat_dict[e.mesh_object_name][e.mesh_object_sub_index] = label_to_material_dict[e.material_label]
 
