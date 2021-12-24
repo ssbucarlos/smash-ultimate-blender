@@ -832,7 +832,10 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
         # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
         skel_bone_names = set([bone.name for bone in ssbh_skel_data.bones])
         BoneInfluence = ssbh_data_py.mesh_data.BoneInfluence
-        ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in group_to_weights.values() if name in skel_bone_names]
+        if len([wieghts for index, (name, wieghts) in group_to_weights.items() if len(wieghts) > 0]) == 0:
+            print(f'Found Mesh with no wieghts {mesh.name}, not assigning bone_influences')
+        else:
+            ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in group_to_weights.values() if name in skel_bone_names]
 
         context.collection.objects.link(mesh_object_copy)
         context.view_layer.update()
