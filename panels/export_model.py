@@ -752,6 +752,13 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
+    
+    '''
+    TODO: Investigate why export fails if meshes are selected before hitting export.
+    '''
+    for selected_object in context.selected_objects:
+        selected_object.select_set(False)
+    context.view_layer.objects.active = arma
 
     '''
     # TODO split meshes
