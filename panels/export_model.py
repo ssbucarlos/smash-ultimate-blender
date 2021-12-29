@@ -869,7 +869,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
             color_layer.data.foreach_get("color", loop_colors)
             ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
 
-            ssbh_mesh_object.texture_coordinates.append(ssbh_color_layer)
+            ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
 
         # Calculate tangents now that the necessary attributes are initialized.
