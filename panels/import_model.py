@@ -7,6 +7,7 @@ import time
 import bmesh
 import json
 import re
+from .. import ssbh_data_py
 
 from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
@@ -165,7 +166,6 @@ class ModelImporter(bpy.types.Operator):
         return {'FINISHED'}
 
 def import_model(self, context):
-    from .. import ssbh_data_py
     dir = context.scene.sub_model_folder_path
     numdlb_name = context.scene.sub_model_numdlb_file_name
     numshb_name = context.scene.sub_model_numshb_file_name
@@ -176,12 +176,12 @@ def import_model(self, context):
     ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
     ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name) if numshb_name != '' else None
     ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
-    ssbh_material_json = load_numatb_json(dir + numatb_name) if numshb_name != '' else None
+    ssbh_matl = ssbh_data_py.matl_data.read_matl(dir + numatb_name) if numatb_name != '' else None
     end = time.time()
     print(f'Read files in {end - start} seconds')
 
     armature = create_armature(ssbh_skel, context)
-    created_meshes = create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context)
+    created_meshes = create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
     
     '''
     # TODO So merging meshes in blenders and then seperating them is terrible for UV and color layer management.
@@ -213,25 +213,6 @@ def get_shader_db_file_path():
     # https://github.com/ScanMountGoat/Smush-Material-Research#shader-database
     this_file_path = __file__
     return this_file_path + '/../../shader_file/nufx.db'
-
-def load_numatb_json(numatb_path):
-    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
-    print('ssbh_lib_json_exe_path = %s' % ssbh_lib_json_exe_path)
-    output_json_path = numatb_path + '.json'
-
-    # Run ssbh_lib_json
-    try:
-        subprocess.run([ssbh_lib_json_exe_path, numatb_path, output_json_path], capture_output=True, check=True)
-    except:
-        pass
-
-    # Load Outputted Json
-    numatb_json = None
-    with open(output_json_path) as f:
-        numatb_json = json.load(f)
-
-    return numatb_json
-
 
 
 '''
@@ -456,7 +437,7 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     return blender_mesh
 
 
-def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, context):
+def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     '''
     So the goal here is to create a set of materials to share among the meshes for this model.
     But, other previously created models can have materials of the same name.
@@ -473,12 +454,12 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
     master_shader.create_master_shader()
 
     texture_name_to_image_dict = {}
-    texture_name_to_image_dict = import_material_images(ssbh_material_json, context)
+    texture_name_to_image_dict = import_material_images(ssbh_matl, context)
 
     for label in numdlb_material_labels:
         blender_mat = bpy.data.materials.new(label)
 
-        setup_blender_mat(blender_mat, label, ssbh_material_json, texture_name_to_image_dict)
+        setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
         label_to_material_dict[label] = blender_mat
         
     # TODO: Comprehension here?
@@ -505,16 +486,13 @@ def create_mesh(ssbh_model, ssbh_material_json, ssbh_mesh, ssbh_skel, armature, 
 
     return created_meshes
 
-def import_material_images(ssbh_material_json, context):
+def import_material_images(ssbh_matl, context):
     texture_name_to_image_dict = {}
     texture_name_set = set()
 
-    ssbh_mat_entries = ssbh_material_json['data']['Matl']['entries']
-    for ssbh_mat_entry in ssbh_mat_entries:
-        attributes = ssbh_mat_entry['attributes']['Attributes16']
-        for attribute in attributes:
-            if 'Texture' in attribute['param_id']:
-                texture_name_set.add(attribute['param']['data']['MatlString'])
+    for ssbh_mat_entry in ssbh_matl.entries:
+        for attribute in ssbh_mat_entry.textures:
+            texture_name_set.add(attribute.data)
 
     print('texture_name_set = %s' % texture_name_set)
 
@@ -525,12 +503,18 @@ def import_material_images(ssbh_material_json, context):
 
     return texture_name_to_image_dict
 
-def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_name_to_image_dict):
-    ssbh_mat_entries = ssbh_material_json['data']['Matl']['entries']
 
+def enable_input(node_group_node, param_id):
+    for input in node_group_node.inputs:
+        if input.name.split(' ')[0] == param_id:
+            input.hide = False
+
+
+def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_data.MatlData, texture_name_to_image_dict):
+    # TODO: Handle none?
     entry = None
-    for ssbh_mat_entry in ssbh_mat_entries:
-        if ssbh_mat_entry['material_label'] == material_label:
+    for ssbh_mat_entry in ssbh_matl.entries:
+        if ssbh_mat_entry.material_label == material_label:
             entry = ssbh_mat_entry
 
     # Change Mat Settings
@@ -538,8 +522,9 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
     blender_mat.blend_method = 'CLIP'
     blender_mat.use_backface_culling = True
     blender_mat.show_transparent_back = False
+    # TODO: This should be based on the blend state and not the shader label.
     alpha_blend_suffixes = ['_far', '_sort', '_near']
-    if any(suffix in entry['shader_label'] for suffix in alpha_blend_suffixes):
+    if any(suffix in entry.shader_label for suffix in alpha_blend_suffixes):
         blender_mat.blend_method = 'BLEND'
         
     # Clone Master Shader
@@ -548,7 +533,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
     clone_group = master_node_group.copy()
 
     # Setup Clone
-    clone_group.name = entry['shader_label']
+    clone_group.name = entry.shader_label
 
     # Add our new Nodes
     blender_mat.use_nodes = True
@@ -569,220 +554,156 @@ def setup_blender_mat(blender_mat, material_label, ssbh_material_json, texture_n
         input.hide = True
     shader_label = node_group_node.inputs['Shader Label']
     shader_label.hide = False
-    shader_name = entry['shader_label']
-    shader_label.default_value = entry['shader_label']
+    shader_name = entry.shader_label
+    shader_label.default_value = entry.shader_label
     material_label = node_group_node.inputs['Material Name']
     material_label.hide = False
-    material_label.default_value = entry['material_label']
+    material_label.default_value = entry.material_label
 
-    attributes = entry['attributes']['Attributes16']
-    for attribute in attributes:
-        param_id = attribute['param_id']
+    # TODO: Refactor this to be cleaner?
+    blend_state = entry.blend_states[0].data
+    enable_input(node_group_node, entry.blend_states[0].param_id.name)
+
+    blend_state_inputs = []
+    for input in node_group_node.inputs:
+        if input.name.split(' ')[0] == 'BlendState0':
+            blend_state_inputs.append(input)
+            
+    for input in blend_state_inputs:
+        field_name = input.name.split(' ')[1]
+        if field_name == 'Field1':
+            input.default_value = blend_state.source_color.name
+        if field_name == 'Field3':
+            input.default_value = blend_state.destination_color.name
+        if field_name == 'Field7':
+            input.default_value = blend_state.alpha_sample_to_coverage
+
+    rasterizer_state = entry.rasterizer_states[0].data
+    enable_input(node_group_node, entry.rasterizer_states[0].param_id.name)
+
+    rasterizer_state_inputs = [input for input in node_group_node.inputs if input.name.split(' ')[0] == 'RasterizerState0']
+    for input in rasterizer_state_inputs:
+        field_name = input.name.split(' ')[1]
+        if field_name == 'Field1':
+            input.default_value = rasterizer_state.fill_mode.name
+        if field_name == 'Field2':
+            input.default_value = rasterizer_state.cull_mode.name
+        if field_name == 'Field3':
+            input.default_value = rasterizer_state.depth_bias
+
+    for param in entry.booleans:
+        enable_input(node_group_node, param.param_id.name)
+        input = node_group_node.inputs.get(param.param_id.name)
+        input.default_value = param.data
+
+    for param in entry.floats:
+        enable_input(node_group_node, param.param_id.name)
+        input = node_group_node.inputs.get(param.param_id.name)
+        input.default_value = param.data
+    
+    for param in entry.vectors:
+        enable_input(node_group_node, param.param_id.name)
+        x, y, z, w = param.data
+
+        inputs = []
         for input in node_group_node.inputs:
-            if input.name.split(' ')[0] == param_id:
-                input.hide = False
-        if 'BlendState0' in param_id:
-            blend_state = attribute['param']['data']['BlendState']
-            source_color = blend_state['source_color']
-            unk2 = blend_state['unk2']
-            destination_color = blend_state['destination_color']
-            unk4 = blend_state['unk4']
-            unk5 = blend_state['unk5']
-            unk6 = blend_state['unk6']
-            unk7 = blend_state['unk7']
-            unk8 = blend_state['unk8']
-            unk9 = blend_state['unk9']
-            unk10 = blend_state['unk10']
-            blend_state_inputs = []
-            for input in node_group_node.inputs:
-                if input.name.split(' ')[0] == 'BlendState0':
-                    blend_state_inputs.append(input)
-            for input in blend_state_inputs:
-                field_name = input.name.split(' ')[1]
-                if field_name == 'Field1':
-                    input.default_value = source_color
-                if field_name == 'Field2':
-                    input.default_value = unk2
-                if field_name == 'Field3':
-                    input.default_value = destination_color
-                if field_name == 'Field4':
-                    input.default_value = unk4
-                if field_name == 'Field5':
-                    input.default_value = unk5
-                if field_name == 'Field6':
-                    input.default_value = unk6
-                if field_name == 'Field7':
-                    input.default_value = unk7
-                if field_name == 'Field8':
-                    input.default_value = unk8
-                if field_name == 'Field9':
-                    input.default_value = unk9
-                if field_name == 'Field10':
-                    input.default_value = unk10
-        if 'RasterizerState0' in param_id:
-            rasterizer_state = attribute['param']['data']['RasterizerState']
-            fill_mode = rasterizer_state['fill_mode']
-            cull_mode = rasterizer_state['cull_mode']
-            depth_bias = rasterizer_state['depth_bias']
-            unk4 = rasterizer_state['unk4']
-            unk5 = rasterizer_state['unk5']
-            unk6 = rasterizer_state['unk6']
-            rasterizer_state_inputs = [input for input in node_group_node.inputs if input.name.split(' ')[0] == 'RasterizerState0']
-            for input in rasterizer_state_inputs:
-                field_name = input.name.split(' ')[1]
-                if field_name == 'Field1':
-                    input.default_value = 0 if fill_mode == 'Line' else 1
-                if field_name == 'Field2':
-                    input.default_value = 0 if cull_mode == 'Back' else\
-                                          1 if cull_mode == 'Front' else\
-                                          2  
-                if field_name == 'Field3':
-                    input.default_value = depth_bias
-                if field_name == 'Field4':
-                    input.default_value = unk4
-                if field_name == 'Field5':
-                    input.default_value = unk5
-                if field_name == 'Field6':
-                    input.default_value = unk6
-
-        if 'CustomBoolean' in param_id:
-            bool_value = attribute['param']['data']['Boolean']
-            input = node_group_node.inputs.get(param_id)
-            input.default_value = bool_value
-
-        if 'CustomFloat' in param_id:
-            float_value = attribute['param']['data']['Float']
-            input = node_group_node.inputs.get(param_id)
-            input.default_value = float_value
-        
-        if 'CustomVector' in param_id:
-            vector4 = attribute['param']['data']['Vector4']
-            x = vector4['x']
-            y = vector4['y']
-            z = vector4['z']
-            w = vector4['w']
-            inputs = []
-            for input in node_group_node.inputs:
-                if input.name.split(' ')[0] == param_id:
-                    inputs.append(input)
-            if len(inputs) == 1:
-                inputs[0].default_value = (x,y,z,w)
-            elif len(inputs) == 2:
-                for input in inputs:
-                    field = input.name.split(' ')[1]
-                    if field == 'RGB':
-                        input.default_value = (x,y,z,1)
-                    if field == 'Alpha':
-                        input.default_value = w
-            else:
-                for input in inputs:
-                    axis = input.name.split(' ')[1]
-                    if axis == 'X':
-                        input.default_value = x
-                    if axis == 'Y':
-                        input.default_value = y
-                    if axis == 'Z':
-                        input.default_value = z
-                    if axis == 'W':
-                        input.default_value = w
-            if 'CustomVector47' == param_id:
-                node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
+            if input.name.split(' ')[0] == param.param_id.name:
+                inputs.append(input)
+        if len(inputs) == 1:
+            inputs[0].default_value = (x,y,z,w)
+        elif len(inputs) == 2:
+            for input in inputs:
+                field = input.name.split(' ')[1]
+                if field == 'RGB':
+                    input.default_value = (x,y,z,1)
+                if field == 'Alpha':
+                    input.default_value = w
+        else:
+            for input in inputs:
+                axis = input.name.split(' ')[1]
+                if axis == 'X':
+                    input.default_value = x
+                if axis == 'Y':
+                    input.default_value = y
+                if axis == 'Z':
+                    input.default_value = z
+                if axis == 'W':
+                    input.default_value = w
+        if param.param_id.name == 'CustomVector47':
+            node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
 
     links.new(material_output_node.inputs[0], node_group_node.outputs[0])
 
     # Add image texture nodes
-    samplers = [a for a in attributes if 'Sampler' in a['param_id']]
-    textures = [a for a in attributes if 'Texture' in a['param_id']]
-    texture_name_to_sampler_entry = {t['param_id']:s for t in textures for s in samplers if t['param_id'].split('Texture')[1] == s['param_id'].split('Sampler')[1]}
     node_count = 0
-    for attribute in attributes:
-        param_id = attribute['param_id']
-        if 'Texture' in param_id:
-            texture_node = nodes.new('ShaderNodeTexImage')
-            texture_node.location = (-800, -500 * node_count + 1000)
-            texture_file_name = attribute['param']['data']['MatlString']
-            texture_node.name = texture_file_name
-            texture_node.label = texture_file_name
-            texture_node.image = texture_name_to_image_dict[texture_file_name]
-            #texture_node.image = texture_file_name + '.png', context.scene.sub_model_folder_path, place_holder=True, check_existing=False, force_reload=True)
-            matched_rgb_input = None
-            matched_alpha_input = None
-            for input in node_group_node.inputs:
-                if param_id == input.name.split(' ')[0]:
-                    if 'RGB' == input.name.split(' ')[1]:
-                        matched_rgb_input = input
-                    else:
-                        matched_alpha_input = input
-            # For now, manually set the colorspace types....
-            linear_textures = ['Texture6', 'Texture4']
-            if param_id in linear_textures:
-                texture_node.image.colorspace_settings.name = 'Linear'
-                texture_node.image.alpha_mode = 'CHANNEL_PACKED'
-            
-            uv_map_node = nodes.new('ShaderNodeUVMap')
-            uv_map_node.name = 'uv_map_node'
-            uv_map_node.location = (texture_node.location[0] - 900, texture_node.location[1])
-            uv_map_node.label = param_id + ' UV Map'
 
-            if param_id == 'Texture9':
-                uv_map_node.uv_map = 'bake1'
-            elif param_id == 'Texture1':
-                uv_map_node.uv_map = 'uvSet'
-            else:
-                uv_map_node.uv_map = 'map1'
+    for texture_param in entry.textures:
+        enable_input(node_group_node, texture_param.param_id.name)
 
-            # Create Sampler Node
-            sampler_node = nodes.new('CustomNodeUltimateSampler')
-            sampler_node.name = 'sampler_node'
-            sampler_node.label = 'Sampler' + param_id.split('Texture')[1]
-            sampler_node.location = (texture_node.location[0] - 600, texture_node.location[1])
-            sampler_node.width = 500
+        texture_node = nodes.new('ShaderNodeTexImage')
+        texture_node.location = (-800, -500 * node_count + 1000)
+        texture_file_name = texture_param.data
+        texture_node.name = texture_file_name
+        texture_node.label = texture_file_name
+        texture_node.image = texture_name_to_image_dict[texture_file_name]
+        #texture_node.image = texture_file_name + '.png', context.scene.sub_model_folder_path, place_holder=True, check_existing=False, force_reload=True)
+        matched_rgb_input = None
+        matched_alpha_input = None
+        for input in node_group_node.inputs:
+            if texture_param.param_id.name == input.name.split(' ')[0]:
+                if 'RGB' == input.name.split(' ')[1]:
+                    matched_rgb_input = input
+                else:
+                    matched_alpha_input = input
+        # For now, manually set the colorspace types....
+        linear_textures = ['Texture6', 'Texture4']
+        if texture_param.param_id.name in linear_textures:
+            texture_node.image.colorspace_settings.name = 'Linear'
+            texture_node.image.alpha_mode = 'CHANNEL_PACKED'
+        
+        uv_map_node = nodes.new('ShaderNodeUVMap')
+        uv_map_node.name = 'uv_map_node'
+        uv_map_node.location = (texture_node.location[0] - 900, texture_node.location[1])
+        uv_map_node.label = texture_param.param_id.name + ' UV Map'
 
-            sampler_entry = texture_name_to_sampler_entry[param_id]
-            sampler_data = sampler_entry['param']['data']['Sampler']
-            sampler_node.wrap_s = 'REPEAT' if sampler_data['wraps'] == 'Repeat' else\
-                                  'CLAMP_TO_BORDER' if sampler_data['wraps'] == 'ClampToBorder' else\
-                                  'CLAMP_TO_EDGE' if sampler_data['wraps'] == 'ClampToEdge' else\
-                                  'MIRRORED_REPEAT'
-            sampler_node.wrap_t = 'REPEAT' if sampler_data['wrapt'] == 'Repeat' else\
-                                  'CLAMP_TO_BORDER' if sampler_data['wrapt'] == 'ClampToBorder' else\
-                                  'CLAMP_TO_EDGE' if sampler_data['wrapt'] == 'ClampToEdge' else\
-                                  'MIRRORED_REPEAT'
+        if texture_param.param_id.name == 'Texture9':
+            uv_map_node.uv_map = 'bake1'
+        elif texture_param.param_id.name == 'Texture1':
+            uv_map_node.uv_map = 'uvSet'
+        else:
+            uv_map_node.uv_map = 'map1'
 
-            sampler_node.wrap_r = 'REPEAT' if sampler_data['wrapr'] == 'Repeat' else\
-                                  'CLAMP_TO_BORDER' if sampler_data['wrapr'] == 'ClampToBorder' else\
-                                  'CLAMP_TO_EDGE' if sampler_data['wrapr'] == 'ClampToEdge' else\
-                                  'MIRRORED_REPEAT'
-            sampler_node.min_filter = 'NEAREST' if sampler_data['min_filter'] == 'Nearest' else\
-                                      'LINEAR_MIPMAP_LINEAR' if sampler_data['min_filter'] == 'LinearMipmapLinear' else\
-                                      'LINEAR_MIPMAP_LINEAR_2' 
-            sampler_node.mag_filter = 'NEAREST' if sampler_data['mag_filter'] == 'Nearest' else\
-                                      'LINEAR' if sampler_data['mag_filter'] == 'Linear' else\
-                                      'LINEAR_2'
-            sampler_node.texture_filter = 'DEFAULT' if sampler_data['texture_filtering_type'] == 'Default' else\
-                                          'DEFAULT_2' if sampler_data['texture_filtering_type'] == 'Default2' else\
-                                          'ANISOTROPIC_FILTERING'
-            r = sampler_data['border_color']['r']
-            g = sampler_data['border_color']['g']
-            b = sampler_data['border_color']['b']
-            a = sampler_data['border_color']['a']
+        # Create Sampler Node
+        sampler_node = nodes.new('CustomNodeUltimateSampler')
+        sampler_node.name = 'sampler_node'
+        sampler_node.label = 'Sampler' + texture_param.param_id.name.split('Texture')[1]
+        sampler_node.location = (texture_node.location[0] - 600, texture_node.location[1])
+        sampler_node.width = 500
 
-            sampler_node.border_color = (r,g,b,a)
+        # TODO: Handle the None case?
+        sampler_entry = None
+        for sampler_param in entry.samplers:
+            if texture_param.param_id.name.split('Texture')[1] == sampler_param.param_id.name.split('Sampler')[1]:
+                sampler_entry = sampler_param
+                break
 
-            sampler_node.unk11 = sampler_data['unk11']
-            sampler_node.unk12 = sampler_data['unk12']
-            sampler_node.lod_bias = sampler_data['lod_bias']
-            sampler_node.max_anisotropy = '1X' if sampler_data['max_anisotropy'] == 0 else\
-                                          '2X' if sampler_data['max_anisotropy'] == 2 else\
-                                          '4X' if sampler_data['max_anisotropy'] == 4 else\
-                                          '16X' if sampler_data['max_anisotropy'] == 8 else\
-                                          '128X'                               
+        enable_input(node_group_node, sampler_entry.param_id.name)
+        sampler_data = sampler_entry.data
+        sampler_node.wrap_s = sampler_data.wraps.name
+        sampler_node.wrap_t = sampler_data.wrapt.name
+        sampler_node.wrap_r = sampler_data.wrapr.name
+        sampler_node.min_filter = sampler_data.min_filter.name
+        sampler_node.mag_filter = sampler_data.mag_filter.name
+        sampler_node.anisotropic_filtering = sampler_data.max_anisotropy is not None
+        sampler_node.max_anisotropy = sampler_data.max_anisotropy.name if sampler_data.max_anisotropy else 'One'
+        sampler_node.border_color = tuple(sampler_data.border_color)
+        sampler_node.lod_bias = sampler_data.lod_bias       
 
-            links.new(sampler_node.inputs['UV Input'], uv_map_node.outputs[0])
-            links.new(texture_node.inputs[0], sampler_node.outputs[0])
-            links.new(matched_rgb_input, texture_node.outputs['Color'])
-            links.new(matched_alpha_input, texture_node.outputs['Alpha'])
-            node_count = node_count + 1
+        links.new(sampler_node.inputs['UV Input'], uv_map_node.outputs[0])
+        links.new(texture_node.inputs[0], sampler_node.outputs[0])
+        links.new(matched_rgb_input, texture_node.outputs['Color'])
+        links.new(matched_alpha_input, texture_node.outputs['Alpha'])
+        node_count = node_count + 1
     
     # Query the shader database for attribute information.
     # Using SQLite is much faster than iterating through the JSON dump.

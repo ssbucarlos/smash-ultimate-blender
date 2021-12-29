@@ -14,11 +14,11 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
     def update_internal_nodes(self, context):
         math_x = self.node_tree.nodes['math_x']
  
-        if self.wrap_s == 'REPEAT':
+        if self.wrap_s == 'Repeat':
             math_x.operation = 'MULTIPLY'
             math_x.use_clamp = False
             math_x.inputs[1].default_value = 1.0
-        elif self.wrap_s == 'MIRRORED_REPEAT':
+        elif self.wrap_s == 'MirroredRepeat':
             math_x.operation = 'PINGPONG'
             math_x.use_clamp = False
             math_x.inputs[1].default_value = 1.0
@@ -29,11 +29,11 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         
         math_y = self.node_tree.nodes['math_y']
         
-        if self.wrap_t == 'REPEAT':
+        if self.wrap_t == 'Repeat':
             math_y.operation = 'MULTIPLY'
             math_y.use_clamp = False
             math_y.inputs[1].default_value = 1.0
-        elif self.wrap_t == 'MIRRORED_REPEAT':
+        elif self.wrap_t == 'MirroredRepeat':
             math_y.operation = 'PINGPONG'
             math_y.use_clamp = False
             math_y.inputs[1].default_value = 1.0
@@ -43,73 +43,67 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
             math_y.inputs[1].default_value = 1.0
 
     wrap_types = (
-        ('REPEAT', "Repeat", "The texture just keeps repeating"),
-        ('CLAMP_TO_EDGE', "Clamp To Edge", "Out-of-bounds UVs just get clamped to the edge"),
-        ('MIRRORED_REPEAT', "Mirrored Repeat", "Repeats, but mirrored"),
-        ('CLAMP_TO_BORDER', "Clamp To Border", "Out-of-bounds UVs just get clamped to one pixel before the edge"),
+        ('Repeat', "Repeat", "The texture just keeps repeating"),
+        ('ClampToEdge', "Clamp To Edge", "Out-of-bounds UVs just get clamped to the edge"),
+        ('MirroredRepeat', "Mirrored Repeat", "Repeats, but mirrored"),
+        ('ClampToBorder', "Clamp To Border", "Out-of-bounds UVs just get clamped to one pixel before the edge"),
     )
     min_filter_types = (
-        ('NEAREST', 'Nearest', 'Nearest'),
-        ('LINEAR_MIPMAP_LINEAR', 'LinearMipmapLinear + ??? 1', 'LinearMipmapLinear + ??? 1'),
-        ('LINEAR_MIPMAP_LINEAR_2', 'LinearMipmapLinear + ??? 2', 'LinearMipmapLinear + ??? 2'),
+        ('Nearest', 'Nearest', 'Nearest'),
+        ('LinearMipmapLinear', 'LinearMipmapLinear', 'LinearMipmapLinear'),
+        ('LinearMipmapLinear2', 'LinearMipmapLinear2', 'LinearMipmapLinear2'),
     )
     mag_filter_types = (
-        ('NEAREST', 'Nearest', 'Nearest'),
-        ('LINEAR', 'Linear + ??? 1', 'Linear + ??? 1'),
-        ('LINEAR_2', 'Linear + ??? 2', 'Linear + ??? 2'),
-    )
-    texture_filtering_types = (
-        ('DEFAULT', 'No Anisotropic + ??? 0', 'No Anisotropic + ??? 0'),
-        ('DEFAULT_2', 'No Anisotropic + ??? 1', 'No Anisotropic + ??? 1'),
-        ('ANISOTROPIC_FILTERING', 'Anisotropic', 'Anisotropic'),
+        ('Nearest', 'Nearest', 'Nearest'),
+        ('Linear', 'Linear', 'Linear'),
+        ('Linear2', 'Linear2', 'Linear2'),
     )
     max_anisotropy_levels = (
-        ('1X', '1x', '1x'),
-        ('2X', '2x', '2x'),
-        ('4X', '4x', '4x'),
-        ('16X', '16x', '16x'),
-        ('128X', '128x', '128x'),
+        ('One', '1x', '1x'),
+        ('Two', '2x', '2x'),
+        ('Four', '4x', '4x'),
+        ('Eight', '8x', '8x'),
+        ('Sixteen', '16x', '16x'),
     )
     wrap_s: bpy.props.EnumProperty(
         name="S",
         description="Wrap S",
         items=wrap_types,
-        default='REPEAT',
+        default='Repeat',
         update=update_internal_nodes,
     )
     wrap_t: bpy.props.EnumProperty(
         name="T",
         description="Wrap T",
         items=wrap_types,
-        default='REPEAT',
+        default='Repeat',
         update=update_internal_nodes,
     )
     wrap_r: bpy.props.EnumProperty(
         name="R",
         description="Wrap R",
         items=wrap_types,
-        default='REPEAT',
+        default='Repeat',
     )
     
     min_filter: bpy.props.EnumProperty(
         name='Min',
         description='Min Filter',
         items=min_filter_types,
-        default='NEAREST',
+        default='Nearest',
     )
     
     mag_filter: bpy.props.EnumProperty(
         name='Mag',
         description='Mag Filter',
         items=mag_filter_types,
-        default='NEAREST',
+        default='Nearest',
     )
     
-    texture_filter: bpy.props.EnumProperty(
-        name='Texture',
-        description='Texture Filter',
-        items=texture_filtering_types,
-        default='DEFAULT',
+    anisotropic_filtering: bpy.props.BoolProperty(
+        name='Anisotropic Filtering',
+        description='Anisotropic Filtering',
+        default=False,
     )
     
     border_color: bpy.props.FloatVectorProperty(
@@ -121,19 +115,7 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         soft_max=1.0,
         soft_min=0.0,
     )
-    
-    unk11: bpy.props.IntProperty(
-        name='Unk11',
-        description='Unk11',
-        default=0,
-    )
-    
-    unk12: bpy.props.IntProperty(
-        name='Unk12',
-        description='Unk12',
-        default=2139095022,
-    )
-    
+
     lod_bias: bpy.props.FloatProperty(
         name='LOD Bias',
         description='LOD Bias',
@@ -144,7 +126,7 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         name='Max Anisotropy',
         description='Max Anisotropy',
         items=max_anisotropy_levels,
-        default='1X',
+        default='One',
     )
 
     def init(self, context):
@@ -171,11 +153,11 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         math_x = inner_nodes.new('ShaderNodeMath')
         math_x.name = 'math_x'
         math_x.label = 'math_x'
-        if self.wrap_s == 'REPEAT':
+        if self.wrap_s == 'Repeat':
             math_x.operation = 'MULTIPLY'
             math_x.use_clamp = False
             math_x.inputs[1].default_value = 1.0
-        elif self.wrap_s == 'MIRRORED_REPEAT':
+        elif self.wrap_s == 'MirroredRepeat':
             math_x.operation = 'PINGPONG'
             math_x.use_clamp = False
             math_x.inputs[1].default_value = 1.0
@@ -187,11 +169,11 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         math_y = inner_nodes.new('ShaderNodeMath')
         math_y.name = 'math_y'
         math_y.label = 'math_y'
-        if self.wrap_t == 'REPEAT':
+        if self.wrap_t == 'Repeat':
             math_y.operation = 'MULTIPLY'
             math_y.use_clamp = False
             math_y.inputs[1].default_value = 1.0
-        elif self.wrap_t == 'MIRRORED_REPEAT':
+        elif self.wrap_t == 'MirroredRepeat':
             math_y.operation = 'PINGPONG'
             math_y.use_clamp = False
             math_y.inputs[1].default_value = 1.0
@@ -227,10 +209,8 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         row = layout.row()
         row.prop(self, 'min_filter')
         row.prop(self, 'mag_filter')
-        row.prop(self, 'texture_filter')
+        row.prop(self, 'anisotropic_filtering')
         layout.prop(self, 'border_color')
-        layout.prop(self, 'unk11')
-        layout.prop(self, 'unk12')
         layout.prop(self, 'lod_bias')
         layout.prop(self, 'max_anisotropy')
 
