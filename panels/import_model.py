@@ -1,13 +1,10 @@
 import os
 import os.path
-import subprocess
 import bpy
 import mathutils
 import time
-import bmesh
-import json
-import re
 from .. import ssbh_data_py
+import numpy as np
 
 from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
@@ -174,7 +171,11 @@ def import_model(self, context):
     
     start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
-    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name) if numshb_name != '' else None
+
+    # Numpy provides much faster performance than Python lists.
+    # TODO(SMG): This API for ssbh_data_py will likely have changes and improvements in the future.
+    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh_numpy(dir + numshb_name) if numshb_name != '' else None
+
     ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
     ssbh_matl = ssbh_data_py.matl_data.read_matl(dir + numatb_name) if numatb_name != '' else None
     end = time.time()
@@ -236,91 +237,6 @@ def find_bone_index(skel, name):
             return i
 
     return None
-
-
-def create_verts(bm, mesh_object, skel):
-    for (index, pos) in enumerate(mesh_object.positions[0].data):
-        # Vertex attributes
-        vert = bm.verts.new()
-        vert.co = pos[:3]
-        vert.index = index
-
-    # Make sure the indices are set to make faces.
-    bm.verts.ensure_lookup_table()
-    bm.verts.index_update()
-
-    # Meshes can only have a single deform layer active at a time.
-    # The mesh was just recently created, so create the new layer.
-    weight_layer = bm.verts.layers.deform.new()
-
-    # Set the vertex skin weights for each bone.
-    if skel is not None:
-        for influence in mesh_object.bone_influences:
-            bone_index = find_bone_index(skel, influence.bone_name)
-            if bone_index is not None:
-                for w in influence.vertex_weights:
-                    bm.verts[w.vertex_index][weight_layer][bone_index] = w.vertex_weight
-
-    # Set the vertex skin weights for single bind meshes
-    if skel is not None:
-        parent_bone = find_bone(skel, mesh_object.parent_bone_name)
-        if parent_bone is not None: # This is a single bind mesh
-            bone_index = find_bone_index(skel, parent_bone.name)
-            for vert in bm.verts:
-                vert[weight_layer][bone_index] = 1.0
-
-def create_faces(bm, mesh):
-    # Create the faces from vertices.
-    for i in range(0, len(mesh.vertex_indices), 3):
-        # This will fail if the face has already been added.
-        v0, v1, v2 = mesh.vertex_indices[i:i+3]
-        try:
-            face = bm.faces.new([bm.verts[v0], bm.verts[v1], bm.verts[v2]])
-            face.smooth = True
-        except:
-            continue
-
-    bm.faces.ensure_lookup_table()
-    bm.faces.index_update()
-
-
-def create_uvs(bm, mesh):
-    for attribute_data in mesh.texture_coordinates:
-        uv_layer = bm.loops.layers.uv.new(attribute_data.name)
-
-        for face in bm.faces:
-            for loop in face.loops:
-                # Get the index of the vertex the loop contains.
-                loop[uv_layer].uv = [attribute_data.data[loop.vert.index][0], 1 - attribute_data.data[loop.vert.index][1]] # This 'Flips' the imported UVs
-
-def get_color_scale(color_set_name):
-    scale = 2 if color_set_name == 'colorSet1' else\
-            7 if color_set_name == 'colorSet2' else\
-            7 if color_set_name == 'colorSet2_1' else\
-            7 if color_set_name == 'colorSet2_2' else\
-            7 if color_set_name == 'colorSet2_3' else\
-            2 if color_set_name == 'colorSet3' else\
-            2 if color_set_name == 'colorSet4' else\
-            3 if color_set_name == 'colorSet5' else\
-            1 if color_set_name == 'colorSet6' else\
-            1 if color_set_name == 'colorSet7' else\
-            1
-    return scale
-
-def create_color_sets(bm, mesh):
-    for attribute_data in mesh.color_sets:
-        color_layer = bm.loops.layers.color.new(attribute_data.name)
-
-        for face in bm.faces:
-            for loop in face.loops:
-                # Get the index of the vertex the loop contains.
-                # For ease of use and to meet user expectations, vertex colors will be scaled on import
-                # For instance this will let users paint vertex colors for colorset1 without needing the user to scale
-                # This scaling will be compensated for on export in this plugin.
-                # Sadly this might break the vertex colors in external apps if exported via .FBX or .DAE
-                # Update: So blender clamps vertex colors to 1.0, so scaling on import is not viable, will address scaling in shader
-                # scale = get_color_scale(attribute_data.name)
-                loop[color_layer] = [value for value in attribute_data.data[loop.vert.index]]
 
 
 def create_armature(skel, context):
@@ -385,17 +301,31 @@ def create_armature(skel, context):
     return armature
 
 
-def attach_armature_create_vertex_groups(mesh_obj, skel, armature, parent_bone_name):
+def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_object):
     if skel is not None:
         # Create vertex groups for each bone to support skinning.
         for bone in skel.bones:
             mesh_obj.vertex_groups.new(name=bone.name)
 
-        # Apply the initial parent bone transform for single bound meshes.
-        parent_bone = find_bone(skel, parent_bone_name)
+        # Apply the initial parent bone transform if present.
+        parent_bone = find_bone(skel, ssbh_mesh_object.parent_bone_name)
         if parent_bone is not None:
+            # TODO: Should this transform be baked to fix exported positions?
             world_transform = skel.calculate_world_transform(parent_bone)
             mesh_obj.matrix_world = get_matrix4x4_blender(world_transform)
+
+            # Use regular skin weights for mesh objects parented to a bone.
+            # TODO: Should this only apply if there are no influences?
+            # TODO: Should this be handled by actual parenting in Blender?
+            mesh_obj.vertex_groups[parent_bone.name].add(ssbh_mesh_object.vertex_indices, 1.0, 'REPLACE')
+        else:
+            # Set the vertex skin weights for each bone.
+            # TODO: Is there a faster way than setting weights per vertex?
+            for influence in ssbh_mesh_object.bone_influences:
+                # TODO: Will influences always refer to valid bones in the skeleton?
+                vertex_group = mesh_obj.vertex_groups[influence.bone_name]
+                for w in influence.vertex_weights:
+                    vertex_group.add([w.vertex_index], w.vertex_weight, 'REPLACE')
 
     # Attach the mesh object to the armature object.
     if armature is not None:
@@ -409,30 +339,60 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, parent_bone_n
 def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     blender_mesh = bpy.data.meshes.new(ssbh_mesh_object.name)
 
-    # Using bmesh is faster than from_pydata.
-    bm = bmesh.new()
+    # TODO: Handle attribute data arrays not having the appropriate number of rows and columns.
+    # This won't be an issue for in game models.
 
-    create_verts(bm, ssbh_mesh_object, skel)
-    create_faces(bm, ssbh_mesh_object)
-    # TODO: We can't assume the component count.
-    # TODO: This needs vector padding for this to be safe.
-    create_uvs(bm, ssbh_mesh_object)
-    create_color_sets(bm, ssbh_mesh_object)
+    # Using foreach_set is much faster than bmesh or from_pydata.
+    # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+    positions = ssbh_mesh_object.positions[0].data[:,:3]
+    blender_mesh.vertices.add(positions.shape[0])
+    blender_mesh.vertices.foreach_set("co", positions.flatten())
 
-    bm.to_mesh(blender_mesh)
-    bm.free()
+    # Assume triangles, which is the only primitive used in Smash Ultimate.
+    # TODO(SMG): ssbh_data_py can use a numpy array here in the future.
+    vertex_indices = np.array(ssbh_mesh_object.vertex_indices, dtype=np.int32)
+    loop_start = np.arange(0, vertex_indices.shape[0], 3, dtype=np.int32)
+    loop_total = np.full(loop_start.shape[0], 3, dtype=np.int32)
 
+    blender_mesh.loops.add(vertex_indices.shape[0])
+    blender_mesh.loops.foreach_set("vertex_index", vertex_indices)
+
+    blender_mesh.polygons.add(loop_start.shape[0])
+    blender_mesh.polygons.foreach_set("loop_start", loop_start)
+    blender_mesh.polygons.foreach_set("loop_total", loop_total)
+
+    for attribute_data in ssbh_mesh_object.texture_coordinates:
+        uv_layer = blender_mesh.uv_layers.new(name=attribute_data.name)
+
+        # Flip vertical.
+        uvs = attribute_data.data[:,:2].copy()
+        uvs[:,1] = 1.0 - uvs[:,1]
+
+        # This is set per loop rather than per vertex.
+        loop_uvs = uvs[vertex_indices].flatten()
+        uv_layer.data.foreach_set("uv", loop_uvs)
+
+    for attribute_data in ssbh_mesh_object.color_sets:
+        color_layer = blender_mesh.vertex_colors.new(name=attribute_data.name)
+        # TODO: Create a function for this?
+        colors = attribute_data.data[:,:4]
+
+        # This is set per loop rather than per vertex.
+        loop_colors = colors[vertex_indices].flatten()
+        color_layer.data.foreach_set("color", loop_colors)
+
+    # These calls are necessary since we're setting mesh data manually.
+    blender_mesh.update()
+    blender_mesh.validate()
+
+    # TODO: Is there a faster way to do this?
     # Now that the mesh is created, now we can assign split custom normals
     blender_mesh.use_auto_smooth = True # Required to use custom normals
-    vertex_normals = ssbh_mesh_object.normals[0].data
-    blender_mesh.normals_split_custom_set_from_vertices([(vn[0], vn[1], vn[2]) for vn in vertex_normals])
+    blender_mesh.normals_split_custom_set_from_vertices(ssbh_mesh_object.normals[0].data[:,:3])
 
     # Assign Material
-    material = name_index_mat_dict[ssbh_mesh_object.name][ssbh_mesh_object.sub_index]
+    material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.sub_index)]
     blender_mesh.materials.append(material)
-    for polygon in blender_mesh.polygons:
-        polygon.material_index = blender_mesh.materials.find(material.name)
-
 
     return blender_mesh
 
@@ -444,11 +404,8 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     Gonna make sure not to conflict.
     example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
     '''
-
     created_meshes = []
-    
-    numdlb_material_labels = {e.material_label for e in ssbh_model.entries} # {blah} creates a set aka a list with no duplicates. {} creates an empty dictionary tho
-    label_to_material_dict = {} # This creates an empty Dictionary
+    unique_numdlb_material_labels = {e.material_label for e in ssbh_model.entries}
     
     # Make Master Shader if its not already made
     master_shader.create_master_shader()
@@ -456,19 +413,14 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     texture_name_to_image_dict = {}
     texture_name_to_image_dict = import_material_images(ssbh_matl, context)
 
-    for label in numdlb_material_labels:
+    label_to_material_dict = {}
+    for label in unique_numdlb_material_labels:
         blender_mat = bpy.data.materials.new(label)
 
         setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
         label_to_material_dict[label] = blender_mat
         
-    # TODO: Comprehension here?
-    name_index_mat_dict = {}
-    for e in ssbh_model.entries:
-        name_index_mat_dict[e.mesh_object_name] = {}
-    for e in ssbh_model.entries:
-        name_index_mat_dict[e.mesh_object_name][e.mesh_object_sub_index] = label_to_material_dict[e.material_label]
-
+    name_index_mat_dict = {(e.mesh_object_name,e.mesh_object_sub_index):label_to_material_dict[e.material_label] for e in ssbh_model.entries}
 
     start = time.time()
 
@@ -476,7 +428,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
         blender_mesh = create_blender_mesh(ssbh_mesh_object, ssbh_skel, name_index_mat_dict)
         mesh_obj = bpy.data.objects.new(blender_mesh.name, blender_mesh)
 
-        attach_armature_create_vertex_groups(mesh_obj, ssbh_skel, armature, ssbh_mesh_object.parent_bone_name)
+        attach_armature_create_vertex_groups(mesh_obj, ssbh_skel, armature, ssbh_mesh_object)
 
         context.collection.objects.link(mesh_obj)
         created_meshes.append(mesh_obj)
