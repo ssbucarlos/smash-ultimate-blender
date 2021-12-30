@@ -1,6 +1,6 @@
 import os
 import time
-from .import_model import get_color_scale, get_ssbh_lib_json_exe_path
+from .import_model import get_ssbh_lib_json_exe_path
 import bpy
 import os.path
 import numpy as np
