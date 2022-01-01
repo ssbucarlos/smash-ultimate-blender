@@ -5,6 +5,7 @@ import mathutils
 import time
 from .. import ssbh_data_py
 import numpy as np
+from pathlib import Path
 
 from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
@@ -205,15 +206,15 @@ def import_model(self, context):
     return
 
 def get_ssbh_lib_json_exe_path():
-    #print('this_file_path = %s' % (__file__))
-    this_file_path = __file__
-    return this_file_path + '/../../ssbh_lib_json/ssbh_lib_json.exe'
+    # Use the Path class to handle path differences between Windows, Linux, and MacOS.
+    this_file_path = Path(__file__)
+    return this_file_path.parent.parent.joinpath('ssbh_lib_json').joinpath('ssbh_lib_json.exe').resolve()
 
 def get_shader_db_file_path():
     # This file was generated with duplicates removed to optimize space.
     # https://github.com/ScanMountGoat/Smush-Material-Research#shader-database
-    this_file_path = __file__
-    return this_file_path + '/../../shader_file/nufx.db'
+    this_file_path = Path(__file__)
+    return this_file_path.parent.parent.joinpath('shader_file').joinpath('Nufx.db').resolve()
 
 
 '''
