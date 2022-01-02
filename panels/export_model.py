@@ -124,21 +124,35 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     if include_numdlb:
         export_numdlb(context, filepath)
     '''
+    # The skel needs to be made first to determine the mesh's bone influences.
     ssbh_skel_data = None
     if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
         ssbh_skel_data = make_skel_no_link(context)
     else:
         ssbh_skel_data = make_skel(context, linked_nusktb_settings)
     
+    # Prepare the scene for export and find the meshes to export.
+    arma = context.scene.sub_model_export_armature
+    export_meshes = [child for child in arma.children if child.type == 'MESH']
+    export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
+    
+    '''
+    TODO: Investigate why export fails if meshes are selected before hitting export.
+    '''
+    for selected_object in context.selected_objects:
+        selected_object.select_set(False)
+    context.view_layer.objects.active = arma
+
     start = time.time()
 
-    ssbh_modl_data, ssbh_mesh_data, ssbh_matl, ssbh_numshexb_json = make_modl_mesh_matl_data(context, ssbh_skel_data, filepath)
+    ssbh_modl_data, ssbh_mesh_data, ssbh_numshexb_json = make_modl_mesh_meshex_data(context, export_meshes, ssbh_skel_data, filepath)
     
     end = time.time()
     print(f'Created export files in {end - start} seconds')
 
     start = time.time()
 
+    # TODO: Avoid creating files we don't plan on saving in this step.
     if include_numdlb:
         ssbh_modl_data.save(filepath + 'model.numdlb')
     if include_numshb:
@@ -146,12 +160,21 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     if include_nusktb:
         ssbh_skel_data.save(filepath + 'model.nusktb')
     if include_numatb:
-        ssbh_matl.save(filepath + 'model.numatb')
+        create_and_save_matl(filepath, export_meshes)
     if include_numshexb:
         save_ssbh_json(ssbh_numshexb_json, filepath + 'model.numshexb')
 
     end = time.time()
     print(f'Saved files in {end - start} seconds')
+
+
+def create_and_save_matl(filepath, export_meshes):
+    #  Gather Material Info
+    materials = {mesh.data.materials[0] for mesh in export_meshes}
+    ssbh_matl = make_matl(materials)
+
+    ssbh_matl.save(filepath + 'model.numatb')
+
 
 def save_ssbh_json(ssbh_json, output_file_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
@@ -673,7 +696,7 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     return per_vertex
 
 
-def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
+def make_modl_mesh_meshex_data(context, export_meshes, ssbh_skel_data, temp_file_path):
 
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
@@ -684,16 +707,6 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
     ssbh_modl_data.animation_file_name = None
     ssbh_modl_data.mesh_file_name = 'model.numshb'
 
-    arma = context.scene.sub_model_export_armature
-    export_meshes = [child for child in arma.children if child.type == 'MESH']
-    export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
-    
-    '''
-    TODO: Investigate why export fails if meshes are selected before hitting export.
-    '''
-    for selected_object in context.selected_objects:
-        selected_object.select_set(False)
-    context.view_layer.objects.active = arma
 
     '''
     # TODO split meshes
@@ -702,9 +715,6 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
     for l in remove:
         mesh.data.uv_layers.remove(l)
     '''
-    #  Gather Material Info
-    materials = {mesh.data.materials[0] for mesh in export_meshes}
-    ssbh_matl = make_matl(materials)
 
     # Gather true names for NUMSHEXB
     true_names = {re.split('Shape|_VIS_|_O_', mesh.name)[0] for mesh in export_meshes}
@@ -827,7 +837,7 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
         bpy.data.meshes.remove(mesh_data_copy)
         ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
-    return ssbh_modl_data, ssbh_mesh_data, ssbh_matl, ssbh_numshexb_json
+    return ssbh_modl_data, ssbh_mesh_data, ssbh_numshexb_json
 
 def make_skel_no_link(context):
     arma = context.scene.sub_model_export_armature
