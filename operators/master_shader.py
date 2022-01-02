@@ -429,6 +429,7 @@ def create_master_shader():
     prm_compare_cv30_x.label = 'Compare CV30 X'
     prm_compare_cv30_x.operation = 'COMPARE'
     prm_compare_cv30_x.inputs[0].default_value = 0
+    prm_compare_cv30_x.inputs[2].default_value = 0.00001
     prm_compare_cv30_x.location = (-600,0)
     prm_compare_cv30_x.parent = prm_frame
    
