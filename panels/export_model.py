@@ -758,7 +758,13 @@ def make_modl_mesh_matl_data(context, ssbh_skel_data, temp_file_path):
         normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
         loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
         mesh.data.loops.foreach_get("normal", loop_normals)
-        normal0.data = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
+        normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
+
+        # Pad normals to 4 components instead of 3 components.
+        # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
+        normals = np.append(normals, np.zeros((normals.shape[0],1)), axis=1)
+        
+        normal0.data = normals
         ssbh_mesh_object.normals = [normal0]
 
         # Export Weights
