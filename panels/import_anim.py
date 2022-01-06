@@ -1,6 +1,6 @@
 import math
 import bpy
-from ..ssbh_data_py import ssbh_data_py
+from .. import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import IntProperty, StringProperty, BoolProperty
 from bpy.types import Operator
@@ -168,7 +168,7 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                 #print(f'bone="{bone.name}", index = "{index}", rotation ={r}')
         '''
         s = scale = node.tracks[0].values[index].scale
-        cs = compensate_scale = node.tracks[0].values[index].compensate_scale
+        cs = compensate_scale = node.tracks[0].scale_options.compensate_scale
         
         tm = translation_matrix = mathutils.Matrix.Translation(t)
         qr = quaternion_rotation = mathutils.Quaternion([r[3], r[0], r[1], r[2]])
