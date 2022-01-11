@@ -175,7 +175,7 @@ def import_model(self, context):
 
     # Numpy provides much faster performance than Python lists.
     # TODO(SMG): This API for ssbh_data_py will likely have changes and improvements in the future.
-    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh_numpy(dir + numshb_name) if numshb_name != '' else None
+    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name, use_numpy=True) if numshb_name != '' else None
 
     ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
     ssbh_matl = ssbh_data_py.matl_data.read_matl(dir + numatb_name) if numatb_name != '' else None

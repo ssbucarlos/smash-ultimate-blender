@@ -3,10 +3,7 @@
 from typing import List, Tuple, Any, Optional, Union, ClassVar
 
 
-def read_mesh(path: str) -> MeshData: ...
-
-
-def read_mesh_numpy(path: str) -> MeshData: ...
+def read_mesh(path: str, use_numpy: bool = False) -> MeshData: ...
 
 
 def transform_points(
@@ -58,7 +55,19 @@ class MeshObjectData:
     def __init__(
         self,
         name: str,
-        sub_index: int
+        sub_index: int,
+        parent_bone_name: str = '',
+        disable_depth_test: bool = False,
+        disable_depth_write: bool = False,
+        sort_bias: int = 0,
+        vertex_indices: list[int] = [],
+        positions: list[AttributeData] = [],
+        normals: list[AttributeData] = [],
+        binormals: list[AttributeData] = [],
+        tangents: list[AttributeData] = [],
+        texture_coordinates: list[AttributeData] = [],
+        color_sets: list[AttributeData] = [],
+        bone_influences: list[BoneInfluence] = []
     ) -> None: ...
 
 
@@ -69,6 +78,7 @@ class AttributeData:
     def __init__(
         self,
         name: str,
+        data: list[list[float]] = []
     ) -> None: ...
 
 

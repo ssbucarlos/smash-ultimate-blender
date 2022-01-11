@@ -35,6 +35,13 @@ class MatlEntryData:
         self,
         material_label: str,
         shader_label: str,
+        blend_states: list[BlendStateParam] = [],
+        floats: list[FloatParam] = [],
+        booleans: list[BooleanParam] = [],
+        vectors: list[Vector4Param] = [],
+        rasterizer_states: list[RasterizerStateParam] = [],
+        samplers: list[SamplerParam] = [],
+        textures: list[TextureParam] = []
     ) -> None: ...
 
 
@@ -120,7 +127,12 @@ class BlendStateData:
     destination_color: BlendFactor
     alpha_sample_to_coverage: bool
 
-    def __init__(self) -> None: ...
+    def __init__(
+        self,
+        source_color: BlendFactor = BlendFactor.One,
+        destination_color: BlendFactor = BlendFactor.Zero,
+        alpha_sample_to_coverage: bool = False
+    ) -> None: ...
 
 
 class RasterizerStateData:

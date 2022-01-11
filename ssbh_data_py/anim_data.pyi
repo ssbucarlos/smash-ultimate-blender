@@ -28,6 +28,7 @@ class GroupData:
     def __init__(
         self,
         group_type: GroupType,
+        nodes: list[NodeData] = []
     ) -> None: ...
 
 
@@ -54,6 +55,7 @@ class NodeData:
     def __init__(
         self,
         name: str,
+        tracks: list[TrackData] = []
     ) -> None: ...
 
 
@@ -66,6 +68,9 @@ class TrackData:
     def __init__(
         self,
         name: str,
+        values: Union[list[UvTransform], list[Transform],
+                  list[float], list[bool], list[int], list[list[float]]] = [],
+        scale_options: ScaleOptions = ScaleOptions()
     ) -> None: ...
 
 
@@ -73,7 +78,11 @@ class ScaleOptions:
     inherit_scale: bool
     compensate_scale: bool
 
-    def __init__(self) -> None: ...
+    def __init__(
+        self,
+        inherit_scale: bool = False,
+        compensate_scale: bool = False
+    ) -> None: ...
 
 
 class Transform:
