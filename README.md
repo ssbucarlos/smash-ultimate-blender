@@ -6,6 +6,7 @@ Click the 'Code' button, download the code as a .ZIP, install that .ZIP in Blend
 
 The plugin supports 64-bit versions of Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
 If your computer can run Blender 2.93 or later but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues).
+The exo skel features still require a windows machine, but it's possible to build ssbh_lib_json from source for Linux or MacOS with Rust installed.
 
 # Un-Installation / Updating (Please Read!)
 TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then u can install the newest version.
