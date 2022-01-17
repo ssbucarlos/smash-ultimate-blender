@@ -830,6 +830,8 @@ def make_skel(context, linked_nusktb_settings):
         vanilla_ssbh_skel = ssbh_data_py.skel_data.read_skel(context.scene.sub_vanilla_nusktb)
         for vanilla_ssbh_bone in vanilla_ssbh_skel.bones:
             linked_bone = output_bones.get(vanilla_ssbh_bone.name)
+            if linked_bone is None:
+                continue
             reordered_bones.append(linked_bone)
             del output_bones[linked_bone.name]
         
