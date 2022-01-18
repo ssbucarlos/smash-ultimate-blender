@@ -135,7 +135,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
-    
+    export_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
     '''
     TODO: Investigate why export fails if meshes are selected before hitting export.
     '''
@@ -637,7 +637,8 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
     # Gather true names for NUMSHEXB
     true_names = {re.split('Shape|_VIS_|_O_', mesh.name)[0] for mesh in export_meshes}
     true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split('Shape|_VIS_|_O_', mesh.name)[0]] for true_name in true_names}
-    
+    true_name_to_meshes = {k:v for k,v in sorted(true_name_to_meshes.items(), key = lambda item: item[1][0].get("numshb order", 10000))}
+
     pruned_mesh_name_list = []
     for mesh in [mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list]:
         '''

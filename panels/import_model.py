@@ -425,12 +425,12 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
 
     start = time.time()
 
-    for ssbh_mesh_object in ssbh_mesh.objects:
+    for i, ssbh_mesh_object in enumerate(ssbh_mesh.objects):
         blender_mesh = create_blender_mesh(ssbh_mesh_object, ssbh_skel, name_index_mat_dict)
         mesh_obj = bpy.data.objects.new(blender_mesh.name, blender_mesh)
 
         attach_armature_create_vertex_groups(mesh_obj, ssbh_skel, armature, ssbh_mesh_object)
-
+        mesh_obj["numshb order"] = i
         context.collection.objects.link(mesh_obj)
         created_meshes.append(mesh_obj)
     
