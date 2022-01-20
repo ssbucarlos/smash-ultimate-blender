@@ -218,11 +218,11 @@ def get_shader_db_file_path():
 
 
 '''
-The following code is mostly shamelessly stolen from SMG
+The following code is mostly shamelessly stolen from SMG 
+(except for the bone import)
 '''
 def get_matrix4x4_blender(ssbh_matrix):
     return mathutils.Matrix(ssbh_matrix).transposed()
-
 
 def find_bone(skel, name):
     for bone in skel.bones:
@@ -239,62 +239,116 @@ def find_bone_index(skel, name):
 
     return None
 
+def get_name_from_index(index, bones):
+    if index is None:
+        return None
+    return bones[index].name
 
-def create_armature(skel, context):
+def get_index_from_name(name, bones):
+    for index, bone in enumerate(bones):
+        if bone.name == name:
+            return index
+
+def reorient(m):
+    from mathutils import Matrix
+    m = Matrix(m)
+
+    m.transpose()
+     
+    c00,c01,c02,c03 = m[0]
+    c10,c11,c12,c13 = m[1]
+    c20,c21,c22,c23 = m[2]
+    c30,c31,c32,c33 = m[3]
+    
+    m = Matrix([
+        [c11, -c10, -c12, -c13],
+        [ -c01, c00, c02, c03],
+        [ -c21, c20, c22, c23],
+        [ c30, c31, c32, c33]
+    ])
+
+    return m 
+
+def reorient_root(m):
+    from mathutils import Matrix
+    m = Matrix(m)
+    
+    m.transpose() 
+      
+    c00,c01,c02,c03 = m[0]
+    c10,c11,c12,c13 = m[1]
+    c20,c21,c22,c23 = m[2]
+    c30,c31,c32,c33 = m[3]
+    
+    # TODO: Find out if the following does not work for certain skels
+    m = Matrix([
+        [0.0, 1.0, 0.0, 0.0],
+        [ 0.0, 0.0, -1.0, 0.0],
+        [ -1.0, 0.0, 0.0, 0.0],
+        [ 0.0, 0.0, 0.0, 1.0]
+    ])
+    
+    return m
+
+
+def create_armature(ssbh_skel, context): 
+    '''
+    So blender bone matrixes are not relative to their parent, unlike the ssbh skel.
+    Also, blender has a different coordinate system for the bones.
+    Also, ssbh matrixes need to be transposed first.
+    Also, the root bone needs to be modified differently to fix the world orientation
+    Also, the ssbh bones are not guaranteed to appear in 'heirarchal' order, 
+                 which is where the parent always appears before the child.
+    Also, iterating through the blender bones appears to preserve the order of insertion,
+                 so its also not gauranteed heirarchal order.
+    '''
     start = time.time()
     
     # Create a new armature and select it.
-    base_skel_name = "new_armature"
+    base_skel_name = "smush_blender_import"
     armature = bpy.data.objects.new(base_skel_name, bpy.data.armatures.new(base_skel_name))
-    given_skel_obj_name = armature.name
-    given_skel_data_name = armature.data.name
-
     armature.rotation_mode = 'QUATERNION'
-
     armature.show_in_front = True
-
     context.view_layer.active_layer_collection.collection.objects.link(armature)
     context.view_layer.objects.active = armature
     bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+    
+    bone_name_parent_name_dict = {bone.name:get_name_from_index(bone.parent_index, ssbh_skel.bones) for bone in ssbh_skel.bones}
+    
+    edit_bones = armature.data.edit_bones
 
-    # HACK: Store Transform in order to assign the matrix to the blender bone after bones been parented
-    bone_to_matrix_dict = {}
-    for bone_data in skel.bones:
-        new_bone = armature.data.edit_bones.new(bone_data.name)
-        
-        world_transform = skel.calculate_world_transform(bone_data)
+    # Make Bones
+    for ssbh_bone in ssbh_skel.bones:
+        blender_bone = edit_bones.new(ssbh_bone.name)
+        blender_bone.head = [0,0,0]
+        blender_bone.tail = [0,1,0]
 
-           
-        matrix_world = get_matrix4x4_blender(world_transform)
-        # print('bone name =%s: \n\tworld_transform = %s,\n\t matrix_world = %s' % (bone_data.name, world_transform, matrix_world)) 
-        # Assign transform pre-parenting
-        new_bone.transform(matrix_world, scale=True, roll=False)
-        #new_bone.matrix = matrix_world <--- Doesnt actually do anything here lol
-        bone_to_matrix_dict[new_bone] = matrix_world
-        # print('bone name = %s: \n\tnew_bone.matrix= %s' % (bone_data.name, new_bone.matrix))
-        new_bone.length = 1
-        new_bone.use_deform = True
-        new_bone.use_inherit_rotation = True
-        new_bone.use_inherit_scale = True
+    # Assign Parents
+    for ssbh_bone in ssbh_skel.bones:  
+        blender_bone = edit_bones.get(ssbh_bone.name)
+        parent_bone_name = bone_name_parent_name_dict[ssbh_bone.name]
+        if parent_bone_name is None:
+            continue
+        parent_bone = edit_bones.get(parent_bone_name, None)
+        blender_bone.parent = parent_bone
 
-    # Associate each bone with its parent.
-    for bone_data in skel.bones: 
-        current_bone = armature.data.edit_bones[bone_data.name]
-        if bone_data.parent_index is not None:
-            try:
-                current_bone.parent = armature.data.edit_bones[bone_data.parent_index]
-            except:
-                continue
-        else:
-            # HACK: Prevent root bones from being removed
-            #current_bone.tail[1] = current_bone.tail[1] - 0.001
-            pass
-    # HACK: Use that matrix dict from earlier to re-assign matrixes
-    for bone_data in skel.bones:
-        current_bone = armature.data.edit_bones[bone_data.name]
-        matrix = bone_to_matrix_dict[current_bone]
-        current_bone.matrix = matrix
-        # print ('current_bone=%s:\n\t matrix=%s\n\t current_bone.matrix = %s' % (current_bone.name, matrix, current_bone.matrix))
+    # Get a list of bones in 'heirarchal' order
+    def heirarchy_order(bone, reordered):
+        if bone not in reordered:
+            reordered.append(bone)
+        for child in bone.children:
+            heirarchy_order(child, reordered)
+    reordered = []
+    heirarchy_order(edit_bones[0], reordered)
+
+    # Transform bones    
+    for blender_bone in reordered:
+        ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
+        if blender_bone.parent is None:
+            blender_bone.matrix = reorient_root(ssbh_bone.transform)
+            continue
+        blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
+    
 
     end = time.time()
     print(f'Created armature in {end - start} seconds')
