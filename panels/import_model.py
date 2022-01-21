@@ -310,7 +310,7 @@ def create_armature(ssbh_skel, context):
     armature = bpy.data.objects.new(base_skel_name, bpy.data.armatures.new(base_skel_name))
     armature.rotation_mode = 'QUATERNION'
     armature.show_in_front = True
-    armature.display_type = 'STICK'
+    armature.data.display_type = 'STICK'
     context.view_layer.active_layer_collection.collection.objects.link(armature)
     context.view_layer.objects.active = armature
     bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -360,12 +360,18 @@ def create_armature(ssbh_skel, context):
         if len(blender_bone.children) == 0:
             if blender_bone.parent:
                 blender_bone.length = blender_bone.parent.length
+            continue
         
         if len(blender_bone.children) == 1:
             if blender_bone.head == blender_bone.children[0].head:
                 continue
             blender_bone.length = (blender_bone.head - blender_bone.children[0].head).length
+            continue
         
+        for child in blender_bone.children:
+            if child.name == blender_bone.name + '_eff':
+                blender_bone.length = (blender_bone.head - child.head).length
+
         finger_base_bones = ['FingerL10','FingerL20', 'FingerL30','FingerL40',
                              'FingerR10','FingerR20', 'FingerR30','FingerR40',]
         if any(finger_base_bone == blender_bone.name for finger_base_bone in finger_base_bones):
@@ -402,8 +408,52 @@ def create_armature(ssbh_skel, context):
     # Create Bone Layers
 
     # Assign Bone Colors
+    bpy.ops.object.mode_set(mode='POSE')
+    
+    default_group = bpy.context.object.pose.bone_groups.new()
+    default_group.name = 'Default'
+    default_group.color_set = 'DEFAULT'
+
+    helper_group = bpy.context.object.pose.bone_groups.new()
+    helper_group.name = 'Helper'
+    helper_group.color_set = 'THEME06'
+
+    swing_group = bpy.context.object.pose.bone_groups.new()
+    swing_group.name = 'Swing'
+    swing_group.color_set = 'THEME04'
+
+    system_group = bpy.context.object.pose.bone_groups.new()
+    system_group.name = 'System'
+    system_group.color_set = 'THEME10'
+
+    system_bone_names = ['Trans', 'Rot', 'Throw']
+    system_bone_suffixes = ['_null', '_eff', '_offset']
+    for bone in bpy.context.object.pose.bones:
+        bone.bone.layers[16] = True
+        if 'H_' == bone.name[:2]:
+            bone.bone_group = helper_group
+            bone.bone.layers[2] = True
+        elif 'S_' == bone.name[:2]:
+            bone.bone.layers[1] = True
+            bone.bone.layers[17] = True
+            bone.bone_group = swing_group
+            if '_null' in bone.name:
+                bone.bone_group = system_group
+                bone.bone.layers[16] = False
+                bone.bone.layers[17] = False
+                bone.bone.use_deform = False
+        else:
+            bone.bone_group = default_group
+            if any(system_bone_name == bone.name for system_bone_name in system_bone_names) \
+            or any(system_bone_suffix in bone.name for system_bone_suffix in system_bone_suffixes):
+                bone.bone_group = system_group
+                bone.bone.layers[16] = False
+                bone.bone.layers[17] = False
+                bone.bone.use_deform = False
 
 
+    
+    bpy.ops.object.mode_set(mode='OBJECT')
     end = time.time()
     print(f'Created armature in {end - start} seconds')
 
