@@ -362,6 +362,8 @@ def create_armature(ssbh_skel, context):
                 blender_bone.length = blender_bone.parent.length
         
         if len(blender_bone.children) == 1:
+            if blender_bone.head == blender_bone.children[0].head:
+                continue
             blender_bone.length = (blender_bone.head - blender_bone.children[0].head).length
         
         finger_base_bones = ['FingerL10','FingerL20', 'FingerL30','FingerL40',
