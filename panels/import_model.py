@@ -220,6 +220,7 @@ def get_shader_db_file_path():
 '''
 The following code is mostly shamelessly stolen from SMG 
 (except for the bone import)
+Oh hey SMG is a collaborator of this repo now, and you cant steal code from a collaborator ;)
 '''
 def get_matrix4x4_blender(ssbh_matrix):
     return mathutils.Matrix(ssbh_matrix).transposed()
@@ -309,6 +310,7 @@ def create_armature(ssbh_skel, context):
     armature = bpy.data.objects.new(base_skel_name, bpy.data.armatures.new(base_skel_name))
     armature.rotation_mode = 'QUATERNION'
     armature.show_in_front = True
+    armature.display_type = 'STICK'
     context.view_layer.active_layer_collection.collection.objects.link(armature)
     context.view_layer.objects.active = armature
     bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -321,7 +323,7 @@ def create_armature(ssbh_skel, context):
     for ssbh_bone in ssbh_skel.bones:
         blender_bone = edit_bones.new(ssbh_bone.name)
         blender_bone.head = [0,0,0]
-        blender_bone.tail = [0,1,0]
+        blender_bone.tail = [0,1,0] # Doesnt actually matter where its pointing, it just needs to point somewhere
 
     # Assign Parents
     for ssbh_bone in ssbh_skel.bones:  
@@ -349,6 +351,56 @@ def create_armature(ssbh_skel, context):
             continue
         blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
     
+
+    # fix bone lengths
+    for blender_bone in reordered:
+        if "H_" == blender_bone.name[:2]:
+            continue
+
+        if len(blender_bone.children) == 0:
+            if blender_bone.parent:
+                blender_bone.length = blender_bone.parent.length
+        
+        if len(blender_bone.children) == 1:
+            blender_bone.length = (blender_bone.head - blender_bone.children[0].head).length
+        
+        finger_base_bones = ['FingerL10','FingerL20', 'FingerL30','FingerL40',
+                             'FingerR10','FingerR20', 'FingerR30','FingerR40',]
+        if any(finger_base_bone == blender_bone.name for finger_base_bone in finger_base_bones):
+            finger_1_bone = edit_bones.get(blender_bone.name[:-1]+'1')
+            if finger_1_bone:
+                blender_bone.length = (blender_bone.head - finger_1_bone.head).length
+        
+        if blender_bone.name == 'ArmL' or blender_bone.name == 'ArmR':
+            hand_bone = edit_bones.get("Hand" + blender_bone.name[-1])
+            if hand_bone:
+                blender_bone.length = (blender_bone.head - hand_bone.head).length
+        
+        if blender_bone.name == 'ShoulderL' or blender_bone.name == 'ShoulderR':
+            arm_bone = edit_bones.get("Arm" + blender_bone.name[-1])
+            if arm_bone:
+                blender_bone.length = (blender_bone.head - arm_bone.head).length
+
+        if blender_bone.name == 'LegR' or blender_bone.name == 'LegL':
+            knee_bone = edit_bones.get('Knee' + blender_bone.name[-1])
+            if knee_bone:
+                blender_bone.length = (blender_bone.head - knee_bone.head).length
+        
+        if blender_bone.name == 'KneeR' or blender_bone.name == 'KneeL':
+            foot_bone = edit_bones.get('Foot' + blender_bone.name[-1])
+            if foot_bone:
+                blender_bone.length = (blender_bone.head - foot_bone.head).length
+        
+        if blender_bone.name == 'ClavicleC':
+            neck_bone = edit_bones.get('Neck')
+            if neck_bone:
+                blender_bone.length = (blender_bone.head - neck_bone.head).length
+
+
+    # Create Bone Layers
+
+    # Assign Bone Colors
+
 
     end = time.time()
     print(f'Created armature in {end - start} seconds')
