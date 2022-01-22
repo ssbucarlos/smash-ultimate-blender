@@ -3,6 +3,7 @@ import os.path
 import bpy
 import mathutils
 import time
+import math
 from .. import ssbh_data_py
 import numpy as np
 from pathlib import Path
@@ -458,6 +459,8 @@ def create_armature(ssbh_skel, context):
 
 
 def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_object):
+    from math import radians
+    from mathutils import Matrix
     if skel is not None:
         # Create vertex groups for each bone to support skinning.
         for bone in skel.bones:
@@ -466,7 +469,6 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
         # Apply the initial parent bone transform if present.
         parent_bone = find_bone(skel, ssbh_mesh_object.parent_bone_name)
         if parent_bone is not None:
-            # TODO: Should this transform be baked to fix exported positions?
             world_transform = skel.calculate_world_transform(parent_bone)
             mesh_obj.matrix_world = get_matrix4x4_blender(world_transform)
 
@@ -482,6 +484,14 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
                 vertex_group = mesh_obj.vertex_groups[influence.bone_name]
                 for w in influence.vertex_weights:
                     vertex_group.add([w.vertex_index], w.vertex_weight, 'REPLACE')
+        # Fix the rotation of the mesh objects. 
+        # TODO: Figure out how to apply all transforms.
+        trans_vec, rot_vec, scale_vec = mesh_obj.matrix_world.decompose()
+        trans_mat = Matrix.Translation(trans_vec)
+        rot_mat = rot_vec.to_matrix().to_4x4()
+        scale_mat = Matrix.Scale(scale_vec[0],4,(1,0,0)) * Matrix.Scale(scale_vec[1],4,(0,1,0)) * Matrix.Scale(scale_vec[2],4,(0,0,1)) # theres gotta be a better way of doing this
+        axis_correction = Matrix.Rotation(radians(90), 4, 'X')  
+        mesh_obj.matrix_world = axis_correction @ trans_mat @ rot_mat @ scale_mat
 
     # Attach the mesh object to the armature object.
     if armature is not None:
