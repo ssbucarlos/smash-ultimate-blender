@@ -404,10 +404,7 @@ def create_armature(ssbh_skel, context):
             if neck_bone:
                 blender_bone.length = (blender_bone.head - neck_bone.head).length
 
-
-    # Create Bone Layers
-
-    # Assign Bone Colors
+    # Assign bone colors and bone layers
     bpy.ops.object.mode_set(mode='POSE')
     
     default_group = bpy.context.object.pose.bone_groups.new()

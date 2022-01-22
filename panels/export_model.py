@@ -15,7 +15,7 @@ import bmesh
 import sys
 import json
 import subprocess
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -755,6 +755,30 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
 
     return ssbh_modl_data, ssbh_mesh_data
 
+def unreorient_matrix(reoriented_matrix) -> Matrix:
+    c00,c01,c02,c03 = reoriented_matrix[0]
+    c10,c11,c12,c13 = reoriented_matrix[1]
+    c20,c21,c22,c23 = reoriented_matrix[2]
+    c30,c31,c32,c33 = reoriented_matrix[3]
+    matrix_unreordered = Matrix([
+        [c11, -c10, c12, c13],
+        [ -c01, c00, -c02, -c03],
+        [ c21, -c20, c22, c23],
+        [ c30, c31, c32, c33]
+    ])
+    matrix_unreoriented = matrix_unreordered.transposed()
+    return matrix_unreoriented
+
+def unreorient_root(reoriented_matrix) -> Matrix:
+    m = Matrix([
+        [ 1.0, 0.0, 0.0, 0.0],
+        [ 0.0, 1.0, 0.0, 0.0],
+        [ 0.0, 0.0, 1.0, 0.0],
+        [ 0.0, 0.0, 0.0, 1.0]
+    ])
+    return m
+
+
 def make_skel_no_link(context):
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
@@ -765,14 +789,14 @@ def make_skel_no_link(context):
     edit_bones = arma.data.edit_bones
     edit_bones_list = list(edit_bones)
     for edit_bone in edit_bones_list:
-        if edit_bone.use_deform == False:
-            continue
+        #if edit_bone.use_deform == False: # Need a way to not export user created control bones
+            #continue
         ssbh_bone = None
         if edit_bone.parent is not None:
-            rel_mat = edit_bone.parent.matrix.inverted() @ edit_bone.matrix
-            ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, rel_mat.transposed(), edit_bones_list.index(edit_bone.parent))
+            unreoriented_matrix = unreorient_matrix(edit_bone.parent.matrix.inverted() @ edit_bone.matrix)
+            ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, unreoriented_matrix, edit_bones_list.index(edit_bone.parent))
         else:
-            ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, edit_bone.matrix.transposed(), None)
+            ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, unreorient_root(edit_bone.matrix), None)
         ssbh_skel.bones.append(ssbh_bone) 
 
     #ssbh_skel.save(filepath + 'model.nusktb')
@@ -820,8 +844,8 @@ def make_skel(context, linked_nusktb_settings):
             
     for boneList in [normal_bones, swing_bones, misc_bones, null_bones, helper_bones]:
         for bone in boneList:
-            if bone.use_deform == False:
-                continue
+            #if bone.use_deform == False:
+                #continue
             output_bones[bone.name] = bone
     
     ssbh_skel = ssbh_data_py.skel_data.SkelData()
@@ -850,17 +874,17 @@ def make_skel(context, linked_nusktb_settings):
             if 'ORDER_AND_VALUES' == linked_nusktb_settings:
                 vanilla_ssbh_bone = ssbh_bone_name_to_bone_dict.get(blender_bone.name)
                 if vanilla_ssbh_bone is not None:
-                    print('O&V Link Found: index %s, transform= %s' % (index, vanilla_ssbh_bone.transform))
+                    #print('O&V Link Found: index %s, transform= %s' % (index, vanilla_ssbh_bone.transform))
                     index = index + 1
                     ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, vanilla_ssbh_bone.transform, reordered_bones.index(blender_bone.parent) if blender_bone.parent else None)
                 else:
                     if blender_bone.parent:
-                        rel_mat = blender_bone.parent.matrix.inverted() @ blender_bone.matrix
-                        ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, rel_mat.transposed(), reordered_bones.index(blender_bone.parent))
-                        print(f'O&V No Link Found: index {index}, name {blender_bone.name}, rel_mat.transposed()= {rel_mat.transposed()}')
+                        unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
+                        ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, reordered_bones.index(blender_bone.parent))
+                        #print(f'O&V No Link Found: index {index}, name {blender_bone.name}, rel_mat.transposed()= {rel_mat.transposed()}')
                         index = index + 1
                     else:
-                        ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, blender_bone.matrix.transposed(), None)
+                        ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreorient_root(blender_bone.matrix), None)
             else:
                 if blender_bone.parent:
                     '''
@@ -869,12 +893,12 @@ def make_skel(context, linked_nusktb_settings):
                     rel_transform = ssbh_data_py.skel_data.calculate_relative_transform(blender_bone_matrix_as_list, blender_bone_parent_matrix_as_list)
                     ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, rel_transform, reordered_bones.index(blender_bone.parent))
                     '''
-                    rel_mat = blender_bone.parent.matrix.inverted() @ blender_bone.matrix
-                    ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, rel_mat.transposed(), reordered_bones.index(blender_bone.parent))
-                    print('OO: index %s, name %s, rel_mat.transposed()= %s' % (index, blender_bone.name, rel_mat.transposed()))
+                    unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
+                    ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, reordered_bones.index(blender_bone.parent))
+                    #print('OO: index %s, name %s, rel_mat.transposed()= %s' % (index, blender_bone.name, rel_mat.transposed()))
                     index = index + 1
                 else:
-                    ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, blender_bone.matrix.transposed(), None)
+                    ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreorient_root(blender_bone.matrix), None)
             ssbh_skel.bones.append(ssbh_bone)    
 
     #ssbh_skel.save(filepath + 'model.nusktb')
