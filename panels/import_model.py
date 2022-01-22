@@ -570,9 +570,8 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
             if len(inputs) == 1:
                 inputs[0].default_value = (x,y,z,w)
             elif len(inputs) == 2:
-                for input in inputs:
-                    inputs[0].default_value = (x,y,z,1)
-                    inputs[1].default_value = w
+                inputs[0].default_value = (x,y,z,1)
+                inputs[1].default_value = w
             elif len(inputs) == 4:
                 inputs[0].default_value = x
                 inputs[1].default_value = y

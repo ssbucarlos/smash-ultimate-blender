@@ -16,6 +16,7 @@ import sys
 import json
 import subprocess
 from mathutils import Vector
+from ..operators import material_inputs
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -217,11 +218,14 @@ def make_matl(materials):
         inputs = [input for input in node.inputs if input.hide == False]
         skip = ['Material Name', 'Shader Label']
 
+        # Multiple inputs may correspond to a single parameter.
+        # Avoid exporting the same parameter more than once.
+        exported_params = set()
         for input in inputs:
             name = input.name
             param_name = name.split(' ')[0]
 
-            if name in skip:
+            if name in skip or param_name in exported_params:
                 continue
 
             elif name == 'BlendState0 Field1 (Source Color)':
@@ -277,169 +281,29 @@ def make_matl(materials):
                 attribute = ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
                 entry.floats.append(attribute)
             elif 'Vector' in param_name:
-                attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(param_name), [0.0, 0.0, 0.0, 0.0])
-                
-                # TODO: Is there a simpler way to do this?
-                # Im sorry
-                # print(f'Name = {name}') # DEBUG
-                if name == 'CustomVector0 X (Min Texture Alpha)':
-                    attribute.data[0] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector0 Y (???)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector0 Z (???)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector0 W (???)'].default_value
-                elif name == 'CustomVector1':
-                    attribute.data = node.inputs['CustomVector1'].default_value
-                elif name == 'CustomVector2':
-                    attribute.data = node.inputs['CustomVector2'].default_value
-                elif name == 'CustomVector3 (Emission Color Multiplier)':
-                    attribute.data = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value
-                elif name == 'CustomVector4':
-                    attribute.data = node.inputs['CustomVector4'].default_value
-                elif name == 'CustomVector5':
-                    attribute.data = node.inputs['CustomVector5'].default_value
-                elif name == 'CustomVector6 X (UV Transform Layer 1)':
-                    attribute.data = node.inputs['CustomVector6 X (UV Transform Layer 1)'].default_value
-                elif name == 'CustomVector7':
-                    attribute.data = node.inputs['CustomVector7'].default_value
-                elif name == 'CustomVector8 (Final Color Multiplier)':
-                    attribute.data = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value
-                elif name == 'CustomVector9':
-                    attribute.data = node.inputs['CustomVector9'].default_value
-                elif name == 'CustomVector10':
-                    attribute.data = node.inputs['CustomVector10'].default_value
-                elif name == 'CustomVector11 (Fake SSS Color)':
-                    attribute.data = node.inputs['CustomVector11 (Fake SSS Color)'].default_value
-                elif name == 'CustomVector12':
-                    attribute.data = node.inputs['CustomVector12'].default_value
-                elif name == 'CustomVector13 (Diffuse Color Multiplier)':
-                    attribute.data = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value
-                elif name == 'CustomVector14 RGB (Rim Lighting Color)':
-                    attribute.data[0] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector14 Alpha (Rim Lighting Blend Factor)'].default_value
-                elif name == 'CustomVector15 RGB':
-                    attribute.data[0] = node.inputs['CustomVector15 RGB'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector15 RGB'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector15 RGB'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector15 Alpha'].default_value
-                elif name == 'CustomVector16':
-                    attribute.data = node.inputs['CustomVector16'].default_value
-                elif name == 'CustomVector17':
-                    attribute.data = node.inputs['CustomVector17'].default_value
-                elif name == 'CustomVector18 X (Sprite Sheet Column Count)':
-                    attribute.data[0] = node.inputs['CustomVector18 X (Sprite Sheet Column Count)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector18 Y (Sprite Sheet Row Count)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector18 Z (Sprite Sheet Frames Per Sprite)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector18 W (Sprite Sheet Sprite Count)'].default_value
-                elif name == 'CustomVector19':
-                    attribute.data = node.inputs['CustomVector19'].default_value
-                elif name == 'CustomVector20':
-                    attribute.data = node.inputs['CustomVector20'].default_value
-                elif name == 'CustomVector21':
-                    attribute.data = node.inputs['CustomVector21'].default_value
-                elif name == 'CustomVector22':
-                    attribute.data = node.inputs['CustomVector22'].default_value
-                elif name == 'CustomVector23':
-                    attribute.data = node.inputs['CustomVector23'].default_value
-                elif name == 'CustomVector24':
-                    attribute.data = node.inputs['CustomVector24'].default_value
-                elif name == 'CustomVector25':
-                    attribute.data = node.inputs['CustomVector25'].default_value
-                elif name == 'CustomVector26':
-                    attribute.data = node.inputs['CustomVector26'].default_value
-                elif name == 'CustomVector27 (Controls Distant Fog, X = Intensity)':
-                    attribute.data = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value
-                elif name == 'CustomVector28':
-                    attribute.data = node.inputs['CustomVector28'].default_value
-                elif name == 'CustomVector29':
-                    attribute.data = node.inputs['CustomVector29'].default_value
-                elif name == 'CustomVector30 X (SSS Blend Factor)':
-                    attribute.data[0] = node.inputs['CustomVector30 X (SSS Blend Factor)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector30 Y (SSS Diffuse Shading Smooth Factor)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector30 Z (Unused)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector30 W (Unused)'].default_value
-                elif name == 'CustomVector31 X (UV Transform Layer 2)':
-                    attribute.data[0] = node.inputs['CustomVector31 X (UV Transform Layer 2)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector31 Y (UV Transform Layer 2)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector31 Z (UV Transform Layer 2)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector31 W (UV Transform Layer 2)'].default_value
-                elif name == 'CustomVector32 X (UV Transform Layer 3)':
-                    attribute.data[0] = node.inputs['CustomVector32 X (UV Transform Layer 3)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector32 Y (UV Transform Layer 3)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector32 Z (UV Transform Layer 3)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector32 W (UV Transform Layer 3)'].default_value
-                elif name == 'CustomVector33 X (UV Transform ?)':
-                    attribute.data[0] = node.inputs['CustomVector33 X (UV Transform ?)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector33 Y (UV Transform ?)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector33 Z (UV Transform ?)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector33 W (UV Transform ?)'].default_value
-                elif name == 'CustomVector34 X (UV Transform ?)':
-                    attribute.data[0] = node.inputs['CustomVector34 X (UV Transform ?)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector34 Y (UV Transform ?)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector34 Z (UV Transform ?)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector34 W (UV Transform ?)'].default_value
-                elif name == 'CustomVector35':
-                    attribute.data = node.inputs['CustomVector35'].default_value
-                elif name == 'CustomVector36':
-                    attribute.data = node.inputs['CustomVector36'].default_value
-                elif name == 'CustomVector37':
-                    attribute.data = node.inputs['CustomVector37'].default_value
-                elif name == 'CustomVector38':
-                    attribute.data = node.inputs['CustomVector38'].default_value
-                elif name == 'CustomVector39':
-                    attribute.data = node.inputs['CustomVector39'].default_value
-                elif name == 'CustomVector40':
-                    attribute.data = node.inputs['CustomVector40'].default_value
-                elif name == 'CustomVector41':
-                    attribute.data = node.inputs['CustomVector41'].default_value
-                elif name == 'CustomVector42':
-                    attribute.data = node.inputs['CustomVector42'].default_value
-                elif name == 'CustomVector43':
-                    attribute.data = node.inputs['CustomVector43'].default_value
-                elif name == 'CustomVector44':
-                    attribute.data = node.inputs['CustomVector44'].default_value
-                elif name == 'CustomVector45':
-                    attribute.data = node.inputs['CustomVector45'].default_value
-                elif name == 'CustomVector46':
-                    attribute.data = node.inputs['CustomVector46'].default_value
-                elif name == 'CustomVector47 RGB':
-                    attribute.data[0] = node.inputs['CustomVector47 RGB'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector47 RGB'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector47 RGB'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector47 Alpha'].default_value
-                elif name == 'CustomVector48':
-                    attribute.data = node.inputs['CustomVector48'].default_value
-                elif name == 'CustomVector49':
-                    attribute.data = node.inputs['CustomVector49'].default_value
-                elif name == 'CustomVector50':
-                    attribute.data = node.inputs['CustomVector50'].default_value
-                elif name == 'CustomVector51':
-                    attribute.data = node.inputs['CustomVector51'].default_value
-                elif name == 'CustomVector52':
-                    attribute.data = node.inputs['CustomVector52'].default_value
-                elif name == 'CustomVector53':
-                    attribute.data = node.inputs['CustomVector53'].default_value
-                elif name == 'CustomVector54':
-                    attribute.data = node.inputs['CustomVector54'].default_value
-                elif name == 'CustomVector55':
-                    attribute.data = node.inputs['CustomVector55'].default_value
-                elif name == 'CustomVector56':
-                    attribute.data = node.inputs['CustomVector56'].default_value
-                elif name == 'CustomVector57':
-                    attribute.data = node.inputs['CustomVector57'].default_value
-                elif name == 'CustomVector58':
-                    attribute.data = node.inputs['CustomVector58'].default_value
-                elif name == 'CustomVector59':
-                    attribute.data = node.inputs['CustomVector59'].default_value
-                elif name == 'CustomVector60':
-                    attribute.data = node.inputs['CustomVector60'].default_value
-                else:
-                    continue
+                if param_name in material_inputs.vec4_param_to_inputs:
+                    attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(param_name), [0.0, 0.0, 0.0, 0.0])        
 
-                entry.vectors.append(attribute)
+                    inputs = [node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
+                    
+                    # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
+                    if len(inputs) == 1:
+                        attribute.data = inputs[0].default_value
+                    elif len(inputs) == 2:
+                        # Discard the 4th RGB component and use the explicit alpha instead.
+                        attribute.data[:3] = list(inputs[0].default_value)[:3]
+                        attribute.data[3] = inputs[1].default_value
+                    elif len(inputs) == 4:
+                        attribute.data[0] = inputs[0].default_value
+                        attribute.data[1] = inputs[1].default_value
+                        attribute.data[2] = inputs[2].default_value
+                        attribute.data[3] = inputs[3].default_value
+
+                    entry.vectors.append(attribute)
             else:
                 continue
+
+            exported_params.add(param_name)
         
         matl.entries.append(entry)
 
