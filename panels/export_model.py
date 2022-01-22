@@ -219,10 +219,12 @@ def make_matl(materials):
 
         for input in inputs:
             name = input.name
+            param_name = name.split(' ')[0]
+
             if name in skip:
                 continue
 
-            elif 'BlendState0 Field1 (Source Color)' == name:
+            elif name == 'BlendState0 Field1 (Source Color)':
                 data = ssbh_data_py.matl_data.BlendStateData()                          
                 data.source_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field1 (Source Color)'].default_value)
                 data.destination_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field3 (Destination Color)'].default_value)
@@ -230,7 +232,7 @@ def make_matl(materials):
 
                 attribute = ssbh_data_py.matl_data.BlendStateParam(ssbh_data_py.matl_data.ParamId.BlendState0, data)
                 entry.blend_states.append(attribute)
-            elif 'RasterizerState0 Field1 (Polygon Fill)' == name:
+            elif name == 'RasterizerState0 Field1 (Polygon Fill)':
                 data = ssbh_data_py.matl_data.RasterizerStateData()
                 data.fill_mode = ssbh_data_py.matl_data.FillMode.from_str(node.inputs['RasterizerState0 Field1 (Polygon Fill)'].default_value)
                 data.cull_mode = ssbh_data_py.matl_data.CullMode.from_str(node.inputs['RasterizerState0 Field2 (Cull Mode)'].default_value)
@@ -238,16 +240,17 @@ def make_matl(materials):
 
                 attribute = ssbh_data_py.matl_data.RasterizerStateParam(ssbh_data_py.matl_data.ParamId.RasterizerState0, data)
                 entry.rasterizer_states.append(attribute)
-            elif 'Texture' in name.split(' ')[0] and 'RGB' in name.split(' ')[1]:
+            elif 'Texture' in param_name and 'RGB' in name.split(' ')[1]:
                 texture_node = input.links[0].from_node
 
-                texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), texture_node.label)
+                texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), texture_node.label)
                 entry.textures.append(texture_attribute)
 
-                sampler_number = name.split(' ')[0].split('Texture')[1]
+                sampler_number = param_name.split('Texture')[1]
                 sampler_param_id_text = f'Sampler{sampler_number}'
 
                 # Sampler Data
+                # TODO: Use the default if the sampler is missing.
                 sampler_data = ssbh_data_py.matl_data.SamplerData()
 
                 sampler_node = texture_node.inputs[0].links[0].from_node
@@ -264,17 +267,17 @@ def make_matl(materials):
          
                 sampler_attribute = ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.from_str(sampler_param_id_text), sampler_data)
                 entry.samplers.append(sampler_attribute)
-            elif 'Sampler' in name.split(' ')[0]:
-                # Samplers are not thier own input in the master node, rather they are a seperate node entirely
+            elif 'Sampler' in param_name:
+                # Samplers are not their own input in the master node, rather they are a seperate node entirely
                 pass
-            elif 'Boolean' in name.split(' ')[0]:
-                attribute = ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), input.default_value)
+            elif 'Boolean' in param_name:
+                attribute = ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
                 entry.booleans.append(attribute)
-            elif 'Float' in name.split(' ')[0]:
-                attribute = ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), input.default_value)
+            elif 'Float' in param_name:
+                attribute = ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
                 entry.floats.append(attribute)
-            elif 'Vector' in name.split(' ')[0]:
-                attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), [0.0, 0.0, 0.0, 0.0])
+            elif 'Vector' in param_name:
+                attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(param_name), [0.0, 0.0, 0.0, 0.0])
                 
                 # TODO: Is there a simpler way to do this?
                 # Im sorry
