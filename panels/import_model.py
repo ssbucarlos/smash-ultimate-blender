@@ -3,6 +3,8 @@ import os.path
 import bpy
 import mathutils
 import time
+
+from operators import material_inputs
 from .. import ssbh_data_py
 import numpy as np
 from pathlib import Path
@@ -11,7 +13,7 @@ from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
 from bpy_extras import image_utils
 
-from ..operators import master_shader
+from ..operators import master_shader, material_inputs
 
 import sqlite3
 
@@ -457,7 +459,7 @@ def import_material_images(ssbh_matl, context):
     return texture_name_to_image_dict
 
 
-def enable_input(node_group_node, param_id):
+def enable_inputs(node_group_node, param_id):
     for input in node_group_node.inputs:
         if input.name.split(' ')[0] == param_id:
             input.hide = False
@@ -515,7 +517,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
 
     # TODO: Refactor this to be cleaner?
     blend_state = entry.blend_states[0].data
-    enable_input(node_group_node, entry.blend_states[0].param_id.name)
+    enable_inputs(node_group_node, entry.blend_states[0].param_id.name)
 
     blend_state_inputs = []
     for input in node_group_node.inputs:
@@ -532,7 +534,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
             input.default_value = blend_state.alpha_sample_to_coverage
 
     rasterizer_state = entry.rasterizer_states[0].data
-    enable_input(node_group_node, entry.rasterizer_states[0].param_id.name)
+    enable_inputs(node_group_node, entry.rasterizer_states[0].param_id.name)
 
     rasterizer_state_inputs = [input for input in node_group_node.inputs if input.name.split(' ')[0] == 'RasterizerState0']
     for input in rasterizer_state_inputs:
@@ -545,45 +547,40 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
             input.default_value = rasterizer_state.depth_bias
 
     for param in entry.booleans:
-        enable_input(node_group_node, param.param_id.name)
         input = node_group_node.inputs.get(param.param_id.name)
+        input.hide = False
         input.default_value = param.data
 
     for param in entry.floats:
-        enable_input(node_group_node, param.param_id.name)
         input = node_group_node.inputs.get(param.param_id.name)
+        input.hide = False
         input.default_value = param.data
     
     for param in entry.vectors:
-        enable_input(node_group_node, param.param_id.name)
-        x, y, z, w = param.data
+        param_name = param.param_id.name
 
-        inputs = []
-        for input in node_group_node.inputs:
-            if input.name.split(' ')[0] == param.param_id.name:
-                inputs.append(input)
-        if len(inputs) == 1:
-            inputs[0].default_value = (x,y,z,w)
-        elif len(inputs) == 2:
+        if param_name in material_inputs.vec4_param_to_inputs:
+            # Find and enable inputs.
+            inputs = [node_group_node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
             for input in inputs:
-                field = input.name.split(' ')[1]
-                if field == 'RGB':
-                    input.default_value = (x,y,z,1)
-                if field == 'Alpha':
-                    input.default_value = w
-        else:
-            for input in inputs:
-                axis = input.name.split(' ')[1]
-                if axis == 'X':
-                    input.default_value = x
-                if axis == 'Y':
-                    input.default_value = y
-                if axis == 'Z':
-                    input.default_value = z
-                if axis == 'W':
-                    input.default_value = w
-        if param.param_id.name == 'CustomVector47':
-            node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
+                input.hide = False
+
+            # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
+            x, y, z, w = param.data
+            if len(inputs) == 1:
+                inputs[0].default_value = (x,y,z,w)
+            elif len(inputs) == 2:
+                for input in inputs:
+                    inputs[0].default_value = (x,y,z,1)
+                    inputs[1].default_value = w
+            elif len(inputs) == 4:
+                inputs[0].default_value = x
+                inputs[1].default_value = y
+                inputs[2].default_value = z
+                inputs[3].default_value = w
+
+            if param_name == 'CustomVector47':
+                node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
 
     links.new(material_output_node.inputs[0], node_group_node.outputs[0])
 
@@ -591,7 +588,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
     node_count = 0
 
     for texture_param in entry.textures:
-        enable_input(node_group_node, texture_param.param_id.name)
+        enable_inputs(node_group_node, texture_param.param_id.name)
 
         texture_node = nodes.new('ShaderNodeTexImage')
         texture_node.location = (-800, -500 * node_count + 1000)
@@ -640,7 +637,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
                 sampler_entry = sampler_param
                 break
 
-        enable_input(node_group_node, sampler_entry.param_id.name)
+        enable_inputs(node_group_node, sampler_entry.param_id.name)
         sampler_data = sampler_entry.data
         sampler_node.wrap_s = sampler_data.wraps.name
         sampler_node.wrap_t = sampler_data.wrapt.name

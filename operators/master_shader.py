@@ -1,7 +1,7 @@
 import bpy
 from bpy.types import ShaderNodeVertexColor
 
-from .material_inputs import *
+from . import material_inputs
 
 
 def get_master_shader_name():
@@ -144,9 +144,9 @@ def create_master_shader():
     input = node_group_node.inputs.new(
         'NodeSocketFloat', 'Texture19 Alpha (Unused)')
 
-    create_inputs(node_group_node, vec4_param_to_inputs)
-    create_inputs(node_group_node, float_param_to_inputs)
-    create_inputs(node_group_node, bool_param_to_inputs)
+    create_inputs(node_group_node, material_inputs.vec4_param_to_inputs)
+    create_inputs(node_group_node, material_inputs.float_param_to_inputs)
+    create_inputs(node_group_node, material_inputs.bool_param_to_inputs)
 
     input = node_group_node.inputs.new(
         'NodeSocketString', 'BlendState0 Field1 (Source Color)')
