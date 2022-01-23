@@ -16,6 +16,7 @@ import sys
 import json
 import subprocess
 from mathutils import Vector, Matrix
+import math
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -649,7 +650,19 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         '''
         mesh_object_copy = mesh.copy() # Copy the Mesh Object
         mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
-        mesh_data_copy = mesh_object_copy.data
+        mesh_data_copy = mesh_object_copy.data 
+        # Undo the Matrix axis correction that was done on import
+        # TODO: Is there a way to apply transforms that works as expected without using bpy.ops
+        context.collection.objects.link(mesh_object_copy)
+        context.view_layer.update()
+        context.view_layer.objects.active = mesh_object_copy
+        mesh_object_copy.select_set(True)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        axis_correction = Matrix.Rotation(math.radians(-90), 4, 'X')  
+        mesh_object_copy.matrix_world = mesh_object_copy.matrix_world @ axis_correction
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
         pruned_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
 
         # Quick Detour to file out MODL stuff
@@ -678,13 +691,13 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         ssbh_mesh_object.vertex_indices = vertex_indices
 
         # We use the loop normals rather than vertex normals to allow exporting custom normals.
-        mesh.data.calc_normals_split()
+        mesh_object_copy.data.calc_normals_split()
 
         # Export Normals
         normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
-        loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
-        mesh.data.loops.foreach_get("normal", loop_normals)
-        normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
+        loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 3, dtype=np.float32)
+        mesh_object_copy.data.loops.foreach_get("normal", loop_normals)
+        normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh_object_copy.data.vertices), 3))
 
         # Pad normals to 4 components instead of 3 components.
         # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
@@ -711,17 +724,17 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         else:
             ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in group_to_weights.values() if name in skel_bone_names]
 
-        context.collection.objects.link(mesh_object_copy)
-        context.view_layer.update()
-        context.view_layer.objects.active = mesh_object_copy
-        bpy.ops.object.mode_set(mode='EDIT')
+        '''
+        The uv layer data is actually empty for the active object in edit mode
+        '''
+        #bpy.ops.object.mode_set(mode='EDIT')
 
-        for uv_layer in mesh.data.uv_layers:
+        for uv_layer in mesh_object_copy.data.uv_layers:
             ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
-            loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
+            loop_uvs = np.zeros(len(mesh_object_copy.data.loops) * 2, dtype=np.float32)
             uv_layer.data.foreach_get("uv", loop_uvs)
             
-            uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
+            uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh_object_copy.data.vertices), 2))
             # Flip vertical.
             uvs[:,1] = 1.0 - uvs[:,1]
             ssbh_uv_layer.data = uvs
@@ -729,12 +742,12 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
             ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
 
         # Export Color Set 
-        for color_layer in mesh.data.vertex_colors:
+        for color_layer in mesh_object_copy.data.vertex_colors:
             ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
 
-            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+            loop_colors = np.zeros(len(mesh_object_copy.data.loops) * 4, dtype=np.float32)
             color_layer.data.foreach_get("color", loop_colors)
-            ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
+            ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh_object_copy.data.vertices), 4))
 
             ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
