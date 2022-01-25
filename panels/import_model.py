@@ -393,9 +393,16 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     blender_mesh.use_auto_smooth = True # Required to use custom normals
     blender_mesh.normals_split_custom_set_from_vertices(ssbh_mesh_object.normals[0].data[:,:3])
 
-    # Assign Material
-    material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.sub_index)]
-    blender_mesh.materials.append(material)
+    # Try and assign the material.
+    # Mesh import should still succeed even if materials couldn't be created.
+    # Users can still choose to not export the matl.
+    # TODO: Report errors to the user?
+    try:
+        material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.sub_index)]
+        blender_mesh.materials.append(material)
+    except Exception as e:
+        print(f'Failed to assign material for {ssbh_mesh_object.name}{ssbh_mesh_object.sub_index}: {e}')
+
 
     return blender_mesh
 
@@ -420,10 +427,18 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     for label in unique_numdlb_material_labels:
         blender_mat = bpy.data.materials.new(label)
 
-        setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
-        label_to_material_dict[label] = blender_mat
-        
-    name_index_mat_dict = {(e.mesh_object_name,e.mesh_object_sub_index):label_to_material_dict[e.material_label] for e in ssbh_model.entries}
+        # Mesh import should still succeed even if materials can't be created.
+        # TODO: Report some sort of error to the user?
+        try:
+            setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
+            label_to_material_dict[label] = blender_mat
+        except Exception as e:
+            print(f'Failed to create material for {label}: {e}')
+
+    name_index_mat_dict = { 
+        (e.mesh_object_name,e.mesh_object_sub_index):label_to_material_dict[e.material_label] 
+        for e in ssbh_model.entries if e.material_label in label_to_material_dict
+    }
 
     start = time.time()
 

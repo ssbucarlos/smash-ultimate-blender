@@ -349,7 +349,8 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         mesh.data.uv_layers.remove(l)
     '''
 
-    # Gather true names for NUMSHEXB
+    # TODO: We don't need to do "true names" here since meshex is handled separately.
+    # TODO: Separate modl generation code so it can be disabled if materials aren't set up.
     true_names = {re.split('Shape|_VIS_|_O_', mesh.name)[0] for mesh in export_meshes}
     true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split('Shape|_VIS_|_O_', mesh.name)[0]] for true_name in true_names}
     true_name_to_meshes = {k:v for k,v in sorted(true_name_to_meshes.items(), key = lambda item: item[1][0].get("numshb order", 10000))}
