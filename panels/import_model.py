@@ -4,7 +4,6 @@ import bpy
 import mathutils
 import time
 
-from operators import material_inputs
 from .. import ssbh_data_py
 import numpy as np
 from pathlib import Path
