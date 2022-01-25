@@ -593,35 +593,9 @@ def make_skel(context, linked_nusktb_settings):
                     ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, blender_bone.matrix.transposed(), None)
             ssbh_skel.bones.append(ssbh_bone)    
 
-    #ssbh_skel.save(filepath + 'model.nusktb')
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
     bpy.context.view_layer.objects.active = None
     return ssbh_skel
 
-
-
-# TODO: This will eventually be replaced by ssbh_data_py.
-def bounding_sphere(objects):
-    # A fast to compute bounding sphere that will contain all points.
-    # We don't need an optimal solution for visibility tests and depth sorting.
-    # Create a single numpy array for better performance.
-    vertex_count = sum([len(obj.data.vertices) for obj in objects])
-    positions_world_all = np.ones((vertex_count, 4))
-
-    offset = 0
-    for obj in objects:
-        count = len(obj.data.vertices)
-
-        positions = np.zeros(count * 3, dtype=np.float32)
-        obj.data.vertices.foreach_get("co", positions)
-        # TODO: Find a more elegant way to account for world position.
-        positions_world_all[offset:offset+count,:3] = positions.reshape((-1,3)) 
-        positions_world_all[offset:offset+count,:] = positions_world_all[offset:offset+count,:] @ obj.matrix_world
-
-        offset += count
-
-    center = positions_world_all[:,:3].mean(axis=0)
-    radius = np.max(la.norm(positions_world_all[:,:3] - center, 2, axis=1))
-    return center, radius
