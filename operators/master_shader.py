@@ -8,18 +8,6 @@ def get_master_shader_name():
     return 'Smash Ultimate Master Shader'
 
 
-def multiply_rgb(nodes, links, a, b):
-    # TODO: Configure and return a mix node to multiply a * b
-    node = nodes.new('ShaderNodeMixRGB')
-    node.blend_type = 'MULTIPLY'
-    node.inputs['Fac'].default_value = 1.0
-
-    links.new(node.inputs['Color1'], a)
-    links.new(node.inputs['Color2'], b)
-
-    return node
-
-
 def create_inputs(node_group_node, name_to_inputs):
     for name, inputs in name_to_inputs.items():
         for socket, name, default in inputs:
