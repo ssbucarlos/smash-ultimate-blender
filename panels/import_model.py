@@ -251,11 +251,12 @@ def get_index_from_name(name, bones):
         if bone.name == name:
             return index
 
-def reorient(m):
+def reorient(m, transpose=True):
     from mathutils import Matrix
     m = Matrix(m)
 
-    m.transpose()
+    if transpose:
+        m.transpose()
      
     c00,c01,c02,c03 = m[0]
     c10,c11,c12,c13 = m[1]
@@ -271,11 +272,12 @@ def reorient(m):
 
     return m 
 
-def reorient_root(m):
+def reorient_root(m, transpose=True):
     from mathutils import Matrix
     m = Matrix(m)
     
-    m.transpose() 
+    if transpose:
+        m.transpose() 
       
     c00,c01,c02,c03 = m[0]
     c10,c11,c12,c13 = m[1]

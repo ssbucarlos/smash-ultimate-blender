@@ -1,7 +1,7 @@
 from bpy.types import Scene, Object
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 
-from .panels import exo_skel, io_matl
+from .panels import exo_skel, io_matl, import_anim
 
 def register():
     Scene.smash_armature = PointerProperty(
@@ -103,3 +103,19 @@ def register():
         description='Wether to merge same name meshes',
         default=True,
     )
+
+    Scene.sub_anim_armature = PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,
+    )
+    
+    Scene.sub_anim_camera = PointerProperty(
+        name='Camera',
+        description='Select the Camera',
+        type=Object,
+        poll=import_anim.poll_cameras,
+    )
+
+
