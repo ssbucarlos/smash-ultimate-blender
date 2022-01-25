@@ -125,6 +125,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     if include_numdlb:
         export_numdlb(context, filepath)
     '''
+    # TODO: This only needs to be made for include_numshb or include_nusktb or include_numshexb.
     # The skel needs to be made first to determine the mesh's bone influences.
     ssbh_skel_data = None
     if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
@@ -146,15 +147,13 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
 
     start = time.time()
 
-    ssbh_modl_data, ssbh_mesh_data = make_modl_mesh_data(context, export_meshes, ssbh_skel_data)
-    
-    end = time.time()
-    print(f'Created export files in {end - start} seconds')
+    # TODO: This is only needed for include_numshb or include_numshexb.
+    ssbh_mesh_data = make_mesh_data(context, export_meshes, ssbh_skel_data)
 
-    start = time.time()
-
-    # TODO: Avoid creating files we don't plan on saving in this step.
+    # Create and save files individually to make this step more robust.
+    # Users can avoid errors in generating a file by disabling export for that file.
     if include_numdlb:
+        ssbh_modl_data = make_modl_data(context, export_meshes)
         ssbh_modl_data.save(filepath + 'model.numdlb')
     if include_numshb:
         ssbh_mesh_data.save(filepath + 'model.numshb')
@@ -166,7 +165,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
         create_and_save_meshex(filepath, ssbh_mesh_data)
 
     end = time.time()
-    print(f'Saved files in {end - start} seconds')
+    print(f'Create and save export files in {end - start} seconds')
 
 
 def create_and_save_meshex(filepath, ssbh_mesh_data):
@@ -329,17 +328,8 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     return per_vertex
 
 
-def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
-
+def make_mesh_data(context, export_meshes, ssbh_skel_data):
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
-    ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
-
-    ssbh_modl_data.model_name = 'model'
-    ssbh_modl_data.skeleton_file_name = 'model.nusktb'
-    ssbh_modl_data.material_file_names = ['model.numatb']
-    ssbh_modl_data.animation_file_name = None
-    ssbh_modl_data.mesh_file_name = 'model.numshb'
-
 
     '''
     # TODO split meshes
@@ -349,10 +339,13 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         mesh.data.uv_layers.remove(l)
     '''
 
-    # TODO: We don't need to do "true names" here since meshex is handled separately.
+    # TODO: Avoid duplicating the mesh grouping and subindex calculations.
+
+    # Blender doesn't allow duplicate mesh names, so remove the ".001" added by Blender.
+    # TODO: The mesh list is ordered, so we shouldn't need a separate "numshb order" property.
     # TODO: Separate modl generation code so it can be disabled if materials aren't set up.
-    true_names = {re.split('Shape|_VIS_|_O_', mesh.name)[0] for mesh in export_meshes}
-    true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split('Shape|_VIS_|_O_', mesh.name)[0]] for true_name in true_names}
+    true_names = {re.split(r'.\d\d\d', mesh.name)[0] for mesh in export_meshes}
+    true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split(r'.\d\d\d', mesh.name)[0]] for true_name in true_names}
     true_name_to_meshes = {k:v for k,v in sorted(true_name_to_meshes.items(), key = lambda item: item[1][0].get("numshb order", 10000))}
 
     pruned_mesh_name_list = []
@@ -368,14 +361,9 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         mesh_data_copy = mesh_object_copy.data
         pruned_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
 
-        # Quick Detour to file out MODL stuff
         ssbh_mesh_object_sub_index = pruned_mesh_name_list.count(pruned_mesh_name)
         pruned_mesh_name_list.append(pruned_mesh_name)
-        mat_label = get_material_label_from_mesh(mesh)
-        ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(pruned_mesh_name, ssbh_mesh_object_sub_index, mat_label)
-        ssbh_modl_data.entries.append(ssbh_modl_entry)
 
-        # Back to MESH stuff
         # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
         # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
         # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
@@ -469,7 +457,37 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         bpy.data.meshes.remove(mesh_data_copy)
         ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
-    return ssbh_modl_data, ssbh_mesh_data
+    return ssbh_mesh_data
+
+
+def make_modl_data(context, export_meshes):
+    ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
+
+    ssbh_modl_data.model_name = 'model'
+    ssbh_modl_data.skeleton_file_name = 'model.nusktb'
+    ssbh_modl_data.material_file_names = ['model.numatb']
+    ssbh_modl_data.animation_file_name = None
+    ssbh_modl_data.mesh_file_name = 'model.numshb'
+
+    # Blender doesn't allow duplicate mesh names, so remove the ".001" added by Blender.
+    # TODO: The mesh list is ordered, so we shouldn't need a separate "numshb order" property.
+    # TODO: Separate modl generation code so it can be disabled if materials aren't set up.
+    true_names = {re.split(r'.\d\d\d', mesh.name)[0] for mesh in export_meshes}
+    true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split(r'.\d\d\d', mesh.name)[0]] for true_name in true_names}
+    true_name_to_meshes = {k:v for k,v in sorted(true_name_to_meshes.items(), key = lambda item: item[1][0].get("numshb order", 10000))}
+
+    pruned_mesh_name_list = []
+    for mesh in [mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list]:
+        pruned_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
+
+        ssbh_mesh_object_sub_index = pruned_mesh_name_list.count(pruned_mesh_name)
+        pruned_mesh_name_list.append(pruned_mesh_name)
+        mat_label = get_material_label_from_mesh(mesh)
+        ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(pruned_mesh_name, ssbh_mesh_object_sub_index, mat_label)
+        ssbh_modl_data.entries.append(ssbh_modl_entry)
+
+
+    return ssbh_modl_data
 
 def make_skel_no_link(context):
     arma = context.scene.sub_model_export_armature
