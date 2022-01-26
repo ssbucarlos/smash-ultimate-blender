@@ -118,18 +118,22 @@ def import_model_anim(context, filepath,
     #print(bone_name_to_edit_bone_matrix) # DEBUG, remove for release
     bpy.ops.object.mode_set(mode='POSE', toggle=False) # put our armature in pose mode
     
+    from pathlib import Path
+    action_name = context.scene.sub_anim_armature.name + ' ' + Path(filepath).name
+    if context.scene.sub_anim_armature.animation_data is None:
+        context.scene.sub_anim_armature.animation_data_create()
+    action = bpy.data.actions.new(action_name)
+    context.scene.sub_anim_armature.animation_data.action = action
+
     if include_transform_track:
-        from pathlib import Path
-        action_name = context.scene.sub_anim_armature.name + ' ' + Path(filepath).name
-        if context.scene.sub_anim_armature.animation_data is None:
-            context.scene.sub_anim_armature.animation_data_create()
-        action = bpy.data.actions.new(action_name)
-        context.scene.sub_anim_armature.animation_data.action = action
         bones = context.scene.sub_anim_armature.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
     
     if include_visibility_track:
         setup_visibility_drivers(context, visibility_group)
+
+    if include_material_track:
+        setup_material_drivers(context, material_group)
 
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
         scene.frame_set(frame)
@@ -142,27 +146,6 @@ def import_model_anim(context, filepath,
     
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
-
-def setup_visibility_drivers(context, visibility_group):
-    mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
-    
-    # Create the custom property on the armature
-    for node in visibility_group.nodes:
-        context.scene.sub_anim_armature[f"{node.name}"] = True
-
-    # Setup the mesh drivers
-    for node in visibility_group.nodes:
-        for mesh in mesh_children:
-            true_mesh_name = re.split('Shape|_VIS_|_O_', mesh.name)[0]
-            if true_mesh_name == node.name:
-                for property in ['hide_viewport', 'hide_render']:
-                    driver_handle = mesh.driver_add(property)
-                    var = driver_handle.driver.variables.new()
-                    var.name = "var"
-                    target = var.targets[0]
-                    target.id = context.scene.sub_anim_armature
-                    target.data_path = f'["{true_mesh_name}"]'
-                    driver_handle.driver.expression = f'1 - {var.name}'
 
 def poll_cameras(self, obj):
     return obj.type == 'CAMERA'
@@ -222,8 +205,77 @@ def keyframe_insert_bone_locrotscale(armature, bone_name, frame, group_name):
 def do_camera_transform_stuff(context, transform_group, index, frame):
     pass
 
+def node_input_driver_add(input, data_path):
+    driver_handle = input.driver_add('default_value')
+    var = driver_handle.driver.variables.new()
+    var.name = "var"
+    target = var.targets[0]
+    target.id = bpy.context.scene.sub_anim_armature
+    target.data_path = f'{data_path}'
+    driver_handle.driver.expression = f'{var.name}'
+
+def setup_material_drivers(context, material_group):
+    mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
+    materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots }
+    name_node_dict = {node.name : node for node in material_group.nodes}
+
+    for node in material_group.nodes:
+        for track in node.tracks:
+            value = track.values[0]
+            context.scene.sub_anim_armature[f"{node.name}:{track.name}"] = value
+
+
+    for material in materials:
+        bsn = blender_shader_node = material.node_tree.nodes.get('smash_ultimate_shader', None)
+        if bsn is None:
+            #logging.info(f'Material {material.name} did not have the smash_ultimate_shader node, will not have material animations')
+            continue
+        mat_name_input = bsn.inputs.get('Material Name')
+        anim_node = name_node_dict.get(mat_name_input.default_value, None)
+        if anim_node is None:
+            continue # This is very common, most fighter anims only contain material info for the eye materials for instance
+        for track in anim_node.tracks:
+            if track.name == 'CustomVector31':
+                x,y,z,w = [i for i in bsn.inputs if 'CustomVector31' in i.name]
+                node_input_driver_add(x, f'["{anim_node.name}:{track.name}"][0]')
+                node_input_driver_add(y, f'["{anim_node.name}:{track.name}"][1]')
+                node_input_driver_add(z, f'["{anim_node.name}:{track.name}"][2]')
+                node_input_driver_add(w, f'["{anim_node.name}:{track.name}"][3]')
+
+
 def do_material_stuff(context, material_group, index, frame):
-    pass
+    for node in material_group.nodes:
+        for track in node.tracks:
+            try:
+                track.values[index]
+            except IndexError:
+                continue
+            value = track.values[index]
+            arma = context.scene.sub_anim_armature
+            arma[f'{node.name}:{track.name}'] = value
+            arma.keyframe_insert(data_path=f'["{node.name}:{track.name}"]', frame=frame, group='Material', options={'INSERTKEY_NEEDED'})
+
+
+def setup_visibility_drivers(context, visibility_group):
+    mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
+    
+    # Create the custom property on the armature
+    for node in visibility_group.nodes:
+        context.scene.sub_anim_armature[f"{node.name}"] = True
+
+    # Setup the mesh drivers
+    for node in visibility_group.nodes:
+        for mesh in mesh_children:
+            true_mesh_name = re.split('Shape|_VIS_|_O_', mesh.name)[0]
+            if true_mesh_name == node.name:
+                for property in ['hide_viewport', 'hide_render']:
+                    driver_handle = mesh.driver_add(property)
+                    var = driver_handle.driver.variables.new()
+                    var.name = "var"
+                    target = var.targets[0]
+                    target.id = context.scene.sub_anim_armature
+                    target.data_path = f'["{true_mesh_name}"]'
+                    driver_handle.driver.expression = f'1 - {var.name}'
 
 def do_visibility_stuff(context, visibility_group, index, frame):
     for node in visibility_group.nodes:
