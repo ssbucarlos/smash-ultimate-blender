@@ -6,6 +6,7 @@ from bpy.props import IntProperty, StringProperty, BoolProperty
 from bpy.types import Operator
 import mathutils
 from .import_model import reorient, reorient_root
+import re
 
 class ImportAnimPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
@@ -127,6 +128,9 @@ def import_model_anim(context, filepath,
         bones = context.scene.sub_anim_armature.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
     
+    if include_visibility_track:
+        setup_visibility_drivers(context, visibility_group)
+
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
         scene.frame_set(frame)
         if include_transform_track:
@@ -139,6 +143,26 @@ def import_model_anim(context, filepath,
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
 
+def setup_visibility_drivers(context, visibility_group):
+    mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
+    
+    # Create the custom property on the armature
+    for node in visibility_group.nodes:
+        context.scene.sub_anim_armature[f"{node.name}"] = True
+
+    # Setup the mesh drivers
+    for node in visibility_group.nodes:
+        for mesh in mesh_children:
+            true_mesh_name = re.split('Shape|_VIS_|_O_', mesh.name)[0]
+            if true_mesh_name == node.name:
+                for property in ['hide_viewport', 'hide_render']:
+                    driver_handle = mesh.driver_add(property)
+                    var = driver_handle.driver.variables.new()
+                    var.name = "var"
+                    target = var.targets[0]
+                    target.id = context.scene.sub_anim_armature
+                    target.data_path = f'["{true_mesh_name}"]'
+                    driver_handle.driver.expression = f'1 - {var.name}'
 
 def poll_cameras(self, obj):
     return obj.type == 'CAMERA'
@@ -185,7 +209,7 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
             fm = fixed_matrix = reorient_root(raw_m, transpose=False)
             bone.matrix = fm
         
-        keyframe_insert_bone_locrotscale(context.scene.sub_anim_armature, bone.name, frame, bone.name)
+        keyframe_insert_bone_locrotscale(context.scene.sub_anim_armature, bone.name, frame, 'Transform')
 
 def keyframe_insert_bone_locrotscale(armature, bone_name, frame, group_name):
     for parameter in ['location', 'rotation_quaternion', 'scale']:
@@ -202,7 +226,17 @@ def do_material_stuff(context, material_group, index, frame):
     pass
 
 def do_visibility_stuff(context, visibility_group, index, frame):
-    pass
+    for node in visibility_group.nodes:
+        try:
+            node.tracks[0].values[index]
+        except IndexError: # Not every vis track entry will have values on every frame. Many only have the first frame.
+            continue
+        value = node.tracks[0].values[index]
+
+        arma = context.scene.sub_anim_armature
+        arma[f'{node.name}'] = value
+        arma.keyframe_insert(data_path=f'["{node.name}"]', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
+
 
 def do_camera_settings_stuff(context, camera_group, index, frame):
     pass
