@@ -46,6 +46,7 @@ classes = [
     panels.import_anim.AnimArmatureClearOperator,
     panels.import_anim.AnimCameraClearOperator,
     panels.import_anim.AnimModelImporterOperator,
+    panels.import_anim.AnimCameraImporterOperator,
 ]
 
 def register():

@@ -1,4 +1,5 @@
 import math
+from os import name
 import bpy
 from .. import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
@@ -38,7 +39,9 @@ class ImportAnimPanel(bpy.types.Panel):
             row = layout.row(align=True)
             row.label(text=f'Selected camera: {context.scene.sub_anim_camera.name}')
             row.operator('sub.anim_camera_clear', icon='CANCEL', text='Clear Selected Camera')
-        
+            row = layout.row(align=True)
+            row.operator('sub.anim_camera_importer', icon='FILE', text='Import a Camera Animation')
+
 class AnimArmatureClearOperator(Operator):
     bl_idname = 'sub.anim_armature_clear'
     bl_label = 'Anim Armature Clear Operator'
@@ -87,6 +90,24 @@ class AnimModelImporterOperator(Operator, ImportHelper):
         import_model_anim(context, self.filepath,
                         self.include_transform_track, self.include_material_track,
                         self.include_visibility_track, self.first_blender_frame)
+        return {'FINISHED'}
+
+class AnimCameraImporterOperator(Operator, ImportHelper):
+    bl_idname = 'sub.anim_camera_importer'
+    bl_label = 'Import Camera Anim'
+
+    filter_glob: StringProperty(
+        default='*.nuanmb',
+        options={'HIDDEN'}
+    )
+
+    first_blender_frame: IntProperty(
+        name='Start Frame',
+        description='What frame to start importing the track on',
+        default=1,
+    )
+    def execute(self, context):
+        import_camera_anim(context, self.filepath, self.first_blender_frame)
         return {'FINISHED'}
     
 def import_model_anim(context, filepath,
@@ -202,8 +223,13 @@ def keyframe_insert_bone_locrotscale(armature, bone_name, frame, group_name):
             group=group_name
         )
 
-def do_camera_transform_stuff(context, transform_group, index, frame):
-    pass
+def keyframe_insert_camera_locrotscale(camera, frame):
+    for parameter in ['location', 'rotation_quaternion', 'scale']:
+        camera.keyframe_insert(
+            data_path=f'{parameter}',
+            frame=frame,
+            group='Transform'
+    ) 
 
 def node_input_driver_add(input, data_path):
     driver_handle = input.driver_add('default_value')
@@ -303,6 +329,58 @@ def do_visibility_stuff(context, visibility_group, index, frame):
         arma[f'{node.name}'] = value
         arma.keyframe_insert(data_path=f'["{node.name}"]', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
 
+def import_camera_anim(context, filepath, first_blender_frame):
+    camera = context.scene.sub_anim_camera
+    ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
+    name_group_dict = {group.group_type.name : group for group in ssbh_anim_data.groups}
+    transform_group = name_group_dict.get('Transform')
+    camera_group = name_group_dict.get('Camera')
 
-def do_camera_settings_stuff(context, camera_group, index, frame):
+    frame_count = ssbh_anim_data.final_frame_index + 1
+    scene = context.scene
+    scene.frame_start = first_blender_frame
+    scene.frame_end = scene.frame_start + frame_count - 1
+    scene.frame_set(scene.frame_start)
+
+    try:
+        bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
+    except RuntimeError: # There may not have been any active or selected object
+        pass
+    context.view_layer.objects.active = camera
+
+    from pathlib import Path
+    action_name = camera.name + ' ' + Path(filepath).name
+    if camera.animation_data is None:
+        camera.animation_data_create()
+    action = bpy.data.actions.new(action_name)
+    camera.animation_data.action = action
+    camera.matrix_local.identity()
+    camera.rotation_mode = 'QUATERNION'
+
+    for index, frame in enumerate(range(scene.frame_start, scene.frame_end+1)):
+        scene.frame_set(frame)
+        if camera_group is not None:
+            update_camera_properties(context, camera_group, index)
+        if transform_group is not None:
+            update_camera_transforms(context, transform_group, index, frame)
+
+def update_camera_properties(context, camera_group, index):
     pass
+
+def update_camera_transforms(context, transform_group, index, frame):
+    value = transform_group.nodes[0].tracks[0].values[index]
+    from mathutils import Matrix, Quaternion
+    rt = raw_translation = value.translation
+    rr = raw_rotation = value.rotation
+    rs = raw_scale = value.scale
+    rtm = raw_translation_matrix =  Matrix.Translation(rt)
+    rqr = raw_quaternion_rotation = Quaternion([rr[3], rr[0], rr[1], rr[2]])
+    rrm = raw_rotation_matrix = Matrix.Rotation(rqr.angle, 4, rqr.axis)
+    rsmx = raw_scale_matrix_x = mathutils.Matrix.Scale(rs[0], 4, (1,0,0))
+    rsmy = raw_scale_matrix_y = mathutils.Matrix.Scale(rs[1], 4, (0,1,0))
+    rsmz = raw_scale_matrix_z = mathutils.Matrix.Scale(rs[2], 4, (0,0,1))
+    axis_correction = Matrix.Rotation(math.radians(90), 4, 'X')   
+    fm = final_matrix = Matrix(axis_correction @ rtm @ rrm @ rsmx @ rsmy @ rsmz)
+    context.scene.sub_anim_camera.matrix_local = fm
+    keyframe_insert_camera_locrotscale(context.scene.sub_anim_camera, frame)
+
