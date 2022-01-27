@@ -214,6 +214,17 @@ def node_input_driver_add(input, data_path):
     target.data_path = f'{data_path}'
     driver_handle.driver.expression = f'{var.name}'
 
+def sampler_uv_transform_driver_add(sampler_node, row, var_name, material, target, target_data_path, expression):
+    input = sampler_node.inputs.get('UV Transform')
+    driver_handle = input.driver_add('default_value', row)
+    var = driver_handle.driver.variables.new()
+    var.name = var_name
+    driver_target = var.targets[0]
+    driver_target.id_type = 'MATERIAL'
+    driver_target.id = material
+    driver_target.data_path = "node_tree." + target.path_from_id(target_data_path)
+    driver_handle.driver.expression = expression
+
 def setup_material_drivers(context, material_group):
     mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
     materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots }
@@ -237,10 +248,13 @@ def setup_material_drivers(context, material_group):
         for track in anim_node.tracks:
             if track.name == 'CustomVector31':
                 x,y,z,w = [i for i in bsn.inputs if 'CustomVector31' in i.name]
-                node_input_driver_add(x, f'["{anim_node.name}:{track.name}"][0]')
-                node_input_driver_add(y, f'["{anim_node.name}:{track.name}"][1]')
-                node_input_driver_add(z, f'["{anim_node.name}:{track.name}"][2]')
-                node_input_driver_add(w, f'["{anim_node.name}:{track.name}"][3]')
+                for index, var in enumerate([x,y,z,w]):
+                    node_input_driver_add(var, f'["{anim_node.name}:{track.name}"][{index}]')
+                labels_nodes_dict = {node.label:node for node in material.node_tree.nodes}
+                sampler_1_node = labels_nodes_dict.get('Sampler1', None)
+                if sampler_1_node is not None:
+                    sampler_uv_transform_driver_add(sampler_1_node, 0, "var", material, z, 'default_value', "0 - var")
+                    sampler_uv_transform_driver_add(sampler_1_node, 1, "var", material, w, 'default_value', "0 - var")
 
 
 def do_material_stuff(context, material_group, index, frame):
