@@ -17,6 +17,7 @@ import json
 import subprocess
 from mathutils import Vector
 from ..operators import material_inputs
+from itertools import groupby
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -137,7 +138,13 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
+    # TODO: Is it possible to keep the correct order for non imported meshes?
     export_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
+
+    # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
+    # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
+    export_mesh_groups = [(k, list(g)) for k,g in groupby(export_meshes, lambda x: re.split(r'.\d\d\d', x.name)[0])]
+
     '''
     TODO: Investigate why export fails if meshes are selected before hitting export.
     '''
@@ -148,12 +155,12 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     start = time.time()
 
     # TODO: This is only needed for include_numshb or include_numshexb.
-    ssbh_mesh_data = make_mesh_data(context, export_meshes, ssbh_skel_data)
+    ssbh_mesh_data = make_mesh_data(context, export_mesh_groups, ssbh_skel_data)
 
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
     if include_numdlb:
-        ssbh_modl_data = make_modl_data(context, export_meshes)
+        ssbh_modl_data = make_modl_data(context, export_mesh_groups)
         ssbh_modl_data.save(filepath + 'model.numdlb')
     if include_numshb:
         ssbh_mesh_data.save(filepath + 'model.numshb')
@@ -328,7 +335,7 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     return per_vertex
 
 
-def make_mesh_data(context, export_meshes, ssbh_skel_data):
+def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
     '''
@@ -339,128 +346,115 @@ def make_mesh_data(context, export_meshes, ssbh_skel_data):
         mesh.data.uv_layers.remove(l)
     '''
 
-    # TODO: Avoid duplicating the mesh grouping and subindex calculations.
+    for group_name, meshes in export_mesh_groups:
+        for i, mesh in enumerate(meshes):
+            '''
+            Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
 
-    # Blender doesn't allow duplicate mesh names, so remove the ".001" added by Blender.
-    # TODO: The mesh list is ordered, so we shouldn't need a separate "numshb order" property.
-    # TODO: Separate modl generation code so it can be disabled if materials aren't set up.
-    true_names = {re.split(r'.\d\d\d', mesh.name)[0] for mesh in export_meshes}
-    true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split(r'.\d\d\d', mesh.name)[0]] for true_name in true_names}
-    true_name_to_meshes = {k:v for k,v in sorted(true_name_to_meshes.items(), key = lambda item: item[1][0].get("numshb order", 10000))}
+            list of potential issues that need to validate
+            1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
+            '''
+            mesh_object_copy = mesh.copy() # Copy the Mesh Object
+            mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
+            mesh_data_copy = mesh_object_copy.data
 
-    pruned_mesh_name_list = []
-    for mesh in [mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list]:
-        '''
-        Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
+            # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
+            # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
+            # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+            ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(group_name, i)
+            position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
+            # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
+            positions = np.zeros(len(mesh_data_copy.vertices) * 3, dtype=np.float32)
+            mesh_data_copy.vertices.foreach_get("co", positions)
+            # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
+            position0.data = positions.reshape((-1, 3))
+            ssbh_mesh_object.positions = [position0]
 
-        list of potential issues that need to validate
-        1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
-        '''
-        mesh_object_copy = mesh.copy() # Copy the Mesh Object
-        mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
-        mesh_data_copy = mesh_object_copy.data
-        pruned_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
+            # Store vertex indices as a numpy array for faster indexing later.
+            vertex_indices = np.zeros(len(mesh_data_copy.loops), dtype=np.uint32)
+            mesh_data_copy.loops.foreach_get("vertex_index", vertex_indices)
+            ssbh_mesh_object.vertex_indices = vertex_indices
 
-        ssbh_mesh_object_sub_index = pruned_mesh_name_list.count(pruned_mesh_name)
-        pruned_mesh_name_list.append(pruned_mesh_name)
+            # We use the loop normals rather than vertex normals to allow exporting custom normals.
+            mesh.data.calc_normals_split()
 
-        # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
-        # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
-        # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
-        ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(pruned_mesh_name, ssbh_mesh_object_sub_index)
-        position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
-        # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
-        positions = np.zeros(len(mesh_data_copy.vertices) * 3, dtype=np.float32)
-        mesh_data_copy.vertices.foreach_get("co", positions)
-        # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
-        position0.data = positions.reshape((-1, 3))
-        ssbh_mesh_object.positions = [position0]
+            # Export Normals
+            normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
+            loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
+            mesh.data.loops.foreach_get("normal", loop_normals)
+            normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
 
-        # Store vertex indices as a numpy array for faster indexing later.
-        vertex_indices = np.zeros(len(mesh_data_copy.loops), dtype=np.uint32)
-        mesh_data_copy.loops.foreach_get("vertex_index", vertex_indices)
-        ssbh_mesh_object.vertex_indices = vertex_indices
-
-        # We use the loop normals rather than vertex normals to allow exporting custom normals.
-        mesh.data.calc_normals_split()
-
-        # Export Normals
-        normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
-        loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
-        mesh.data.loops.foreach_get("normal", loop_normals)
-        normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
-
-        # Pad normals to 4 components instead of 3 components.
-        # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
-        normals = np.append(normals, np.zeros((normals.shape[0],1)), axis=1)
-        
-        normal0.data = normals
-        ssbh_mesh_object.normals = [normal0]
-
-        # Export Weights
-        # TODO: Research weight layers       
-        # Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
-        # TODO: Does Blender not expose this directly?
-        group_to_weights = { vg.index : (vg.name, []) for vg in mesh_object_copy.vertex_groups }
-        for vertex in mesh_data_copy.vertices:
-            for group in vertex.groups:
-                ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
-                group_to_weights[group.group][1].append(ssbh_vertex_weight)
-        
-        # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
-        skel_bone_names = set([bone.name for bone in ssbh_skel_data.bones])
-        BoneInfluence = ssbh_data_py.mesh_data.BoneInfluence
-        if len([wieghts for index, (name, wieghts) in group_to_weights.items() if len(wieghts) > 0]) == 0:
-            print(f'Found Mesh with no wieghts {mesh.name}, not assigning bone_influences')
-        else:
-            ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in group_to_weights.values() if name in skel_bone_names]
-
-        context.collection.objects.link(mesh_object_copy)
-        context.view_layer.update()
-        context.view_layer.objects.active = mesh_object_copy
-        bpy.ops.object.mode_set(mode='EDIT')
-
-        for uv_layer in mesh.data.uv_layers:
-            ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
-            loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
-            uv_layer.data.foreach_get("uv", loop_uvs)
+            # Pad normals to 4 components instead of 3 components.
+            # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
+            normals = np.append(normals, np.zeros((normals.shape[0],1)), axis=1)
             
-            uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
-            # Flip vertical.
-            uvs[:,1] = 1.0 - uvs[:,1]
-            ssbh_uv_layer.data = uvs
+            normal0.data = normals
+            ssbh_mesh_object.normals = [normal0]
 
-            ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
+            # Export Weights
+            # TODO: Research weight layers       
+            # Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
+            # TODO: Does Blender not expose this directly?
+            group_to_weights = { vg.index : (vg.name, []) for vg in mesh_object_copy.vertex_groups }
+            for vertex in mesh_data_copy.vertices:
+                for group in vertex.groups:
+                    ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
+                    group_to_weights[group.group][1].append(ssbh_vertex_weight)
+            
+            # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
+            skel_bone_names = set([bone.name for bone in ssbh_skel_data.bones])
+            BoneInfluence = ssbh_data_py.mesh_data.BoneInfluence
+            if len([wieghts for index, (name, wieghts) in group_to_weights.items() if len(wieghts) > 0]) == 0:
+                print(f'Found Mesh with no wieghts {mesh.name}, not assigning bone_influences')
+            else:
+                ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in group_to_weights.values() if name in skel_bone_names]
 
-        # Export Color Set 
-        for color_layer in mesh.data.vertex_colors:
-            ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
+            context.collection.objects.link(mesh_object_copy)
+            context.view_layer.update()
+            context.view_layer.objects.active = mesh_object_copy
+            bpy.ops.object.mode_set(mode='EDIT')
 
-            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
-            color_layer.data.foreach_get("color", loop_colors)
-            ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
+            for uv_layer in mesh.data.uv_layers:
+                ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
+                loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
+                uv_layer.data.foreach_get("uv", loop_uvs)
+                
+                uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
+                # Flip vertical.
+                uvs[:,1] = 1.0 - uvs[:,1]
+                ssbh_uv_layer.data = uvs
 
-            ssbh_mesh_object.color_sets.append(ssbh_color_layer)
+                ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
+
+            # Export Color Set 
+            for color_layer in mesh.data.vertex_colors:
+                ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
+
+                loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+                color_layer.data.foreach_get("color", loop_colors)
+                ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
+
+                ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
 
-        # Calculate tangents now that the necessary attributes are initialized.
-        # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
-        tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
-        tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
-            ssbh_mesh_object.normals[0].data, 
-            ssbh_mesh_object.texture_coordinates[0].data,
-            ssbh_mesh_object.vertex_indices)
-        ssbh_mesh_object.tangents = [tangent0]
-        
-        bpy.ops.object.mode_set(mode='OBJECT')
+            # Calculate tangents now that the necessary attributes are initialized.
+            # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
+            tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
+            tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
+                ssbh_mesh_object.normals[0].data, 
+                ssbh_mesh_object.texture_coordinates[0].data,
+                ssbh_mesh_object.vertex_indices)
+            ssbh_mesh_object.tangents = [tangent0]
+            
+            bpy.ops.object.mode_set(mode='OBJECT')
 
-        bpy.data.meshes.remove(mesh_data_copy)
-        ssbh_mesh_data.objects.append(ssbh_mesh_object)
+            bpy.data.meshes.remove(mesh_data_copy)
+            ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
     return ssbh_mesh_data
 
 
-def make_modl_data(context, export_meshes):
+def make_modl_data(context, export_mesh_groups):
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
 
     ssbh_modl_data.model_name = 'model'
@@ -469,23 +463,11 @@ def make_modl_data(context, export_meshes):
     ssbh_modl_data.animation_file_name = None
     ssbh_modl_data.mesh_file_name = 'model.numshb'
 
-    # Blender doesn't allow duplicate mesh names, so remove the ".001" added by Blender.
-    # TODO: The mesh list is ordered, so we shouldn't need a separate "numshb order" property.
-    # TODO: Separate modl generation code so it can be disabled if materials aren't set up.
-    true_names = {re.split(r'.\d\d\d', mesh.name)[0] for mesh in export_meshes}
-    true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split(r'.\d\d\d', mesh.name)[0]] for true_name in true_names}
-    true_name_to_meshes = {k:v for k,v in sorted(true_name_to_meshes.items(), key = lambda item: item[1][0].get("numshb order", 10000))}
-
-    pruned_mesh_name_list = []
-    for mesh in [mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list]:
-        pruned_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
-
-        ssbh_mesh_object_sub_index = pruned_mesh_name_list.count(pruned_mesh_name)
-        pruned_mesh_name_list.append(pruned_mesh_name)
-        mat_label = get_material_label_from_mesh(mesh)
-        ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(pruned_mesh_name, ssbh_mesh_object_sub_index, mat_label)
-        ssbh_modl_data.entries.append(ssbh_modl_entry)
-
+    for group_name, meshes in export_mesh_groups:
+        for i, mesh in enumerate(meshes):
+            mat_label = get_material_label_from_mesh(mesh)
+            ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, i, mat_label)
+            ssbh_modl_data.entries.append(ssbh_modl_entry)
 
     return ssbh_modl_data
 
