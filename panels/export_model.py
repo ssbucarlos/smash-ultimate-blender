@@ -272,7 +272,6 @@ def make_matl(materials):
                 sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
                 sampler_data.border_color = sampler_node.border_color
                 sampler_data.lod_bias = sampler_node.lod_bias
-                print(sampler_node.anisotropic_filtering, sampler_node.max_anisotropy)
                 sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
          
                 sampler_attribute = ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.from_str(sampler_param_id_text), sampler_data)
@@ -402,12 +401,17 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
                     group_to_weights[group.group][1].append(ssbh_vertex_weight)
             
             # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
-            skel_bone_names = set([bone.name for bone in ssbh_skel_data.bones])
-            BoneInfluence = ssbh_data_py.mesh_data.BoneInfluence
-            if len([wieghts for index, (name, wieghts) in group_to_weights.items() if len(wieghts) > 0]) == 0:
-                print(f'Found Mesh with no wieghts {mesh.name}, not assigning bone_influences')
-            else:
-                ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in group_to_weights.values() if name in skel_bone_names]
+            # Avoid adding unused influences if there are no weights.
+            # Some meshes are parented to a bone instead of using vertex skinning.
+            # This requires the influence list to be empty to save properly.
+            skel_bone_names = {bone.name for bone in ssbh_skel_data.bones}
+            ssbh_mesh_object.bone_influences = []
+            for name, weights in group_to_weights.values():
+                if name in skel_bone_names and len(weights) > 0:
+                    ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
+
+            if len(ssbh_mesh_object.bone_influences) == 0:
+                print(f'Mesh {mesh.name} has no bone influences')
 
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
