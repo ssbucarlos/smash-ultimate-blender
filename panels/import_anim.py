@@ -114,16 +114,10 @@ def import_model_anim(context, filepath,
                     include_transform_track, include_material_track,
                     include_visibility_track, first_blender_frame):
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
-    transform_group, visibility_group, material_group = None, None, None
-    for group in ssbh_anim_data.groups:
-        if group.group_type.name == 'Transform':
-            transform_group = group
-        elif group.group_type.name == 'Visibility':
-            visibility_group = group
-        elif group.group_type.name == 'Material':
-            material_group = group
-        else:
-            print(f'Unknown Group Type {group.group_type.name} detected!')
+    name_group_dict = {group.group_type.name : group for group in ssbh_anim_data.groups}
+    transform_group = name_group_dict.get('Transform', None)
+    visibility_group = name_group_dict.get('Visibility', None)
+    material_group = name_group_dict.get('Material', None)
 
     # Find max frame count
     frame_count = ssbh_anim_data.final_frame_index + 1
@@ -146,23 +140,23 @@ def import_model_anim(context, filepath,
     action = bpy.data.actions.new(action_name)
     context.scene.sub_anim_armature.animation_data.action = action
 
-    if include_transform_track:
+    if include_transform_track and transform_group is not None:
         bones = context.scene.sub_anim_armature.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
     
-    if include_visibility_track:
+    if include_visibility_track and visibility_group is not None:
         setup_visibility_drivers(context, visibility_group)
 
-    if include_material_track:
+    if include_material_track and material_group is not None:
         setup_material_drivers(context, material_group)
 
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
         scene.frame_set(frame)
-        if include_transform_track:
+        if include_transform_track and transform_group is not None:
             do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node, bone_name_to_edit_bone_matrix)
-        if include_material_track:
+        if include_material_track and material_group is not None:
             do_material_stuff(context, material_group, index, frame)
-        if include_visibility_track:
+        if include_visibility_track and visibility_group is not None:
             do_visibility_stuff(context, visibility_group, index, frame)
     
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
