@@ -214,7 +214,8 @@ def keyframe_insert_bone_locrotscale(armature, bone_name, frame, group_name):
         armature.keyframe_insert(
             data_path=f'pose.bones["{bone_name}"].{parameter}',
             frame=frame,
-            group=group_name
+            group=group_name,
+            options={'INSERTKEY_NEEDED'},
         )
 
 def keyframe_insert_camera_locrotscale(camera, frame):
@@ -222,8 +223,9 @@ def keyframe_insert_camera_locrotscale(camera, frame):
         camera.keyframe_insert(
             data_path=f'{parameter}',
             frame=frame,
-            group='Transform'
-    ) 
+            group='Transform',
+            options={'INSERTKEY_NEEDED'},
+        ) 
 
 def node_input_driver_add(input, data_path):
     driver_handle = input.driver_add('default_value')
@@ -252,7 +254,7 @@ def uvtransform_to_list(uvtransform) -> list[float]:
     translate_u = uvtransform.translate_u
     translate_v = uvtransform.translate_v
     return [scale_u, scale_v, rotation, translate_u, translate_v]
-    
+
 def setup_material_drivers(context, material_group):
     mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
     materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots }
@@ -368,12 +370,26 @@ def import_camera_anim(context, filepath, first_blender_frame):
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end+1)):
         scene.frame_set(frame)
         if camera_group is not None:
-            update_camera_properties(context, camera_group, index)
+            update_camera_properties(context, camera_group, index, frame)
         if transform_group is not None:
             update_camera_transforms(context, transform_group, index, frame)
 
-def update_camera_properties(context, camera_group, index):
-    pass
+def update_camera_properties(context, camera_group, index, frame):
+    camera = context.scene.sub_anim_camera
+    for node in camera_group.nodes:
+        for track in node.tracks:
+            try: 
+                track.values[index]
+            except IndexError:
+                continue
+            value = track.values[index]
+            camera[f'{track.name}'] = value
+            camera.keyframe_insert(
+                data_path=f'["{track.name}"]',
+                frame=frame,
+                group='Camera',
+                options={'INSERTKEY_NEEDED'},
+            ) 
 
 def update_camera_transforms(context, transform_group, index, frame):
     value = transform_group.nodes[0].tracks[0].values[index]
