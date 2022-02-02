@@ -245,6 +245,14 @@ def sampler_uv_transform_driver_add(sampler_node, row, var_name, material, targe
     driver_target.data_path = "node_tree." + target.path_from_id(target_data_path)
     driver_handle.driver.expression = expression
 
+def uvtransform_to_list(uvtransform) -> list[float]:
+    scale_u = uvtransform.scale_u
+    scale_v = uvtransform.scale_v
+    rotation = uvtransform.rotation
+    translate_u = uvtransform.translate_u
+    translate_v = uvtransform.translate_v
+    return [scale_u, scale_v, rotation, translate_u, translate_v]
+    
 def setup_material_drivers(context, material_group):
     mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
     materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots }
@@ -253,7 +261,10 @@ def setup_material_drivers(context, material_group):
     for node in material_group.nodes:
         for track in node.tracks:
             value = track.values[0]
-            context.scene.sub_anim_armature[f"{node.name}:{track.name}"] = value
+            if isinstance(value, ssbh_data_py.anim_data.UvTransform):
+                context.scene.sub_anim_armature[f'{node.name}:{track.name}'] = uvtransform_to_list(value)
+            else:
+                context.scene.sub_anim_armature[f"{node.name}:{track.name}"] = value
 
 
     for material in materials:
@@ -286,7 +297,10 @@ def do_material_stuff(context, material_group, index, frame):
                 continue
             value = track.values[index]
             arma = context.scene.sub_anim_armature
-            arma[f'{node.name}:{track.name}'] = value
+            if isinstance(value, ssbh_data_py.anim_data.UvTransform):
+                arma[f'{node.name}:{track.name}'] = uvtransform_to_list(value)
+            else:
+                arma[f'{node.name}:{track.name}'] = value
             arma.keyframe_insert(data_path=f'["{node.name}:{track.name}"]', frame=frame, group='Material', options={'INSERTKEY_NEEDED'})
 
 
