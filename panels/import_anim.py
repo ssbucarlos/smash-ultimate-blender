@@ -110,6 +110,9 @@ class AnimCameraImporterOperator(Operator, ImportHelper):
         import_camera_anim(context, self.filepath, self.first_blender_frame)
         return {'FINISHED'}
     
+def poll_cameras(self, obj):
+    return obj.type == 'CAMERA'
+
 def import_model_anim(context, filepath,
                     include_transform_track, include_material_track,
                     include_visibility_track, first_blender_frame):
@@ -143,6 +146,7 @@ def import_model_anim(context, filepath,
     if include_transform_track and transform_group is not None:
         bones = context.scene.sub_anim_armature.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
+        setup_bone_scale_drivers(bone_to_node.keys()) # Only want to setup drivers for the bones that have an entry in the anim
     
     if include_visibility_track and visibility_group is not None:
         setup_visibility_drivers(context, visibility_group)
@@ -162,8 +166,24 @@ def import_model_anim(context, filepath,
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
 
-def poll_cameras(self, obj):
-    return obj.type == 'CAMERA'
+def setup_bone_scale_drivers(pose_bones):
+    for pose_bone in pose_bones:
+        # Setup default values for drivers to work, will get overwritten by the anim later anyways
+        # TODO: theres 4 combos of inherit_scale and compensate_scale together, i am honestly not sure how to make use
+        # of compensate_scale, however whenever 'inherit_scale' is 0, setting the blender scale inheritance to 'None' seems
+        # to do the trick. Its possible the other blender scale inheritance types can approximate
+        pose_bone['inherit_scale'] = 1 # The custom properties exist on the pose_bone, not the bone...
+        pose_bone['compensate_scale'] = 1
+        driver_handle = pose_bone.bone.driver_add('inherit_scale') # ... but drivers belong on the bone, not the pose_bone
+        inheritscale_var = driver_handle.driver.variables.new()
+        inheritscale_var.name = "inherit_scale"
+        isv = inheritscale_var # shorthand for this var
+        target = inheritscale_var.targets[0]
+        target.id = bpy.context.scene.sub_anim_armature
+        target.data_path = f'pose.bones["{pose_bone.name}"]["inherit_scale"]'
+        # TODO: Figure out how to incorporate compensate scale
+        driver_handle.driver.expression = f'0 if {isv.name} == 1 else 3' # 0 is 'FULL' and 3 is 'NONE'
+
 
 def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node, bone_name_to_edit_bone_matrix):
     bones = context.scene.sub_anim_armature.pose.bones
@@ -187,17 +207,21 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         except IndexError: # Not all bones will have a value at every frame. Many bones only have one frame.
             continue
 
+        from mathutils import Matrix, Quaternion
         t = translation = node.tracks[0].values[index].translation
         r = rotation = node.tracks[0].values[index].rotation
         s = scale = node.tracks[0].values[index].scale
         compensate_scale = node.tracks[0].scale_options.compensate_scale
         inherit_scale = node.tracks[0].scale_options.inherit_scale
-        tm = translation_matrix = mathutils.Matrix.Translation(t)
-        qr = quaternion_rotation = mathutils.Quaternion([r[3], r[0], r[1], r[2]])
-        rm = rotation_matrix = mathutils.Matrix.Rotation(qr.angle, 4, qr.axis)
-        sx = scale_matrix_x = mathutils.Matrix.Scale(s[0], 4, (1,0,0))
-        sy = scale_matrix_y = mathutils.Matrix.Scale(s[1], 4, (0,1,0))
-        sz = scale_matrix_z = mathutils.Matrix.Scale(s[2], 4, (0,0,1))
+        tm = translation_matrix = Matrix.Translation(t)
+        qr = quaternion_rotation = Quaternion([r[3], r[0], r[1], r[2]])
+        rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
+        sx = scale_matrix_x = Matrix.Scale(s[0], 4, (1,0,0))
+        sy = scale_matrix_y = Matrix.Scale(s[1], 4, (0,1,0))
+        sz = scale_matrix_z = Matrix.Scale(s[2], 4, (0,0,1))
+        '''
+        Ok the old code was taking the parents matrix and then mutliplying the childs matrix
+        but im pretty sure this would mutiply the scales together, which is not what i want
         raw_m = raw_matrix = mathutils.Matrix(tm @ rm @ sx @ sy @ sz)       
         
         if bone.parent is not None:
@@ -206,8 +230,55 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         else:
             fm = fixed_matrix = reorient_root(raw_m, transpose=False)
             bone.matrix = fm
-        
+        '''
+
+
+        raw_m = raw_matrix = mathutils.Matrix(tm @ rm @ sx @ sy @ sz)   
+        if bone.parent is not None:
+            if compensate_scale and not inherit_scale:
+                pm = parent_matrix = bone.parent.matrix
+                pmsv = parent_matrix_scale_vector = pm.to_scale()
+                pmsmx = parent_matrix_scale_matrix_x = Matrix.Scale(pmsv[0], 4, (1,0,0))
+                pmsmy = parent_matrix_scale_matrix_y = Matrix.Scale(pmsv[1], 4, (0,1,0))
+                pmsmz = parent_matrix_scale_matrix_z = Matrix.Scale(pmsv[2], 4, (0,0,1))
+                pmsm = parent_matrix_scale_matrix = pmsmx @ pmsmy @ pmsmz
+                fm = fixed_matrix = reorient(raw_m, transpose=False)
+                '''
+                #bone.matrix = pm @ pmsm.inverted() @ fm
+                debug_bone_names = ['LegR', 'KneeR', 'FootR', 'ToeR']
+                if bone.name in debug_bone_names and frame==9:
+                    print(f'bone={bone.name}, {bone.matrix.to_translation()}, {pm.to_translation()}, {fm.to_translation()}')
+                    rm = bone.bone.parent.matrix_local.inverted() @ bone.bone.matrix_local # Rest Pose Relative Matrix
+                    bone.matrix_basis = rm.inverted() @ fm
+                else:
+                    bone.matrix = pm @ pmsm.inverted() @ fm
+                '''
+                rm = bone.bone.parent.matrix_local.inverted() @ bone.bone.matrix_local # Rest Pose Relative Matrix
+                bone.matrix_basis = rm.inverted() @ fm
+            else:
+                fm = fixed_matrix = reorient(raw_m, transpose=False)
+                bone.matrix = bone.parent.matrix @ fm
+        else:
+            fm = fixed_matrix = reorient_root(raw_m, transpose=False)
+            bone.matrix = fm
+
         keyframe_insert_bone_locrotscale(context.scene.sub_anim_armature, bone.name, frame, 'Transform')
+
+        bone['compensate_scale'] = compensate_scale
+        bone['inherit_scale'] = inherit_scale
+        bone.keyframe_insert(
+            data_path=f'["compensate_scale"]',
+            frame=frame,
+            group='Transform',
+            options={'INSERTKEY_NEEDED'},
+        )
+        bone.keyframe_insert(
+            data_path=f'["inherit_scale"]',
+            frame=frame,
+            group='Transform',
+            options={'INSERTKEY_NEEDED'},
+        )
+
 
 def keyframe_insert_bone_locrotscale(armature, bone_name, frame, group_name):
     for parameter in ['location', 'rotation_quaternion', 'scale']:
