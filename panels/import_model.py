@@ -868,6 +868,7 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
         aim_entry_empty['target_bone_name2'] = aim_entry['target_bone_name2']
         for unk_index in range(1, 22+1):
             aim_entry_empty[f'unk{unk_index}'] = aim_entry[f'unk{unk_index}']
+        create_aim_type_helper_bone_constraints(aim_entry['name'], armature, aim_entry['target_bone_name1'], aim_entry['aim_bone_name1'])
           
     interpolation_entries_empty = create_new_empty('interpolation_entries', root_empty)
     for interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
@@ -891,3 +892,21 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
     '''
     list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
     '''
+
+
+def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
+    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+    if owner_bone is None:
+        print(f'Didnt find bone {owner_bone_name}')
+        return
+    new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
+    new_constraint.name = constraint_name
+    new_constraint.track_axis = 'TRACK_Y'
+    new_constraint.influence = 1.0
+    new_constraint.target = armature
+    new_constraint.subtarget = target_bone_name
+    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+
+
