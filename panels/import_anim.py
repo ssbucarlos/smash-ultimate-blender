@@ -236,12 +236,14 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         raw_m = raw_matrix = mathutils.Matrix(tm @ rm @ sx @ sy @ sz)   
         if bone.parent is not None:
             if compensate_scale and not inherit_scale:
+                '''
                 pm = parent_matrix = bone.parent.matrix
                 pmsv = parent_matrix_scale_vector = pm.to_scale()
                 pmsmx = parent_matrix_scale_matrix_x = Matrix.Scale(pmsv[0], 4, (1,0,0))
                 pmsmy = parent_matrix_scale_matrix_y = Matrix.Scale(pmsv[1], 4, (0,1,0))
                 pmsmz = parent_matrix_scale_matrix_z = Matrix.Scale(pmsv[2], 4, (0,0,1))
                 pmsm = parent_matrix_scale_matrix = pmsmx @ pmsmy @ pmsmz
+                '''
                 fm = fixed_matrix = reorient(raw_m, transpose=False)
                 '''
                 #bone.matrix = pm @ pmsm.inverted() @ fm

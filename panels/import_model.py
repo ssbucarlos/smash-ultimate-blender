@@ -1,5 +1,7 @@
+import json
 import os
 import os.path
+from tokenize import String
 import bpy
 import mathutils
 import time
@@ -149,6 +151,8 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
                 context.scene.sub_model_numdlb_file_name = model_file
             elif '.numatb' == extension:
                 context.scene.sub_model_numatb_file_name = model_file
+            elif '.nuhlpb' == extension:
+                context.scene.sub_model_nuhlpb_file_name = model_file
         return {'FINISHED'}
 
 class ModelImporter(bpy.types.Operator):
@@ -170,7 +174,8 @@ def import_model(self, context):
     numshb_name = context.scene.sub_model_numshb_file_name
     nusktb_name = context.scene.sub_model_nusktb_file_name
     numatb_name = context.scene.sub_model_numatb_file_name
-    
+    nuhlpb_name = context.scene.sub_model_nuhlpb_file_name
+
     start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
 
@@ -180,29 +185,13 @@ def import_model(self, context):
 
     ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
     ssbh_matl = ssbh_data_py.matl_data.read_matl(dir + numatb_name) if numatb_name != '' else None
+    nuhlpb_json = read_nuhlpb_json(dir + nuhlpb_name) if nuhlpb_name != '' else None
     end = time.time()
     print(f'Read files in {end - start} seconds')
 
     armature = create_armature(ssbh_skel, context)
     created_meshes = create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
-    
-    '''
-    # TODO So merging meshes in blenders and then seperating them is terrible for UV and color layer management.
-            Can't split a mesh after joining, or else all meshes will have all uv layers.
-    
-    if context.scene.sub_merge_same_name_meshes == True:
-        real_names = {re.split(r'.\d\d\d', mesh.name)[0] for mesh in created_meshes} 
-        real_name_to_meshes = {real_name: [mesh for mesh in created_meshes if real_name == re.split(r'.\d\d\d', mesh.name)[0]] for real_name in real_names}
-        for mesh_list in real_name_to_meshes.values():
-            if len(mesh_list) == 1:
-                continue
-            context.view_layer.objects.active = mesh_list[0]
-            c = {}
-            c['object'] = c['active_object'] = context.object
-            c['selected_objects'] = c['selected_editable_objects'] = mesh_list
-            bpy.ops.object.join(c)  
-    '''
-
+    import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
 
@@ -839,3 +828,66 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
         # The database has a single entry for each program, so don't include the render pass tag.
         attributes = [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
         node_group_node.inputs['use_color_set_1'].default_value = 1.0 if 'colorSet1' in attributes else 0.0
+
+def read_nuhlpb_json(nuhlpb_path) -> str:
+    import subprocess
+    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
+    output_json_path = nuhlpb_path + '.json'
+    try:
+        subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
+    except:
+        pass # Lol
+    
+    nuhlpb_json = None
+    with open(output_json_path) as f:
+        nuhlpb_json = json.load(f)
+    return nuhlpb_json
+
+def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
+    '''
+    The nuhlpb data will be stored in a tree of empty objects.
+    '''
+    def create_new_empty(name, parent) -> bpy.types.Object:
+        empty = bpy.data.objects.new('empty', None)
+        empty.name = name
+        bpy.context.collection.objects.link(empty)
+        empty.parent = parent
+        return empty
+
+    root_empty = create_new_empty('_NUHLPB', armature)
+    root_empty['major_version'] = nuhlpb_json['data']['Hlpb']['major_version']
+    root_empty['minor_version'] = nuhlpb_json['data']['Hlpb']['minor_version']
+    aim_entries_empty = create_new_empty('aim_entries', root_empty)
+    for aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
+        aim_entry_empty = create_new_empty(aim_entry['name'], aim_entries_empty)
+        aim_entry_empty['aim_bone_name1'] = aim_entry['aim_bone_name1']
+        aim_entry_empty['aim_bone_name2'] = aim_entry['aim_bone_name2'] 
+        aim_entry_empty['aim_type1'] = aim_entry['aim_type1']
+        aim_entry_empty['aim_type2'] = aim_entry['aim_type2']
+        aim_entry_empty['target_bone_name1'] = aim_entry['target_bone_name1'] 
+        aim_entry_empty['target_bone_name2'] = aim_entry['target_bone_name2']
+        for unk_index in range(1, 22+1):
+            aim_entry_empty[f'unk{unk_index}'] = aim_entry[f'unk{unk_index}']
+          
+    interpolation_entries_empty = create_new_empty('interpolation_entries', root_empty)
+    for interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
+        ie = interpolation_entry
+        ie_empty = create_new_empty(ie['name'], interpolation_entries_empty)
+        ie_empty['bone_name'] = ie['bone_name']
+        ie_empty['root_bone_name'] = ie['root_bone_name']
+        ie_empty['parent_bone_name'] = ie['parent_bone_name']
+        ie_empty['driver_bone_name'] = ie['driver_bone_name']
+        ie_empty['unk_type'] = ie['unk_type']
+        aoi = ie['aoi']
+        ie_empty['aoi'] = [aoi['x'], aoi['y'], aoi['z']]
+        quat1 = ie['quat1']
+        ie_empty['quat1'] = [quat1['x'],quat1['y'],quat1['z'],quat1['w']]
+        quat2 = ie['quat2']
+        ie_empty['quat2'] = [quat2['x'],quat2['y'],quat2['z'],quat2['w']]
+        range_min = ie['range_min']
+        ie_empty = [range_min['x'], range_min['y'], range_min['z']]
+        range_max = ie['range_max']
+        ie_empty = [range_max['x'], range_max['y'], range_max['z']]
+    '''
+    list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
+    '''
