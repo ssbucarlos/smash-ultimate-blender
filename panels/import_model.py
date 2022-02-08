@@ -889,6 +889,11 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
         ie_empty = [range_min['x'], range_min['y'], range_min['z']]
         range_max = ie['range_max']
         ie_empty = [range_max['x'], range_max['y'], range_max['z']]
+        create_interpolation_type_helper_bone_constraints(
+            ie['name'], armature,
+            ie['driver_bone_name'], ie['parent_bone_name'],
+            [aoi['y'], aoi['x'], aoi['z']]
+        )
     '''
     list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
     '''
@@ -896,17 +901,32 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
 
 def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
     bpy.ops.object.mode_set(mode='POSE', toggle=False)
-    print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
+    #print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
     owner_bone = armature.pose.bones.get(owner_bone_name, None)
-    if owner_bone is None:
-        print(f'Didnt find bone {owner_bone_name}')
-        return
-    new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
-    new_constraint.name = constraint_name
-    new_constraint.track_axis = 'TRACK_Y'
-    new_constraint.influence = 1.0
-    new_constraint.target = armature
-    new_constraint.subtarget = target_bone_name
+    if owner_bone is not None:
+        new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
+        new_constraint.name = constraint_name
+        new_constraint.track_axis = 'TRACK_Y'
+        new_constraint.influence = 1.0
+        new_constraint.target = armature
+        new_constraint.subtarget = target_bone_name
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
 
+def create_interpolation_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name, aoi_xyz_list):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+    if owner_bone is not None:
+        x,y,z = 'X', 'Y', 'Z'
+        for index, axis in enumerate([x,y,z]):
+            crc = owner_bone.constraints.new('COPY_ROTATION')
+            crc.name = f'{constraint_name}.{axis}'
+            crc.target = armature
+            crc.subtarget =  target_bone_name
+            crc.target_space = 'LOCAL_OWNER_ORIENT'
+            crc.owner_space = 'LOCAL'
+            crc.use_x = True if axis is x else False
+            crc.use_y = True if axis is y else False
+            crc.use_z = True if axis is z else False
+            crc.influence = aoi_xyz_list[index]
+    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
