@@ -886,9 +886,9 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
         quat2 = ie['quat2']
         ie_empty['quat2'] = [quat2['x'],quat2['y'],quat2['z'],quat2['w']]
         range_min = ie['range_min']
-        ie_empty = [range_min['x'], range_min['y'], range_min['z']]
+        ie_empty['range_min'] = [range_min['x'], range_min['y'], range_min['z']]
         range_max = ie['range_max']
-        ie_empty = [range_max['x'], range_max['y'], range_max['z']]
+        ie_empty['range_max'] = [range_max['x'], range_max['y'], range_max['z']]
         create_interpolation_type_helper_bone_constraints(
             ie['name'], armature,
             ie['driver_bone_name'], ie['parent_bone_name'],

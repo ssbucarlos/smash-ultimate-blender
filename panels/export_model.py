@@ -103,6 +103,12 @@ class ModelExporterOperator(Operator, ImportHelper):
         description="Export .NUMATB",
         default=True,
     )
+    include_nuhlpb: BoolProperty(
+        name="Export .NUHLPB",
+        description="Export .NUHLPB",
+        default=True,
+    )
+
     linked_nusktb_settings: EnumProperty(
         name="Bone Linkage",
         description="Pick 'Order & Values' unless you intentionally edited the vanilla bones.",
@@ -116,10 +122,10 @@ class ModelExporterOperator(Operator, ImportHelper):
     
     def execute(self, context):
         export_model(context, self.filepath, self.include_numdlb, self.include_numshb, self.include_numshexb,
-                     self.include_nusktb, self.include_numatb, self.linked_nusktb_settings)
+                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings)
         return {'FINISHED'}
 
-def export_model(context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, linked_nusktb_settings):
+def export_model(context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     '''
     numdlb and numshb are inherently linked, must export both if exporting one
     if include_numdlb:
@@ -164,6 +170,8 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
         create_and_save_matl(filepath, export_meshes)
     if include_numshexb:
         create_and_save_meshex(filepath, ssbh_mesh_data)
+    if include_nuhlpb:
+        create_and_save_nuhlpb(filepath, arma)
 
     end = time.time()
     print(f'Saved files in {end - start} seconds')
@@ -946,3 +954,101 @@ def bounding_sphere(objects):
     center = positions_world_all[:,:3].mean(axis=0)
     radius = np.max(la.norm(positions_world_all[:,:3] - center, 2, axis=1))
     return center, radius
+
+def save_ssbh_json(ssbh_json, output_file_path):
+    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
+    dumped_json_file_path = output_file_path + '.tmp.json'
+    with open(dumped_json_file_path, 'w') as f:
+        json.dump(ssbh_json, f, indent=2)
+    subprocess.run([ssbh_lib_json_exe_path, dumped_json_file_path, output_file_path])
+    #os.remove(dumped_json_file_path)
+    return
+
+def create_and_save_nuhlpb(filepath, armature:bpy.types.Object):
+    root_empty = None
+    for child in armature.children:
+        if child.name.startswith('_NUHLPB') and child.type == 'EMPTY':
+            root_empty = child
+            break
+    
+    if root_empty is None:
+        return
+    
+    aim_entries_empty, interpolation_entries_empty = None, None
+    for child in root_empty.children:
+        if child.name.startswith('aim_entries'):
+            aim_entries_empty = child
+        elif child.name.startswith('interpolation_entries'):
+            interpolation_entries_empty = child
+    
+    if aim_entries_empty is None or interpolation_entries_empty is None:
+        print(f'Selected armature had the _NUHLPB empty but not the aim_entries_empty or interpolation_entries_empty!')
+        return
+    
+    nuhlpb_json = {}
+    nuhlpb_json['data'] = {}
+    nuhlpb_json['data']['Hlpb'] = {}
+    nuhlpb_json['data']['Hlpb']['major_version'] = root_empty['major_version']
+    nuhlpb_json['data']['Hlpb']['minor_version'] = root_empty['minor_version']
+    
+    nuhlpb_json['data']['Hlpb']['aim_entries'] = []
+    nuhlpb_json['data']['Hlpb']['interpolation_entries'] = []
+    nuhlpb_json['data']['Hlpb']['list1'] = []
+    nuhlpb_json['data']['Hlpb']['list2'] = []
+
+    for index, aim_entry_empty in enumerate(aim_entries_empty.children):
+        aim_entry = {}
+        aim_entry['name'] = aim_entry_empty.name
+        aim_entry['aim_bone_name1'] = aim_entry_empty['aim_bone_name1']
+        aim_entry['aim_bone_name2'] = aim_entry_empty['aim_bone_name2']
+        aim_entry['aim_type1'] = aim_entry_empty['aim_type1']
+        aim_entry['aim_type2'] = aim_entry_empty['aim_type2']
+        aim_entry['target_bone_name1'] = aim_entry_empty['target_bone_name1']
+        aim_entry['target_bone_name2'] = aim_entry_empty['target_bone_name2']
+        for unk_index in range(1, 22+1):
+            aim_entry[f'unk{unk_index}'] = aim_entry_empty[f'unk{unk_index}']
+        nuhlpb_json['data']['Hlpb']['aim_entries'].append(aim_entry)
+        nuhlpb_json['data']['Hlpb']['list1'].append(index)
+        nuhlpb_json['data']['Hlpb']['list2'].append(0)
+
+    for index, interpolation_entry_empty in enumerate(interpolation_entries_empty.children):
+        interpolation_entry = {}
+        interpolation_entry['name'] = interpolation_entry_empty.name
+        interpolation_entry['bone_name'] = interpolation_entry_empty['bone_name']
+        interpolation_entry['root_bone_name'] = interpolation_entry_empty['root_bone_name']
+        interpolation_entry['parent_bone_name'] = interpolation_entry_empty['parent_bone_name']
+        interpolation_entry['driver_bone_name'] = interpolation_entry_empty['driver_bone_name']
+        interpolation_entry['unk_type'] = interpolation_entry_empty['unk_type']
+        interpolation_entry['aoi'] = {}
+        interpolation_entry['aoi']['x'] = interpolation_entry_empty['aoi'][0]
+        interpolation_entry['aoi']['y'] = interpolation_entry_empty['aoi'][1]
+        interpolation_entry['aoi']['z'] = interpolation_entry_empty['aoi'][2]
+        interpolation_entry['quat1'] = {}
+        interpolation_entry['quat1']['x'] = interpolation_entry_empty['quat1'][0]
+        interpolation_entry['quat1']['y'] = interpolation_entry_empty['quat1'][1]
+        interpolation_entry['quat1']['z'] = interpolation_entry_empty['quat1'][2]
+        interpolation_entry['quat1']['w'] = interpolation_entry_empty['quat1'][3]
+        interpolation_entry['quat2'] = {}
+        interpolation_entry['quat2']['x'] = interpolation_entry_empty['quat1'][0]
+        interpolation_entry['quat2']['y'] = interpolation_entry_empty['quat1'][1]
+        interpolation_entry['quat2']['z'] = interpolation_entry_empty['quat1'][2]
+        interpolation_entry['quat2']['w'] = interpolation_entry_empty['quat1'][3]
+        interpolation_entry['range_min'] = {}
+        interpolation_entry['range_min']['x'] = interpolation_entry_empty['range_min'][0]
+        interpolation_entry['range_min']['y'] = interpolation_entry_empty['range_min'][1] 
+        interpolation_entry['range_min']['z'] = interpolation_entry_empty['range_min'][2]
+        interpolation_entry['range_max'] = {}
+        interpolation_entry['range_max']['x'] = interpolation_entry_empty['range_max'][0]
+        interpolation_entry['range_max']['y'] = interpolation_entry_empty['range_max'][1] 
+        interpolation_entry['range_max']['z'] = interpolation_entry_empty['range_max'][2]
+        nuhlpb_json['data']['Hlpb']['interpolation_entries'].append(interpolation_entry)
+        nuhlpb_json['data']['Hlpb']['list1'].append(index)
+        nuhlpb_json['data']['Hlpb']['list2'].append(1)
+
+    save_ssbh_json(nuhlpb_json, filepath + 'model.nuhlpb')
+
+
+    
+
+
+
