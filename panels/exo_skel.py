@@ -95,6 +95,8 @@ class BuildBoneList(bpy.types.Operator):
         
         #for bone in armature_smash.data.bones:
         for bone in armature_other.data.bones:
+            if not bone.name.startswith('H_'):
+                continue
             bone_item = context.scene.bone_list.add()
             #bone_item.bone_name_smash = bone.name
             bone_item.bone_name_other = bone.name
