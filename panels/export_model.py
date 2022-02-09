@@ -998,7 +998,7 @@ def create_and_save_nuhlpb(filepath, armature:bpy.types.Object):
 
     for index, aim_entry_empty in enumerate(aim_entries_empty.children):
         aim_entry = {}
-        aim_entry['name'] = aim_entry_empty.name
+        aim_entry['name'] = re.split(r'\.\d\d\d$', aim_entry_empty.name)[0]
         aim_entry['aim_bone_name1'] = aim_entry_empty['aim_bone_name1']
         aim_entry['aim_bone_name2'] = aim_entry_empty['aim_bone_name2']
         aim_entry['aim_type1'] = aim_entry_empty['aim_type1']
@@ -1013,7 +1013,7 @@ def create_and_save_nuhlpb(filepath, armature:bpy.types.Object):
 
     for index, interpolation_entry_empty in enumerate(interpolation_entries_empty.children):
         interpolation_entry = {}
-        interpolation_entry['name'] = interpolation_entry_empty.name
+        interpolation_entry['name'] = re.split(r'\.\d\d\d$', interpolation_entry_empty.name)[0]
         interpolation_entry['bone_name'] = interpolation_entry_empty['bone_name']
         interpolation_entry['root_bone_name'] = interpolation_entry_empty['root_bone_name']
         interpolation_entry['parent_bone_name'] = interpolation_entry_empty['parent_bone_name']

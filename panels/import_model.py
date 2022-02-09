@@ -843,17 +843,35 @@ def read_nuhlpb_json(nuhlpb_path) -> str:
         nuhlpb_json = json.load(f)
     return nuhlpb_json
 
+def create_new_empty(name, parent, specified_collection=None) -> bpy.types.Object:
+    empty = bpy.data.objects.new('empty', None)
+    empty.name = name
+
+    if specified_collection is None:
+        bpy.context.collection.objects.link(empty)
+    else:
+        specified_collection.objects.link(empty)
+    empty.parent = parent
+    return empty
+
+def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=None) -> bpy.types.Object:
+    for mesh in meshes:
+        if mesh.name.startswith(pruned_name):
+            return mesh
+    return fallback
+
+def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.types.Object:
+    copy = original.copy()
+    if specified_collection is None:
+        bpy.context.collection.objects.link(copy)
+    else:
+        specified_collection.objects.link(copy)
+    return copy
+
 def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
     '''
     The nuhlpb data will be stored in a tree of empty objects.
     '''
-    def create_new_empty(name, parent) -> bpy.types.Object:
-        empty = bpy.data.objects.new('empty', None)
-        empty.name = name
-        bpy.context.collection.objects.link(empty)
-        empty.parent = parent
-        return empty
-
     root_empty = create_new_empty('_NUHLPB', armature)
     root_empty['major_version'] = nuhlpb_json['data']['Hlpb']['major_version']
     root_empty['minor_version'] = nuhlpb_json['data']['Hlpb']['minor_version']

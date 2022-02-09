@@ -186,13 +186,11 @@ class MakeCombinedSkeleton(bpy.types.Operator):
                     paired_bone_name = entry.bone_name_smash
            
             paired_bone = None
-            print('Paired Bone Name = %s' % paired_bone_name)
             if paired_bone_name is not None:
                 paired_bone = smash_bones.get(paired_bone_name)
                 
             print('Paired Bone = %s' % paired_bone)
             if paired_bone is not None:
-                print('paired_bone.head_local = %s' % paired_bone.head_local)
                 '''
                 Need to create the head+tail to match the original smash one, but move it to the new position
                 '''
@@ -208,7 +206,6 @@ class MakeCombinedSkeleton(bpy.types.Operator):
                 new_bone.tail = new_bone.tail + other_bone.head_local
                 
             else:
-                print('other_bone.head_local = %s' % other_bone.head_local)
                 new_bone.head = other_bone.head_local
                 new_bone.tail = other_bone.tail_local
                 AxisRollFromMatrix = bpy.types.Bone.AxisRollFromMatrix
@@ -218,27 +215,66 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             if other_bone.parent:
                 new_bone.parent = new_bones.get(other_bone.parent.name)
             
-            print('')
             
         bpy.ops.object.mode_set(mode='POSE')
         new_bones = new_arma.pose.bones
         smash_arma = get_smash_armature()
         smash_bones = smash_arma.pose.bones
-        for new_bone in new_bones:
+        from .import_model import create_new_empty, get_from_mesh_list_with_pruned_name, copy_empty
+        old_nuhlpb_root_empty = get_from_mesh_list_with_pruned_name(smash_arma.children, '_NUHLPB', None)
+        new_nuhlpb_root_empty, new_aim_entries_empty, new_interpolation_entries_empty = None, None, None
+        if old_nuhlpb_root_empty:
+            new_nuhlpb_root_empty = copy_empty(old_nuhlpb_root_empty, output_collection)
+            new_nuhlpb_root_empty.parent = new_arma
+            
+            old_aim_entries_empty = get_from_mesh_list_with_pruned_name(old_nuhlpb_root_empty.children, 'aim_entries', None)
+            new_aim_entries_empty = copy_empty(old_aim_entries_empty, output_collection)
+            new_aim_entries_empty.parent = new_nuhlpb_root_empty
+            old_interpolation_entries_empty = get_from_mesh_list_with_pruned_name(old_nuhlpb_root_empty.children, 'interpolation_entries', None)
+            new_interpolation_entries_empty = copy_empty(old_interpolation_entries_empty, output_collection)
+            new_interpolation_entries_empty.parent = new_nuhlpb_root_empty
+        else:
+            new_nuhlpb_root_empty = create_new_empty('_NUHLPB', new_arma, output_collection)
+            new_nuhlpb_root_empty['major_version'] = old_nuhlpb_root_empty['major_version']
+            new_nuhlpb_root_empty['minor_version'] = old_nuhlpb_root_empty['minor_version']
+            new_aim_entries_empty = create_new_empty('aim_entries', new_nuhlpb_root_empty, output_collection)
+            new_interpolation_entries_empty = create_new_empty('interpolation_entries', new_nuhlpb_root_empty, output_collection)
+
+
+        if old_aim_entries_empty:
+            for entry in old_aim_entries_empty.children:
+                new_aim_entry_empty = copy_empty(entry, output_collection)
+                new_aim_entry_empty.parent = new_aim_entries_empty
+        if old_interpolation_entries_empty:
+            for entry in old_interpolation_entries_empty.children:
+                new_interpolation_entry_empty = copy_empty(entry, output_collection)
+                new_interpolation_entry_empty.parent = new_interpolation_entries_empty
+
+        for index, new_bone in enumerate(new_bones):
             paired_bone_name = None
             for entry in context.scene.bone_list:
                 if entry.bone_name_other == new_bone.name:
                     paired_bone_name = entry.bone_name_smash
             if paired_bone_name is None:
                 continue
-            print('Paired Bone Name = %s' % paired_bone_name)
             paired_bone = smash_bones.get(paired_bone_name, None)
             if paired_bone is None:
                 continue
             
             self.create_constraints(new_arma, new_bone, paired_bone)
-        
-        return {'FINISHED'}    
+            new_interpolation_entry_empty = create_new_empty(f'nuHelperBoneRotateInterp{3000+index}', new_interpolation_entries_empty, output_collection)
+            new_interpolation_entry_empty['bone_name'] = paired_bone.parent.name
+            new_interpolation_entry_empty['root_bone_name'] = paired_bone.parent.name
+            new_interpolation_entry_empty['parent_bone_name'] = paired_bone.name
+            new_interpolation_entry_empty['driver_bone_name'] = new_bone.name
+            new_interpolation_entry_empty['unk_type'] = 1
+            new_interpolation_entry_empty['aoi'] = [1.0, 1.0, 1.0]
+            new_interpolation_entry_empty['quat1'] = [0.0, 0.0, 0.0, 1.0]
+            new_interpolation_entry_empty['quat2'] = [0.0, 0.0, 0.0, 1.0]
+            new_interpolation_entry_empty['range_min'] = [-180, -180, -180]
+            new_interpolation_entry_empty['range_max'] = [180, 180, 180]
+
+        return {'FINISHED'}
 
 class ExportSkelJson(bpy.types.Operator):
     bl_idname = 'sub.export_skel_json'
@@ -448,7 +484,6 @@ class SUB_UL_BoneList(UIList):
         smash_armature = get_smash_armature()
         
         layout = layout.split(factor=0.36, align=True)
-        #layout.label(text=item.bone_name_smash)\
         layout.label(text=item.bone_name_other)
         if other_armature and smash_armature:
             layout.prop_search(item, 'bone_name_smash', smash_armature.pose, 'bones', text='')
@@ -497,11 +532,6 @@ class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator(MakeCombinedSkeleton.bl_idname, text='Make New Combined Skeleton')
         
-        row = layout.row(align=True)
-        row.operator(ExportHelperBoneJson.bl_idname, text='Create Helper Bone JSON Text')
-        
-        row = layout.row(align=True)
-        row.label(text='To export the .NUSKTB, use the Model Exporter. Make sure to link a vanilla nusktb!!!')
 '''
 class ExoSkelProperties(bpy.types.PropertyGroup):
     smash_armature = PointerProperty(
