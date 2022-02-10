@@ -216,53 +216,34 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         tm = translation_matrix = Matrix.Translation(t)
         qr = quaternion_rotation = Quaternion([r[3], r[0], r[1], r[2]])
         rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
-        sx = scale_matrix_x = Matrix.Scale(s[0], 4, (1,0,0))
-        sy = scale_matrix_y = Matrix.Scale(s[1], 4, (0,1,0))
-        sz = scale_matrix_z = Matrix.Scale(s[2], 4, (0,0,1))
-        '''
-        Ok the old code was taking the parents matrix and then mutliplying the childs matrix
-        but im pretty sure this would mutiply the scales together, which is not what i want
-        raw_m = raw_matrix = mathutils.Matrix(tm @ rm @ sx @ sy @ sz)       
-        
-        if bone.parent is not None:
-            fm = fixed_matrix = reorient(raw_m, transpose=False)
-            bone.matrix = bone.parent.matrix @ fm
-        else:
-            fm = fixed_matrix = reorient_root(raw_m, transpose=False)
-            bone.matrix = fm
-        '''
+        # Blender doesn't have this built in for some reason.
+        scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
 
-
-        raw_m = raw_matrix = mathutils.Matrix(tm @ rm @ sx @ sy @ sz)   
+        raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)   
         if bone.parent is not None:
-            if compensate_scale and not inherit_scale:
-                '''
-                pm = parent_matrix = bone.parent.matrix
-                pmsv = parent_matrix_scale_vector = pm.to_scale()
-                pmsmx = parent_matrix_scale_matrix_x = Matrix.Scale(pmsv[0], 4, (1,0,0))
-                pmsmy = parent_matrix_scale_matrix_y = Matrix.Scale(pmsv[1], 4, (0,1,0))
-                pmsmz = parent_matrix_scale_matrix_z = Matrix.Scale(pmsv[2], 4, (0,0,1))
-                pmsm = parent_matrix_scale_matrix = pmsmx @ pmsmy @ pmsmz
-                '''
-                fm = fixed_matrix = reorient(raw_m, transpose=False)
-                '''
-                #bone.matrix = pm @ pmsm.inverted() @ fm
-                debug_bone_names = ['LegR', 'KneeR', 'FootR', 'ToeR']
-                if bone.name in debug_bone_names and frame==9:
-                    print(f'bone={bone.name}, {bone.matrix.to_translation()}, {pm.to_translation()}, {fm.to_translation()}')
-                    rm = bone.bone.parent.matrix_local.inverted() @ bone.bone.matrix_local # Rest Pose Relative Matrix
-                    bone.matrix_basis = rm.inverted() @ fm
-                else:
-                    bone.matrix = pm @ pmsm.inverted() @ fm
-                '''
-                rm = bone.bone.parent.matrix_local.inverted() @ bone.bone.matrix_local # Rest Pose Relative Matrix
-                bone.matrix_basis = rm.inverted() @ fm
-            else:
-                fm = fixed_matrix = reorient(raw_m, transpose=False)
-                bone.matrix = bone.parent.matrix @ fm
+            fixed_matrix = reorient(raw_matrix, transpose=False)
+            bone.matrix = bone.parent.matrix @ fixed_matrix
+
+            if compensate_scale:
+                # Scale compensation "compensates" the effect of the immediate parent's scale.
+                # We don't want the compensation to accumulate along a bone chain. 
+                # HACK: Use the transform itself since we may overwrite a scale value.
+                # This assumes the parent is in the animation.
+                # TODO(SMG): Investigate where the parent scale value comes from.
+                # TODO(SMG): Why does setting scale directly work here but not in Cross Mod?
+                parent_node = bone_to_node.get(bone.parent, None)
+                if parent_node is not None:
+                    try:
+                        parent_scale = parent_node.tracks[0].values[index].scale
+                        bone.scale = (bone.scale[0] / parent_scale[0], bone.scale[1] / parent_scale[1], bone.scale[2] / parent_scale[2])
+                    except IndexError:
+                        # TODO: A single frame in ssbh_data_py should be assumed to be a constant animation.
+                        # The single element value applies to all frames.
+                        # This matches the convention used for Smash Ultimate.
+                        pass
         else:
-            fm = fixed_matrix = reorient_root(raw_m, transpose=False)
-            bone.matrix = fm
+            fixed_matrix = reorient_root(raw_matrix, transpose=False)
+            bone.matrix = fixed_matrix
 
         keyframe_insert_bone_locrotscale(context.scene.sub_anim_armature, bone.name, frame, 'Transform')
 
