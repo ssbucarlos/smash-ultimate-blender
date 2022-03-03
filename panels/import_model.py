@@ -479,6 +479,22 @@ def enable_inputs(node_group_node, param_id):
             input.hide = False
 
 
+def get_vertex_attributes(node_group_node, shader_name):
+    # Query the shader database for attribute information.
+    # Using SQLite is much faster than iterating through the JSON dump.
+    with sqlite3.connect(get_shader_db_file_path()) as con:
+        # Construct a query to find all the vertex attributes for this shader.
+        # Invalid shaders will return an empty list.
+        sql = """
+            SELECT v.AttributeName 
+            FROM VertexAttribute v 
+            INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
+            WHERE s.Name = ?
+            """
+        # The database has a single entry for each program, so don't include the render pass tag.
+        return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
+
+
 def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_data.MatlData, texture_name_to_image_dict):
     # TODO: Handle none?
     entry = None
@@ -609,7 +625,6 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
         texture_node.name = texture_file_name
         texture_node.label = texture_file_name
         texture_node.image = texture_name_to_image_dict[texture_file_name]
-        #texture_node.image = texture_file_name + '.png', context.scene.sub_model_folder_path, place_holder=True, check_existing=False, force_reload=True)
         matched_rgb_input = None
         matched_alpha_input = None
         for input in node_group_node.inputs:
@@ -667,18 +682,27 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
         links.new(matched_rgb_input, texture_node.outputs['Color'])
         links.new(matched_alpha_input, texture_node.outputs['Alpha'])
         node_count = node_count + 1
-    
-    # Query the shader database for attribute information.
-    # Using SQLite is much faster than iterating through the JSON dump.
-    with sqlite3.connect(get_shader_db_file_path()) as con:
-        # Construct a query to find all the vertex attributes for this shader.
-        # Invalid shaders will return an empty list.
-        sql = """
-            SELECT v.AttributeName 
-            FROM VertexAttribute v 
-            INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
-            WHERE s.Name = ?
-            """
-        # The database has a single entry for each program, so don't include the render pass tag.
-        attributes = [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
-        node_group_node.inputs['use_color_set_1'].default_value = 1.0 if 'colorSet1' in attributes else 0.0
+
+    # Set up color sets.
+    # Use the default values for non required attributes to be consistent between renderers.
+    # Ignore the rendering accuracy of missing required attributes for now.
+    required_attributes = get_vertex_attributes(node_group_node, shader_name)
+
+    def create_and_enable_color_set(name, row):
+        enable_inputs(node_group_node, name)
+
+        color_set_node = nodes.new('ShaderNodeVertexColor')
+        color_set_node.name = name
+        color_set_node.label = name
+        color_set_node.layer_name = name
+        # Vertically stack color sets with even spacing.
+        color_set_node.location = (-500, 150 - row * 150)
+
+        links.new(node_group_node.inputs[f'{name} RGB'], color_set_node.outputs['Color'])
+        links.new(node_group_node.inputs[f'{name} Alpha'], color_set_node.outputs['Alpha'])
+
+    if 'colorSet1' in required_attributes:
+        create_and_enable_color_set('colorSet1', 0)
+
+    if 'colorSet5' in required_attributes:
+        create_and_enable_color_set('colorSet5', 1)

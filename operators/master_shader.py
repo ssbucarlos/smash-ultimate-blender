@@ -15,6 +15,12 @@ def create_inputs(node_group_node, name_to_inputs):
             input.default_value = default
 
 
+def hide_unlinked_outputs(node):
+    for output in node.outputs:
+        if output.is_linked is False:
+            output.hide = True
+
+
 def create_master_shader():
     master_shader_name = get_master_shader_name()
     # Check if already exists and just skip if it does
@@ -42,95 +48,73 @@ def create_master_shader():
     output = node_group_node.outputs.new('NodeSocketShader', 'Final Output')
 
     # Now we are ready to start adding inputs
-    input = node_group_node.inputs.new('NodeSocketString', 'Material Name')
-    input = node_group_node.inputs.new('NodeSocketString', 'Shader Label')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture0 RGB (Col Map Layer 1)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture0 Alpha (Col Map Layer 1)')
+    def add_color_node(name):
+        return node_group_node.inputs.new('NodeSocketColor', name)
+
+    def add_float_node(name):
+        return node_group_node.inputs.new('NodeSocketFloat', name)
+
+    node_group_node.inputs.new('NodeSocketString', 'Material Name')
+    node_group_node.inputs.new('NodeSocketString', 'Shader Label')
+
+    add_color_node('Texture0 RGB (Col Map Layer 1)')
+    input = add_float_node('Texture0 Alpha (Col Map Layer 1)')
     input.default_value = 1.0
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture1 RGB (Col Map Layer 2)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture1 Alpha (Col Map Layer 2)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture2 RGB (Irradiance Cube Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture2 Alpha (Irradiance Cube Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture3 RGB (Ambient Occlusion Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture3 Alpha (Ambient Occlusion Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture4 RGB (NOR Map)')
+    add_color_node('Texture1 RGB (Col Map Layer 2)')
+    add_float_node('Texture1 Alpha (Col Map Layer 2)')
+    add_color_node('Texture2 RGB (Irradiance Cube Map)')
+    add_float_node('Texture2 Alpha (Irradiance Cube Map)')
+    add_color_node('Texture3 RGB (Ambient Occlusion Map)')
+    add_float_node('Texture3 Alpha (Ambient Occlusion Map)')
+    input = add_color_node('Texture4 RGB (NOR Map)')
     input.default_value = (0.5, 0.5, 0.0, 1)
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture4 Alpha (NOR Map Cavity Channel)')
+    input = add_float_node('Texture4 Alpha (NOR Map Cavity Channel)')
     input.default_value = 1.0
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture5 RGB (Emissive Map Layer 1)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture5 Alpha (Emissive Map Layer 1)')
+    add_color_node('Texture5 RGB (Emissive Map Layer 1)')
+    input = add_float_node('Texture5 Alpha (Emissive Map Layer 1)')
     input.default_value = 1.0
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture6 RGB (PRM Map)')
+    input = add_color_node('Texture6 RGB (PRM Map)')
     input.default_value = (0.0, 1.0, 1.0, 1.0)
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture6 Alpha (PRM Map Specular)')
+    input = add_float_node('Texture6 Alpha (PRM Map Specular)')
     input.default_value = 0.0
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture7 RGB (Specular Cube Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture7 Alpha (Specular Cube Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture8 RGB (Diffuse Cube Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture8 Alpha (Diffuse Cube Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture9 RGB (Baked Lighting Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture9 Alpha (Baked Lighting Map)')
+    add_color_node('Texture7 RGB (Specular Cube Map)')
+    add_float_node('Texture7 Alpha (Specular Cube Map)')
+    add_color_node('Texture8 RGB (Diffuse Cube Map)')
+    add_float_node('Texture8 Alpha (Diffuse Cube Map)')
+    add_color_node('Texture9 RGB (Baked Lighting Map)')
+    input = add_float_node('Texture9 Alpha (Baked Lighting Map)')
     input.default_value = 1.0
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture10 RGB (Diffuse Map Layer 1)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture10 Alpha (Diffuse Map Layer 1)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture11 RGB (Diffuse Map Layer 2)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture11 Alpha (Diffuse Map Layer 2)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture12 RGB (Diffuse Map Layer 3)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture12 Alpha (Diffuse Map Layer 3)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture13 RGB (Projection Light Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture13 Alpha (Projection Light Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture14 RGB (Emissive Map Layer 2)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture14 Alpha (Emissive Map Layer 2)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture15 RGB (Unused)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture15 Alpha (Unused)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture16 RGB (Ink Normal Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture16 Alpha (Ink Normal Map)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture17 RGB (Unused)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture17 Alpha (Unused)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture18 RGB (Unused)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture18 Alpha (Unused)')
-    input = node_group_node.inputs.new(
-        'NodeSocketColor', 'Texture19 RGB (Unused)')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'Texture19 Alpha (Unused)')
+    add_color_node('Texture10 RGB (Diffuse Map Layer 1)')
+    add_float_node('Texture10 Alpha (Diffuse Map Layer 1)')
+    add_color_node('Texture11 RGB (Diffuse Map Layer 2)')
+    add_float_node('Texture11 Alpha (Diffuse Map Layer 2)')
+    add_color_node('Texture12 RGB (Diffuse Map Layer 3)')
+    add_float_node('Texture12 Alpha (Diffuse Map Layer 3)')
+    add_color_node('Texture13 RGB (Projection Light Map)')
+    add_float_node('Texture13 Alpha (Projection Light Map)')
+    add_color_node('Texture14 RGB (Emissive Map Layer 2)')
+    add_float_node('Texture14 Alpha (Emissive Map Layer 2)')
+    add_color_node('Texture15 RGB (Unused)')
+    add_float_node('Texture15 Alpha (Unused)')
+    add_color_node('Texture16 RGB (Ink Normal Map)')
+    add_float_node('Texture16 Alpha (Ink Normal Map)')
+    add_color_node('Texture17 RGB (Unused)')
+    add_float_node('Texture17 Alpha (Unused)')
+    add_color_node('Texture18 RGB (Unused)')
+    add_float_node('Texture18 Alpha (Unused)')
+    add_color_node('Texture19 RGB (Unused)')
+    add_float_node('Texture19 Alpha (Unused)')
+
+    # TODO: It may be necessary to disable these nodes rather than use defaults in the future.
+    input = add_color_node('colorSet1 RGB')
+    input.default_value = (0.5, 0.5, 0.5, 0.5)
+    input = add_float_node('colorSet1 Alpha')
+    input.default_value = 0.5
+
+    input = add_color_node('colorSet5 RGB')
+    input.default_value = (0.0, 0.0, 0.0, 1.0 / 3.0)
+    input = add_float_node('colorSet5 Alpha')
+    input.default_value = 1.0 / 3.0
 
     create_inputs(node_group_node, material_inputs.vec4_param_to_inputs)
     create_inputs(node_group_node, material_inputs.float_param_to_inputs)
@@ -151,14 +135,12 @@ def create_master_shader():
     input = node_group_node.inputs.new(
         'NodeSocketString', 'RasterizerState0 Field2 (Cull Mode)')
     input.default_value = 'Back'
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'RasterizerState0 Field3 (Depth Bias)')
+    input = add_float_node('RasterizerState0 Field3 (Depth Bias)')
     input.default_value = 0.0
     # Wont be shown to users, should always be hidden
-    input = node_group_node.inputs.new('NodeSocketFloat', 'use_color_set_1')
-    input = node_group_node.inputs.new(
-        'NodeSocketFloat', 'use_custom_vector_47')
+    input = add_float_node('use_custom_vector_47')
     input.default_value = 0.0
+
     # Allow for wider node
     node_group_node.bl_width_max = 1000
 
@@ -171,13 +153,19 @@ def create_master_shader():
     output_node = inner_nodes.new('NodeGroupOutput')
     output_node.name = 'Output'
     output_node.location = (1500, 0)
-    #inner_links.new(output_node.inputs['Final Output'], shader_node.outputs['BSDF'])
+    inner_links.new(output_node.inputs['Final Output'], shader_node.outputs['BSDF'])
+
     diffuse_frame = inner_nodes.new('NodeFrame')
     diffuse_frame.name = 'Diffuse Frame'
     diffuse_frame.label = 'Diffuse Color Stuff'
     diffuse_input_node = inner_nodes.new('NodeGroupInput')
     diffuse_input_node.location = (-1500, 0)
     diffuse_input_node.parent = diffuse_frame
+
+    # TODO: Set location here?
+    color_set_input_node = inner_nodes.new('NodeGroupInput')
+    color_set_input_node.location = (-1500, -300)
+
     cv13_node = inner_nodes.new('ShaderNodeMixRGB')
     cv13_node.name = 'CustomVector13 Multiply'
     cv13_node.label = 'CustomVector13 Multiply'
@@ -185,7 +173,6 @@ def create_master_shader():
     cv13_node.blend_type = 'MULTIPLY'
     cv13_node.inputs['Fac'].default_value = 1.0
     cv13_node.parent = diffuse_frame
-    #inner_links.new(shader_node.inputs['Base Color'], cv13_node.outputs['Color'])
     inner_links.new(
         cv13_node.inputs['Color1'], diffuse_input_node.outputs['CustomVector13 (Diffuse Color Multiplier)'])
     fake_sss_color_node = inner_nodes.new('ShaderNodeMixRGB')
@@ -212,10 +199,8 @@ def create_master_shader():
     color_map_mix_node.label = 'ColorMapLayerMixer'
     color_map_mix_node.location = (-650, 0)
     color_map_mix_node.parent = diffuse_frame
-    #inner_links.new(color_map_mix_node.inputs['Color1'], diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
     inner_links.new(color_map_mix_node.inputs['Color2'],
                     diffuse_input_node.outputs['Texture1 RGB (Col Map Layer 2)'])
-    #inner_links.new(color_map_mix_node.inputs['Fac'], diffuse_input_node.outputs['Texture1 Alpha (Col Map Layer 2)'])
     inner_links.new(
         fake_sss_color_node.inputs['Color1'], color_map_mix_node.outputs['Color'])
     df_separate_prm_rgb_node = inner_nodes.new('ShaderNodeSeparateRGB')
@@ -227,12 +212,6 @@ def create_master_shader():
         fake_sss_factor_node.inputs[0], df_separate_prm_rgb_node.outputs['R'])
     inner_links.new(
         df_separate_prm_rgb_node.inputs['Image'], diffuse_input_node.outputs['Texture6 RGB (PRM Map)'])
-    color_set_5_node = inner_nodes.new('ShaderNodeVertexColor')
-    color_set_5_node.name = 'color_set_5_node'
-    color_set_5_node.label = 'Color Set 5'
-    color_set_5_node.parent = diffuse_frame
-    color_set_5_node.location = (-1500, 600)
-    color_set_5_node.layer_name = 'colorSet5'
 
     color_set_5_scale_node = inner_nodes.new('ShaderNodeMath')
     color_set_5_scale_node.name = 'color_set_5_scale_node'
@@ -260,7 +239,7 @@ def create_master_shader():
     layer_2_alpha_minus_col_set_5.use_clamp = True
 
     inner_links.new(
-        color_set_5_scale_node.inputs[1], color_set_5_node.outputs['Alpha'])
+        color_set_5_scale_node.inputs[1], color_set_input_node.outputs['colorSet5 Alpha'])
     inner_links.new(
         one_minus_color_set_5_node.inputs[1], color_set_5_scale_node.outputs[0])
     inner_links.new(
@@ -270,41 +249,6 @@ def create_master_shader():
     inner_links.new(
         color_map_mix_node.inputs['Fac'], layer_2_alpha_minus_col_set_5.outputs[0])
 
-    # Color Set 1
-    '''
-    
-    diffuse_color_set_1_node = inner_nodes.new('ShaderNodeVertexColor')
-    diffuse_color_set_1_node.name = 'diffuse_color_set_1_node'
-    diffuse_color_set_1_node.label = 'Color Set 1'
-    diffuse_color_set_1_node.parent = diffuse_frame
-    diffuse_color_set_1_node.location = (-1500, 400)
-    diffuse_color_set_1_node.layer_name = 'colorSet1'
-
-    diffuse_color_set_1_scale_node = inner_nodes.new('ShaderNodeMixRGB')
-    diffuse_color_set_1_scale_node.name = 'diffuse_color_set_1_scale_node'
-    diffuse_color_set_1_scale_node.label = 'Color Set 1 Scale'
-    diffuse_color_set_1_scale_node.parent = diffuse_frame
-    diffuse_color_set_1_scale_node.blend_type = 'MULTIPLY'
-    diffuse_color_set_1_scale_node.location = (-1200, 200)
-    diffuse_color_set_1_scale_node.inputs['Fac'].default_value = 1.0
-    diffuse_color_set_1_scale_node.inputs['Color1'].default_value = (2.0,2.0,2.0,1.0)
-
-    diffuse_color_set_1_mix_node = inner_nodes.new('ShaderNodeMixRGB')
-    diffuse_color_set_1_mix_node.name = 'diffuse_color_set_1_mix_node'
-    diffuse_color_set_1_mix_node.label = 'Color Set 1 Mixer'
-    diffuse_color_set_1_mix_node.parent = diffuse_frame
-    diffuse_color_set_1_mix_node.location = (-900, 100)
-    diffuse_color_set_1_mix_node.blend_type = 'MULTIPLY'
-    diffuse_color_set_1_mix_node.inputs['Fac'].default_value = 1.0
-
-    '''
-    '''
-    inner_links.new(diffuse_color_set_1_mix_node.inputs['Fac'], diffuse_input_node.outputs['use_color_set_1'])
-    inner_links.new(diffuse_color_set_1_scale_node.inputs['Color2'], diffuse_color_set_1_node.outputs[0])
-    inner_links.new(diffuse_color_set_1_mix_node.inputs['Color2'], diffuse_color_set_1_scale_node.outputs[0])
-    inner_links.new(diffuse_color_set_1_mix_node.inputs['Color1'], diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
-    '''
-    #inner_links.new(color_map_mix_node.inputs['Color1'], diffuse_color_set_1_mix_node.outputs[0])
     inner_links.new(color_map_mix_node.inputs['Color1'],
                     diffuse_input_node.outputs['Texture0 RGB (Col Map Layer 1)'])
     # Baked Lighting
@@ -352,22 +296,8 @@ def create_master_shader():
 
     baked_lighting_frame.location = (0, 300)
 
-    for output in baked_lighting_input_node.outputs:
-        if output.is_linked is False:
-            output.hide = True
-
-    for output in diffuse_input_node.outputs:
-        if output.is_linked is False:
-            output.hide = True
     diffuse_frame.location = (0, 625)
     # PRM Frame Time
-    '''
-    Nodes Needed: 
-        prm_compare_cv30_x 
-        prm_metal_minimum
-        prm_separate_prm_rgb
-        prm_multiply_prm_alpha
-    '''
     prm_frame = inner_nodes.new('NodeFrame')
     prm_frame.name = 'prm_frame'
     prm_frame.label = 'PRM Stuff'
@@ -448,9 +378,6 @@ def create_master_shader():
     inner_links.new(shader_node.inputs['Specular'],
                     prm_multiply_prm_alpha.outputs['Value'])
 
-    for output in prm_group_input.outputs:
-        if output.is_linked is False:
-            output.hide = True
     prm_frame.location = (0, 200)
     # NOR Frame Time
     '''
@@ -490,9 +417,7 @@ def create_master_shader():
         nor_normal_map.inputs['Color'], nor_combine_rgb.outputs['Image'])
     inner_links.new(shader_node.inputs['Normal'],
                     nor_normal_map.outputs['Normal'])
-    for output in nor_group_input.outputs:
-        if output.is_linked is False:
-            output.hide = True
+
     nor_frame.location = (0, -250)
 
     # Alpha Frame Time
@@ -525,14 +450,11 @@ def create_master_shader():
         alpha_lowest_from_textures.inputs[1], alpha_group_input.outputs['Texture5 Alpha (Emissive Map Layer 1)'])
     inner_links.new(alpha_maximum.inputs[0],
                     alpha_lowest_from_textures.outputs[0])
-    #inner_links.new(alpha_maximum.inputs[0], alpha_group_input.outputs['Texture0 Alpha (Col Map Layer 1)'])
     inner_links.new(
         alpha_maximum.inputs[1], alpha_group_input.outputs['CustomVector0 X (Min Texture Alpha)'])
     inner_links.new(shader_node.inputs['Alpha'],
                     alpha_maximum.outputs['Value'])
-    for output in alpha_group_input.outputs:
-        if output.is_linked is False:
-            output.hide = True
+
     alpha_frame.location = (0, -225)
 
     # Emission Frame Time
@@ -550,7 +472,6 @@ def create_master_shader():
     emission_multiply.location = (-600, -400)
     emission_multiply.blend_type = 'MULTIPLY'
     emission_multiply.inputs[0].default_value = 1.0
-    #inner_links.new(emission_multiply.inputs['Color1'], emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
     inner_links.new(emission_multiply.inputs['Color2'],
                     emission_group_input.outputs['CustomVector3 (Emission Color Multiplier)'])
     inner_links.new(shader_node.inputs['Emission'],
@@ -561,39 +482,6 @@ def create_master_shader():
     emission_mix_rgb.parent = emission_frame
     emission_mix_rgb.location = (-900, -400)
 
-    # Emission colorSet1 stuff
-    '''
-    emission_color_set_1 = inner_nodes.new('ShaderNodeVertexColor')
-    emission_color_set_1.name = 'emission_color_set_1'
-    emission_color_set_1.label = 'Color Set 1'
-    emission_color_set_1.parent = emission_frame
-    emission_color_set_1.layer_name = 'colorSet1'
-    emission_color_set_1.location = (-2100, -400)
-    
-    emission_color_set_1_scale = inner_nodes.new('ShaderNodeMixRGB')
-    emission_color_set_1_scale.name = 'emission_color_set_1_scale'
-    emission_color_set_1_scale.label = 'Color Set 1 Scale'
-    emission_color_set_1_scale.parent = emission_frame
-    emission_color_set_1_scale.inputs['Fac'].default_value = 1.0
-    emission_color_set_1_scale.inputs['Color1'].default_value = (2.0,2.0,2.0,2.0)
-    emission_color_set_1_scale.blend_type = 'MULTIPLY'
-    emission_color_set_1_scale.location = (-1800, -400)
-
-    emission_color_set_1_mixer = inner_nodes.new('ShaderNodeMixRGB')
-    emission_color_set_1_mixer.name = 'emission_color_set_1_mixer'
-    emission_color_set_1_mixer.label = 'Color Set 1 Mixer'
-    emission_color_set_1_mixer.parent = emission_frame
-    emission_color_set_1_mixer.inputs['Fac'].default_value = 1.0
-    emission_color_set_1_mixer.blend_type = 'MULTIPLY'
-    emission_color_set_1_mixer.location = (-1500, -400)
-    '''
-    '''
-    inner_links.new(emission_color_set_1_scale.inputs['Color2'],emission_color_set_1.outputs[0])
-    inner_links.new(emission_color_set_1_mixer.inputs['Fac'], emission_group_input.outputs['use_color_set_1'])
-    inner_links.new(emission_color_set_1_mixer.inputs['Color2'],emission_color_set_1_scale.outputs[0])
-    inner_links.new(emission_color_set_1_mixer.inputs['Color1'],emission_group_input.outputs['Texture5 RGB (Emissive Map Layer 1)'])
-    inner_links.new(emission_mix_rgb.inputs['Color1'], emission_color_set_1_mixer.outputs[0])
-    '''
     inner_links.new(
         emission_mix_rgb.inputs['Fac'], emission_group_input.outputs['Texture14 Alpha (Emissive Map Layer 2)'])
     inner_links.new(emission_mix_rgb.inputs['Color1'],
@@ -602,9 +490,7 @@ def create_master_shader():
                     emission_group_input.outputs['Texture14 RGB (Emissive Map Layer 2)'])
     inner_links.new(
         emission_multiply.inputs['Color1'], emission_mix_rgb.outputs[0])
-    for output in emission_group_input.outputs:
-        if output.is_linked is False:
-            output.hide = True
+
     emission_frame.location = (0, 20)
 
     # Post-PBR Shader Stuff
@@ -660,14 +546,6 @@ def create_master_shader():
     post_pbr_color_set_1_group_input.parent = post_pbr_color_set_1_frame
     post_pbr_color_set_1_group_input.location = (0, 0)
 
-    post_pbr_color_set_1_vertex_color = inner_nodes.new(
-        'ShaderNodeVertexColor')
-    post_pbr_color_set_1_vertex_color.name = 'post_pbr_color_set_1_vertex_color'
-    post_pbr_color_set_1_vertex_color.label = 'Color Set 1'
-    post_pbr_color_set_1_vertex_color.parent = post_pbr_color_set_1_frame
-    post_pbr_color_set_1_vertex_color.location = (0, -80)
-    post_pbr_color_set_1_vertex_color.layer_name = 'colorSet1'
-
     post_pbr_color_set_1_color_set_scale = inner_nodes.new('ShaderNodeMixRGB')
     post_pbr_color_set_1_color_set_scale.name = 'post_pbr_color_set_1_color_set_scale'
     post_pbr_color_set_1_color_set_scale.label = 'Color Set 1 Scale'
@@ -685,33 +563,38 @@ def create_master_shader():
     post_pbr_color_set_1_color_mixer.location = (0, -370)
     post_pbr_color_set_1_color_mixer.blend_type = 'MULTIPLY'
 
-    inner_links.new(
-        post_pbr_shader_to_rgb.inputs['Shader'], shader_node.outputs['BSDF'])
-    inner_links.new(
-        post_pbr_custom_vector_8_mix_rgb.inputs['Color1'], post_pbr_shader_to_rgb.outputs['Color'])
-    inner_links.new(post_pbr_custom_vector_8_mix_rgb.inputs['Color2'],
-                    post_pbr_group_input.outputs['CustomVector8 (Final Color Multiplier)'])
-    inner_links.new(
-        post_pbr_transparency_restorer_mix_shader.inputs['Fac'], post_pbr_shader_to_rgb.outputs['Alpha'])
-    inner_links.new(
-        post_pbr_transparency_restorer_mix_shader.inputs[1], post_pbr_transparent_bsdf.outputs['BSDF'])
-    inner_links.new(
-        post_pbr_transparency_restorer_mix_shader.inputs[2], post_pbr_color_set_1_color_mixer.outputs['Color'])
-    inner_links.new(
-        post_pbr_color_set_1_color_set_scale.inputs[2], post_pbr_color_set_1_vertex_color.outputs['Color'])
-    inner_links.new(post_pbr_color_set_1_color_mixer.inputs['Fac'],
-                    post_pbr_color_set_1_group_input.outputs['use_color_set_1'])
-    inner_links.new(
-        post_pbr_color_set_1_color_mixer.inputs['Color1'], post_pbr_custom_vector_8_mix_rgb.outputs['Color'])
-    inner_links.new(
-        post_pbr_color_set_1_color_mixer.inputs['Color2'], post_pbr_color_set_1_color_set_scale.outputs['Color'])
-    inner_links.new(output_node.inputs['Final Output'],
-                    post_pbr_transparency_restorer_mix_shader.outputs['Shader'])
+    # inner_links.new(
+    #     post_pbr_shader_to_rgb.inputs['Shader'], shader_node.outputs['BSDF'])
+    # inner_links.new(
+    #     post_pbr_custom_vector_8_mix_rgb.inputs['Color1'], post_pbr_shader_to_rgb.outputs['Color'])
+    # inner_links.new(post_pbr_custom_vector_8_mix_rgb.inputs['Color2'],
+    #                 post_pbr_group_input.outputs['CustomVector8 (Final Color Multiplier)'])
+    # inner_links.new(
+    #     post_pbr_transparency_restorer_mix_shader.inputs['Fac'], post_pbr_shader_to_rgb.outputs['Alpha'])
+    # inner_links.new(
+    #     post_pbr_transparency_restorer_mix_shader.inputs[1], post_pbr_transparent_bsdf.outputs['BSDF'])
+    # inner_links.new(
+    #     post_pbr_transparency_restorer_mix_shader.inputs[2], post_pbr_color_set_1_color_mixer.outputs['Color'])
+    # inner_links.new(
+    #     post_pbr_color_set_1_color_set_scale.inputs[2], color_set_input_node.outputs['colorSet1 RGB'])
+    # inner_links.new(post_pbr_color_set_1_color_mixer.inputs['Fac'],
+    #                 post_pbr_color_set_1_group_input.outputs['use_color_set_1'])
+    # inner_links.new(
+    #     post_pbr_color_set_1_color_mixer.inputs['Color1'], post_pbr_custom_vector_8_mix_rgb.outputs['Color'])
+    # inner_links.new(
+    #     post_pbr_color_set_1_color_mixer.inputs['Color2'], post_pbr_color_set_1_color_set_scale.outputs['Color'])
+    # inner_links.new(output_node.inputs['Final Output'],
+    #                 post_pbr_transparency_restorer_mix_shader.outputs['Shader'])
 
-    for output in post_pbr_color_set_1_group_input.outputs:
-        if output.is_linked is False:
-            output.hide = True
-
-    for output in post_pbr_group_input.outputs:
-        if output.is_linked is False:
-            output.hide = True
+    # Each input node technically has all the group's inputs.
+    # The duplicate node group input nodes are used to visually group inputs.
+    # Hide the unlinked nodes to make each input node smaller.
+    hide_unlinked_outputs(alpha_group_input)
+    hide_unlinked_outputs(post_pbr_color_set_1_group_input)
+    hide_unlinked_outputs(post_pbr_group_input)
+    hide_unlinked_outputs(color_set_input_node)
+    hide_unlinked_outputs(baked_lighting_input_node)
+    hide_unlinked_outputs(diffuse_input_node)
+    hide_unlinked_outputs(prm_group_input)
+    hide_unlinked_outputs(nor_group_input)
+    hide_unlinked_outputs(emission_group_input)
