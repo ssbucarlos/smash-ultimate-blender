@@ -1,1 +1,1 @@
-from . import master_shader
+from . import master_shader, material_inputs

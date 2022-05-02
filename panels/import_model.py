@@ -6,6 +6,7 @@ import bpy
 import mathutils
 import time
 import math
+
 from .. import ssbh_data_py
 import numpy as np
 from pathlib import Path
@@ -14,7 +15,7 @@ from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
 from bpy_extras import image_utils
 
-from ..operators import master_shader
+from ..operators import master_shader, material_inputs
 
 import sqlite3
 
@@ -547,9 +548,16 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     blender_mesh.use_auto_smooth = True # Required to use custom normals
     blender_mesh.normals_split_custom_set_from_vertices(ssbh_mesh_object.normals[0].data[:,:3])
 
-    # Assign Material
-    material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.sub_index)]
-    blender_mesh.materials.append(material)
+    # Try and assign the material.
+    # Mesh import should still succeed even if materials couldn't be created.
+    # Users can still choose to not export the matl.
+    # TODO: Report errors to the user?
+    try:
+        material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.sub_index)]
+        blender_mesh.materials.append(material)
+    except Exception as e:
+        print(f'Failed to assign material for {ssbh_mesh_object.name}{ssbh_mesh_object.sub_index}: {e}')
+
 
     return blender_mesh
 
@@ -574,10 +582,18 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     for label in unique_numdlb_material_labels:
         blender_mat = bpy.data.materials.new(label)
 
-        setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
-        label_to_material_dict[label] = blender_mat
-        
-    name_index_mat_dict = {(e.mesh_object_name,e.mesh_object_sub_index):label_to_material_dict[e.material_label] for e in ssbh_model.entries}
+        # Mesh import should still succeed even if materials can't be created.
+        # TODO: Report some sort of error to the user?
+        try:
+            setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
+            label_to_material_dict[label] = blender_mat
+        except Exception as e:
+            print(f'Failed to create material for {label}: {e}')
+
+    name_index_mat_dict = { 
+        (e.mesh_object_name,e.mesh_object_sub_index):label_to_material_dict[e.material_label] 
+        for e in ssbh_model.entries if e.material_label in label_to_material_dict
+    }
 
     start = time.time()
 
@@ -613,10 +629,26 @@ def import_material_images(ssbh_matl, context):
     return texture_name_to_image_dict
 
 
-def enable_input(node_group_node, param_id):
+def enable_inputs(node_group_node, param_id):
     for input in node_group_node.inputs:
         if input.name.split(' ')[0] == param_id:
             input.hide = False
+
+
+def get_vertex_attributes(node_group_node, shader_name):
+    # Query the shader database for attribute information.
+    # Using SQLite is much faster than iterating through the JSON dump.
+    with sqlite3.connect(get_shader_db_file_path()) as con:
+        # Construct a query to find all the vertex attributes for this shader.
+        # Invalid shaders will return an empty list.
+        sql = """
+            SELECT v.AttributeName 
+            FROM VertexAttribute v 
+            INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
+            WHERE s.Name = ?
+            """
+        # The database has a single entry for each program, so don't include the render pass tag.
+        return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
 
 
 def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_data.MatlData, texture_name_to_image_dict):
@@ -671,7 +703,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
 
     # TODO: Refactor this to be cleaner?
     blend_state = entry.blend_states[0].data
-    enable_input(node_group_node, entry.blend_states[0].param_id.name)
+    enable_inputs(node_group_node, entry.blend_states[0].param_id.name)
 
     blend_state_inputs = []
     for input in node_group_node.inputs:
@@ -688,7 +720,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
             input.default_value = blend_state.alpha_sample_to_coverage
 
     rasterizer_state = entry.rasterizer_states[0].data
-    enable_input(node_group_node, entry.rasterizer_states[0].param_id.name)
+    enable_inputs(node_group_node, entry.rasterizer_states[0].param_id.name)
 
     rasterizer_state_inputs = [input for input in node_group_node.inputs if input.name.split(' ')[0] == 'RasterizerState0']
     for input in rasterizer_state_inputs:
@@ -701,45 +733,39 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
             input.default_value = rasterizer_state.depth_bias
 
     for param in entry.booleans:
-        enable_input(node_group_node, param.param_id.name)
         input = node_group_node.inputs.get(param.param_id.name)
+        input.hide = False
         input.default_value = param.data
 
     for param in entry.floats:
-        enable_input(node_group_node, param.param_id.name)
         input = node_group_node.inputs.get(param.param_id.name)
+        input.hide = False
         input.default_value = param.data
     
     for param in entry.vectors:
-        enable_input(node_group_node, param.param_id.name)
-        x, y, z, w = param.data
+        param_name = param.param_id.name
 
-        inputs = []
-        for input in node_group_node.inputs:
-            if input.name.split(' ')[0] == param.param_id.name:
-                inputs.append(input)
-        if len(inputs) == 1:
-            inputs[0].default_value = (x,y,z,w)
-        elif len(inputs) == 2:
+        if param_name in material_inputs.vec4_param_to_inputs:
+            # Find and enable inputs.
+            inputs = [node_group_node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
             for input in inputs:
-                field = input.name.split(' ')[1]
-                if field == 'RGB':
-                    input.default_value = (x,y,z,1)
-                if field == 'Alpha':
-                    input.default_value = w
-        else:
-            for input in inputs:
-                axis = input.name.split(' ')[1]
-                if axis == 'X':
-                    input.default_value = x
-                if axis == 'Y':
-                    input.default_value = y
-                if axis == 'Z':
-                    input.default_value = z
-                if axis == 'W':
-                    input.default_value = w
-        if param.param_id.name == 'CustomVector47':
-            node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
+                input.hide = False
+
+            # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
+            x, y, z, w = param.data
+            if len(inputs) == 1:
+                inputs[0].default_value = (x,y,z,w)
+            elif len(inputs) == 2:
+                inputs[0].default_value = (x,y,z,1)
+                inputs[1].default_value = w
+            elif len(inputs) == 4:
+                inputs[0].default_value = x
+                inputs[1].default_value = y
+                inputs[2].default_value = z
+                inputs[3].default_value = w
+
+            if param_name == 'CustomVector47':
+                node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
 
     links.new(material_output_node.inputs[0], node_group_node.outputs[0])
 
@@ -747,7 +773,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
     node_count = 0
 
     for texture_param in entry.textures:
-        enable_input(node_group_node, texture_param.param_id.name)
+        enable_inputs(node_group_node, texture_param.param_id.name)
 
         texture_node = nodes.new('ShaderNodeTexImage')
         texture_node.location = (-800, -500 * node_count + 1000)
@@ -755,7 +781,6 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
         texture_node.name = texture_file_name
         texture_node.label = texture_file_name
         texture_node.image = texture_name_to_image_dict[texture_file_name]
-        #texture_node.image = texture_file_name + '.png', context.scene.sub_model_folder_path, place_holder=True, check_existing=False, force_reload=True)
         matched_rgb_input = None
         matched_alpha_input = None
         for input in node_group_node.inputs:
@@ -796,7 +821,7 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
                 sampler_entry = sampler_param
                 break
 
-        enable_input(node_group_node, sampler_entry.param_id.name)
+        enable_inputs(node_group_node, sampler_entry.param_id.name)
         sampler_data = sampler_entry.data
         sampler_node.wrap_s = sampler_data.wraps.name
         sampler_node.wrap_t = sampler_data.wrapt.name
@@ -813,138 +838,27 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
         links.new(matched_rgb_input, texture_node.outputs['Color'])
         links.new(matched_alpha_input, texture_node.outputs['Alpha'])
         node_count = node_count + 1
-    
-    # Query the shader database for attribute information.
-    # Using SQLite is much faster than iterating through the JSON dump.
-    with sqlite3.connect(get_shader_db_file_path()) as con:
-        # Construct a query to find all the vertex attributes for this shader.
-        # Invalid shaders will return an empty list.
-        sql = """
-            SELECT v.AttributeName 
-            FROM VertexAttribute v 
-            INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
-            WHERE s.Name = ?
-            """
-        # The database has a single entry for each program, so don't include the render pass tag.
-        attributes = [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
-        node_group_node.inputs['use_color_set_1'].default_value = 1.0 if 'colorSet1' in attributes else 0.0
 
-def read_nuhlpb_json(nuhlpb_path) -> str:
-    import subprocess
-    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
-    output_json_path = nuhlpb_path + '.json'
-    try:
-        subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
-    except:
-        pass # Lol
-    
-    nuhlpb_json = None
-    with open(output_json_path) as f:
-        nuhlpb_json = json.load(f)
-    return nuhlpb_json
+    # Set up color sets.
+    # Use the default values for non required attributes to be consistent between renderers.
+    # Ignore the rendering accuracy of missing required attributes for now.
+    required_attributes = get_vertex_attributes(node_group_node, shader_name)
 
-def create_new_empty(name, parent, specified_collection=None) -> bpy.types.Object:
-    empty = bpy.data.objects.new('empty', None)
-    empty.name = name
+    def create_and_enable_color_set(name, row):
+        enable_inputs(node_group_node, name)
 
-    if specified_collection is None:
-        bpy.context.collection.objects.link(empty)
-    else:
-        specified_collection.objects.link(empty)
-    empty.parent = parent
-    return empty
+        color_set_node = nodes.new('ShaderNodeVertexColor')
+        color_set_node.name = name
+        color_set_node.label = name
+        color_set_node.layer_name = name
+        # Vertically stack color sets with even spacing.
+        color_set_node.location = (-500, 150 - row * 150)
 
-def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=None) -> bpy.types.Object:
-    for mesh in meshes:
-        if mesh.name.startswith(pruned_name):
-            return mesh
-    return fallback
+        links.new(node_group_node.inputs[f'{name} RGB'], color_set_node.outputs['Color'])
+        links.new(node_group_node.inputs[f'{name} Alpha'], color_set_node.outputs['Alpha'])
 
-def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.types.Object:
-    copy = original.copy()
-    if specified_collection is None:
-        bpy.context.collection.objects.link(copy)
-    else:
-        specified_collection.objects.link(copy)
-    return copy
+    if 'colorSet1' in required_attributes:
+        create_and_enable_color_set('colorSet1', 0)
 
-def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
-    '''
-    The nuhlpb data will be stored in a tree of empty objects.
-    '''
-    root_empty = create_new_empty('_NUHLPB', armature)
-    root_empty['major_version'] = nuhlpb_json['data']['Hlpb']['major_version']
-    root_empty['minor_version'] = nuhlpb_json['data']['Hlpb']['minor_version']
-    aim_entries_empty = create_new_empty('aim_entries', root_empty)
-    for aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
-        aim_entry_empty = create_new_empty(aim_entry['name'], aim_entries_empty)
-        aim_entry_empty['aim_bone_name1'] = aim_entry['aim_bone_name1']
-        aim_entry_empty['aim_bone_name2'] = aim_entry['aim_bone_name2'] 
-        aim_entry_empty['aim_type1'] = aim_entry['aim_type1']
-        aim_entry_empty['aim_type2'] = aim_entry['aim_type2']
-        aim_entry_empty['target_bone_name1'] = aim_entry['target_bone_name1'] 
-        aim_entry_empty['target_bone_name2'] = aim_entry['target_bone_name2']
-        for unk_index in range(1, 22+1):
-            aim_entry_empty[f'unk{unk_index}'] = aim_entry[f'unk{unk_index}']
-        create_aim_type_helper_bone_constraints(aim_entry['name'], armature, aim_entry['target_bone_name1'], aim_entry['aim_bone_name1'])
-          
-    interpolation_entries_empty = create_new_empty('interpolation_entries', root_empty)
-    for interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
-        ie = interpolation_entry
-        ie_empty = create_new_empty(ie['name'], interpolation_entries_empty)
-        ie_empty['bone_name'] = ie['bone_name']
-        ie_empty['root_bone_name'] = ie['root_bone_name']
-        ie_empty['parent_bone_name'] = ie['parent_bone_name']
-        ie_empty['driver_bone_name'] = ie['driver_bone_name']
-        ie_empty['unk_type'] = ie['unk_type']
-        aoi = ie['aoi']
-        ie_empty['aoi'] = [aoi['x'], aoi['y'], aoi['z']]
-        quat1 = ie['quat1']
-        ie_empty['quat1'] = [quat1['x'],quat1['y'],quat1['z'],quat1['w']]
-        quat2 = ie['quat2']
-        ie_empty['quat2'] = [quat2['x'],quat2['y'],quat2['z'],quat2['w']]
-        range_min = ie['range_min']
-        ie_empty['range_min'] = [range_min['x'], range_min['y'], range_min['z']]
-        range_max = ie['range_max']
-        ie_empty['range_max'] = [range_max['x'], range_max['y'], range_max['z']]
-        create_interpolation_type_helper_bone_constraints(
-            ie['name'], armature,
-            ie['driver_bone_name'], ie['parent_bone_name'],
-            [aoi['y'], aoi['x'], aoi['z']]
-        )
-    '''
-    list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
-    '''
-
-
-def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
-    bpy.ops.object.mode_set(mode='POSE', toggle=False)
-    #print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
-    owner_bone = armature.pose.bones.get(owner_bone_name, None)
-    if owner_bone is not None:
-        new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
-        new_constraint.name = constraint_name
-        new_constraint.track_axis = 'TRACK_Y'
-        new_constraint.influence = 1.0
-        new_constraint.target = armature
-        new_constraint.subtarget = target_bone_name
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-
-
-def create_interpolation_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name, aoi_xyz_list):
-    bpy.ops.object.mode_set(mode='POSE', toggle=False)
-    owner_bone = armature.pose.bones.get(owner_bone_name, None)
-    if owner_bone is not None:
-        x,y,z = 'X', 'Y', 'Z'
-        for index, axis in enumerate([x,y,z]):
-            crc = owner_bone.constraints.new('COPY_ROTATION')
-            crc.name = f'{constraint_name}.{axis}'
-            crc.target = armature
-            crc.subtarget =  target_bone_name
-            crc.target_space = 'LOCAL_OWNER_ORIENT'
-            crc.owner_space = 'LOCAL'
-            crc.use_x = True if axis is x else False
-            crc.use_y = True if axis is y else False
-            crc.use_z = True if axis is z else False
-            crc.influence = aoi_xyz_list[index]
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+    if 'colorSet5' in required_attributes:
+        create_and_enable_color_set('colorSet5', 1)

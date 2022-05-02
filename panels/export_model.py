@@ -17,6 +17,8 @@ import json
 import subprocess
 from mathutils import Vector, Matrix
 import math
+from ..operators import material_inputs
+from itertools import groupby
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -131,6 +133,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     if include_numdlb:
         export_numdlb(context, filepath)
     '''
+    # TODO: This only needs to be made for include_numshb or include_nusktb or include_numshexb.
     # The skel needs to be made first to determine the mesh's bone influences.
     ssbh_skel_data = None
     if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
@@ -142,7 +145,13 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
+    # TODO: Is it possible to keep the correct order for non imported meshes?
     export_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
+
+    # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
+    # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
+    export_mesh_groups = [(k, list(g)) for k,g in groupby(export_meshes, lambda x: re.split(r'.\d\d\d', x.name)[0])]
+
     '''
     TODO: Investigate why export fails if meshes are selected before hitting export.
     '''
@@ -152,15 +161,13 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
 
     start = time.time()
 
-    ssbh_modl_data, ssbh_mesh_data = make_modl_mesh_data(context, export_meshes, ssbh_skel_data)
-    
-    end = time.time()
-    print(f'Created export files in {end - start} seconds')
+    # TODO: This is only needed for include_numshb or include_numshexb.
+    ssbh_mesh_data = make_mesh_data(context, export_mesh_groups, ssbh_skel_data)
 
-    start = time.time()
-
-    # TODO: Avoid creating files we don't plan on saving in this step.
+    # Create and save files individually to make this step more robust.
+    # Users can avoid errors in generating a file by disabling export for that file.
     if include_numdlb:
+        ssbh_modl_data = make_modl_data(context, export_mesh_groups)
         ssbh_modl_data.save(filepath + 'model.numdlb')
     if include_numshb:
         ssbh_mesh_data.save(filepath + 'model.numshb')
@@ -174,7 +181,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
         create_and_save_nuhlpb(filepath, arma)
 
     end = time.time()
-    print(f'Saved files in {end - start} seconds')
+    print(f'Create and save export files in {end - start} seconds')
 
 
 def create_and_save_meshex(filepath, ssbh_mesh_data):
@@ -226,12 +233,17 @@ def make_matl(materials):
         inputs = [input for input in node.inputs if input.hide == False]
         skip = ['Material Name', 'Shader Label']
 
+        # Multiple inputs may correspond to a single parameter.
+        # Avoid exporting the same parameter more than once.
+        exported_params = set()
         for input in inputs:
             name = input.name
-            if name in skip:
+            param_name = name.split(' ')[0]
+
+            if name in skip or param_name in exported_params:
                 continue
 
-            elif 'BlendState0 Field1 (Source Color)' == name:
+            elif name == 'BlendState0 Field1 (Source Color)':
                 data = ssbh_data_py.matl_data.BlendStateData()                          
                 data.source_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field1 (Source Color)'].default_value)
                 data.destination_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field3 (Destination Color)'].default_value)
@@ -239,7 +251,7 @@ def make_matl(materials):
 
                 attribute = ssbh_data_py.matl_data.BlendStateParam(ssbh_data_py.matl_data.ParamId.BlendState0, data)
                 entry.blend_states.append(attribute)
-            elif 'RasterizerState0 Field1 (Polygon Fill)' == name:
+            elif name == 'RasterizerState0 Field1 (Polygon Fill)':
                 data = ssbh_data_py.matl_data.RasterizerStateData()
                 data.fill_mode = ssbh_data_py.matl_data.FillMode.from_str(node.inputs['RasterizerState0 Field1 (Polygon Fill)'].default_value)
                 data.cull_mode = ssbh_data_py.matl_data.CullMode.from_str(node.inputs['RasterizerState0 Field2 (Cull Mode)'].default_value)
@@ -247,16 +259,17 @@ def make_matl(materials):
 
                 attribute = ssbh_data_py.matl_data.RasterizerStateParam(ssbh_data_py.matl_data.ParamId.RasterizerState0, data)
                 entry.rasterizer_states.append(attribute)
-            elif 'Texture' in name.split(' ')[0] and 'RGB' in name.split(' ')[1]:
+            elif 'Texture' in param_name and 'RGB' in name.split(' ')[1]:
                 texture_node = input.links[0].from_node
 
-                texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), texture_node.label)
+                texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), texture_node.label)
                 entry.textures.append(texture_attribute)
 
-                sampler_number = name.split(' ')[0].split('Texture')[1]
+                sampler_number = param_name.split('Texture')[1]
                 sampler_param_id_text = f'Sampler{sampler_number}'
 
                 # Sampler Data
+                # TODO: Use the default if the sampler is missing.
                 sampler_data = ssbh_data_py.matl_data.SamplerData()
 
                 sampler_node = texture_node.inputs[0].links[0].from_node
@@ -268,336 +281,43 @@ def make_matl(materials):
                 sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
                 sampler_data.border_color = sampler_node.border_color
                 sampler_data.lod_bias = sampler_node.lod_bias
-                print(sampler_node.anisotropic_filtering, sampler_node.max_anisotropy)
                 sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
          
                 sampler_attribute = ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.from_str(sampler_param_id_text), sampler_data)
                 entry.samplers.append(sampler_attribute)
-            elif 'Sampler' in name.split(' ')[0]:
-                # Samplers are not thier own input in the master node, rather they are a seperate node entirely
+            elif 'Sampler' in param_name:
+                # Samplers are not their own input in the master node, rather they are a seperate node entirely
                 pass
-            elif 'Boolean' in name.split(' ')[0]:
-                attribute = ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), input.default_value)
+            elif 'Boolean' in param_name:
+                attribute = ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
                 entry.booleans.append(attribute)
-            elif 'Float' in name.split(' ')[0]:
-                attribute = ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), input.default_value)
+            elif 'Float' in param_name:
+                attribute = ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
                 entry.floats.append(attribute)
-            elif 'Vector' in name.split(' ')[0]:
-                attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(name.split(' ')[0]), [0.0, 0.0, 0.0, 0.0])
-                
-                # TODO: Is there a simpler way to do this?
-                # Im sorry
-                # print(f'Name = {name}') # DEBUG
-                if name == 'CustomVector0 X (Min Texture Alpha)':
-                    attribute.data[0] = node.inputs['CustomVector0 X (Min Texture Alpha)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector0 Y (???)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector0 Z (???)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector0 W (???)'].default_value
-                elif name == 'CustomVector1':
-                    attribute.data[0] = node.inputs['CustomVector1'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector1'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector1'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector1'].default_value[3]
-                elif name == 'CustomVector2':
-                    attribute.data[0] = node.inputs['CustomVector2'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector2'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector2'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector2'].default_value[3]
-                elif name == 'CustomVector3 (Emission Color Multiplier)':
-                    attribute.data[0] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector3 (Emission Color Multiplier)'].default_value[3]
-                elif name == 'CustomVector4':
-                    attribute.data[0] = node.inputs['CustomVector4'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector4'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector4'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector4'].default_value[3]
-                elif name == 'CustomVector5':
-                    attribute.data[0] = node.inputs['CustomVector5'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector5'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector5'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector5'].default_value[3]
-                elif name == 'CustomVector6 X (UV Transform Layer 1)':
-                    attribute.data[0] = node.inputs['CustomVector6 X (UV Transform Layer 1)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector6 Y (UV Transform Layer 1)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector6 Z (UV Transform Layer 1)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector6 W (UV Transform Layer 1)'].default_value
-                elif name == 'CustomVector7':
-                    attribute.data[0] = node.inputs['CustomVector7'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector7'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector7'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector7'].default_value[3]
-                elif name == 'CustomVector8 (Final Color Multiplier)':
-                    attribute.data[0] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector8 (Final Color Multiplier)'].default_value[3]
-                elif name == 'CustomVector9':
-                    attribute.data[0] = node.inputs['CustomVector9'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector9'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector9'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector9'].default_value[3]
-                elif name == 'CustomVector10':
-                    attribute.data[0] = node.inputs['CustomVector10'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector10'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector10'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector10'].default_value[3]
-                elif name == 'CustomVector11 (Fake SSS Color)':
-                    attribute.data[0] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector11 (Fake SSS Color)'].default_value[3]
-                elif name == 'CustomVector12':
-                    attribute.data[0] = node.inputs['CustomVector12'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector12'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector12'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector12'].default_value[3]
-                elif name == 'CustomVector13 (Diffuse Color Multiplier)':
-                    attribute.data[0] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector13 (Diffuse Color Multiplier)'].default_value[3]
-                elif name == 'CustomVector14 RGB (Rim Lighting Color)':
-                    attribute.data[0] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector14 RGB (Rim Lighting Color)'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector14 Alpha (Rim Lighting Blend Factor)'].default_value
-                elif name == 'CustomVector15 RGB':
-                    attribute.data[0] = node.inputs['CustomVector15 RGB'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector15 RGB'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector15 RGB'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector15 Alpha'].default_value
-                elif name == 'CustomVector16':
-                    attribute.data[0] = node.inputs['CustomVector16'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector16'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector16'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector16'].default_value[3]
-                elif name == 'CustomVector17':
-                    attribute.data[0] = node.inputs['CustomVector17'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector17'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector17'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector17'].default_value[3]
-                elif name == 'CustomVector18 X (Sprite Sheet Column Count)':
-                    attribute.data[0] = node.inputs['CustomVector18 X (Sprite Sheet Column Count)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector18 Y (Sprite Sheet Row Count)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector18 Z (Sprite Sheet Frames Per Sprite)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector18 W (Sprite Sheet Sprite Count)'].default_value
-                elif name == 'CustomVector19':
-                    attribute.data[0] = node.inputs['CustomVector19'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector19'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector19'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector19'].default_value[3]
-                elif name == 'CustomVector20':
-                    attribute.data[0] = node.inputs['CustomVector20'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector20'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector20'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector20'].default_value[3]
-                elif name == 'CustomVector21':
-                    attribute.data[0] = node.inputs['CustomVector21'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector21'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector21'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector21'].default_value[3]
-                elif name == 'CustomVector22':
-                    attribute.data[0] = node.inputs['CustomVector22'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector22'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector22'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector22'].default_value[3]
-                elif name == 'CustomVector23':
-                    attribute.data[0] = node.inputs['CustomVector23'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector23'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector23'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector23'].default_value[3]
-                elif name == 'CustomVector24':
-                    attribute.data[0] = node.inputs['CustomVector24'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector24'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector24'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector24'].default_value[3]
-                elif name == 'CustomVector25':
-                    attribute.data[0] = node.inputs['CustomVector25'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector25'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector25'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector25'].default_value[3]
-                elif name == 'CustomVector26':
-                    attribute.data[0] = node.inputs['CustomVector26'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector26'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector26'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector26'].default_value[3]
-                elif name == 'CustomVector27 (Controls Distant Fog, X = Intensity)':
-                    attribute.data[0] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector27 (Controls Distant Fog, X = Intensity)'].default_value[3]
-                elif name == 'CustomVector28':
-                    attribute.data[0] = node.inputs['CustomVector28'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector28'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector28'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector28'].default_value[3]
-                elif name == 'CustomVector29':
-                    attribute.data[0] = node.inputs['CustomVector29'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector29'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector29'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector29'].default_value[3]
-                elif name == 'CustomVector30 X (SSS Blend Factor)':
-                    attribute.data[0] = node.inputs['CustomVector30 X (SSS Blend Factor)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector30 Y (SSS Diffuse Shading Smooth Factor)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector30 Z (Unused)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector30 W (Unused)'].default_value
-                elif name == 'CustomVector31 X (UV Transform Layer 2)':
-                    attribute.data[0] = node.inputs['CustomVector31 X (UV Transform Layer 2)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector31 Y (UV Transform Layer 2)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector31 Z (UV Transform Layer 2)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector31 W (UV Transform Layer 2)'].default_value
-                elif name == 'CustomVector32 X (UV Transform Layer 3)':
-                    attribute.data[0] = node.inputs['CustomVector32 X (UV Transform Layer 3)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector32 Y (UV Transform Layer 3)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector32 Z (UV Transform Layer 3)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector32 W (UV Transform Layer 3)'].default_value
-                elif name == 'CustomVector33 X (UV Transform ?)':
-                    attribute.data[0] = node.inputs['CustomVector33 X (UV Transform ?)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector33 Y (UV Transform ?)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector33 Z (UV Transform ?)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector33 W (UV Transform ?)'].default_value
-                elif name == 'CustomVector34 X (UV Transform ?)':
-                    attribute.data[0] = node.inputs['CustomVector34 X (UV Transform ?)'].default_value
-                    attribute.data[1] = node.inputs['CustomVector34 Y (UV Transform ?)'].default_value
-                    attribute.data[2] = node.inputs['CustomVector34 Z (UV Transform ?)'].default_value
-                    attribute.data[3] = node.inputs['CustomVector34 W (UV Transform ?)'].default_value
-                elif name == 'CustomVector35':
-                    attribute.data[0] = node.inputs['CustomVector35'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector35'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector35'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector35'].default_value[3]
-                elif name == 'CustomVector36':
-                    attribute.data[0] = node.inputs['CustomVector36'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector36'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector36'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector36'].default_value[3]
-                elif name == 'CustomVector37':
-                    attribute.data[0] = node.inputs['CustomVector37'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector37'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector37'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector37'].default_value[3]
-                elif name == 'CustomVector38':
-                    attribute.data[0] = node.inputs['CustomVector38'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector38'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector38'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector38'].default_value[3]
-                elif name == 'CustomVector39':
-                    attribute.data[0] = node.inputs['CustomVector39'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector39'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector39'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector39'].default_value[3]
-                elif name == 'CustomVector40':
-                    attribute.data[0] = node.inputs['CustomVector40'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector40'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector40'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector40'].default_value[3]
-                elif name == 'CustomVector41':
-                    attribute.data[0] = node.inputs['CustomVector41'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector41'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector41'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector41'].default_value[3]
-                elif name == 'CustomVector42':
-                    attribute.data[0] = node.inputs['CustomVector42'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector42'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector42'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector42'].default_value[3]
-                elif name == 'CustomVector43':
-                    attribute.data[0] = node.inputs['CustomVector43'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector43'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector43'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector43'].default_value[3]
-                elif name == 'CustomVector44':
-                    attribute.data[0] = node.inputs['CustomVector44'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector44'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector44'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector44'].default_value[3]
-                elif name == 'CustomVector45':
-                    attribute.data[0] = node.inputs['CustomVector45'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector45'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector45'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector45'].default_value[3]
-                elif name == 'CustomVector46':
-                    attribute.data[0] = node.inputs['CustomVector46'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector46'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector46'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector46'].default_value[3]
-                elif name == 'CustomVector47 RGB':
-                    attribute.data[0] = node.inputs['CustomVector47 RGB'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector47 RGB'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector47 RGB'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector47 Alpha'].default_value
-                elif name == 'CustomVector48':
-                    attribute.data[0] = node.inputs['CustomVector48'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector48'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector48'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector48'].default_value[3]
-                elif name == 'CustomVector49':
-                    attribute.data[0] = node.inputs['CustomVector49'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector49'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector49'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector49'].default_value[3]
-                elif name == 'CustomVector50':
-                    attribute.data[0] = node.inputs['CustomVector50'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector50'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector50'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector50'].default_value[3]
-                elif name == 'CustomVector51':
-                    attribute.data[0] = node.inputs['CustomVector51'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector51'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector51'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector51'].default_value[3]
-                elif name == 'CustomVector52':
-                    attribute.data[0] = node.inputs['CustomVector52'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector52'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector52'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector52'].default_value[3]
-                elif name == 'CustomVector53':
-                    attribute.data[0] = node.inputs['CustomVector53'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector53'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector53'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector53'].default_value[3]
-                elif name == 'CustomVector54':
-                    attribute.data[0] = node.inputs['CustomVector54'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector54'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector54'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector54'].default_value[3]
-                elif name == 'CustomVector55':
-                    attribute.data[0] = node.inputs['CustomVector55'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector55'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector55'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector55'].default_value[3]
-                elif name == 'CustomVector56':
-                    attribute.data[0] = node.inputs['CustomVector56'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector56'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector56'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector56'].default_value[3]
-                elif name == 'CustomVector57':
-                    attribute.data[0] = node.inputs['CustomVector57'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector57'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector57'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector57'].default_value[3]
-                elif name == 'CustomVector58':
-                    attribute.data[0] = node.inputs['CustomVector58'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector58'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector58'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector58'].default_value[3]
-                elif name == 'CustomVector59':
-                    attribute.data[0] = node.inputs['CustomVector59'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector59'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector59'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector59'].default_value[3]
-                elif name == 'CustomVector60':
-                    attribute.data[0] = node.inputs['CustomVector60'].default_value[0]
-                    attribute.data[1] = node.inputs['CustomVector60'].default_value[1]
-                    attribute.data[2] = node.inputs['CustomVector60'].default_value[2]
-                    attribute.data[3] = node.inputs['CustomVector60'].default_value[3]
-                else:
-                    continue
-                entry.vectors.append(attribute)
+            elif 'Vector' in param_name:
+                if param_name in material_inputs.vec4_param_to_inputs:
+                    attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(param_name), [0.0, 0.0, 0.0, 0.0])        
+
+                    inputs = [node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
+                    
+                    # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
+                    if len(inputs) == 1:
+                        attribute.data = inputs[0].default_value
+                    elif len(inputs) == 2:
+                        # Discard the 4th RGB component and use the explicit alpha instead.
+                        attribute.data[:3] = list(inputs[0].default_value)[:3]
+                        attribute.data[3] = inputs[1].default_value
+                    elif len(inputs) == 4:
+                        attribute.data[0] = inputs[0].default_value
+                        attribute.data[1] = inputs[1].default_value
+                        attribute.data[2] = inputs[2].default_value
+                        attribute.data[3] = inputs[3].default_value
+
+                    entry.vectors.append(attribute)
             else:
                 continue
+
+            exported_params.add(param_name)
         
         matl.entries.append(entry)
 
@@ -623,17 +343,8 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     return per_vertex
 
 
-def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
-
+def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
-    ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
-
-    ssbh_modl_data.model_name = 'model'
-    ssbh_modl_data.skeleton_file_name = 'model.nusktb'
-    ssbh_modl_data.material_file_names = ['model.numatb']
-    ssbh_modl_data.animation_file_name = None
-    ssbh_modl_data.mesh_file_name = 'model.numshb'
-
 
     '''
     # TODO split meshes
@@ -643,138 +354,135 @@ def make_modl_mesh_data(context, export_meshes, ssbh_skel_data):
         mesh.data.uv_layers.remove(l)
     '''
 
-    # Gather true names for NUMSHEXB
-    true_names = {re.split('Shape|_VIS_|_O_', mesh.name)[0] for mesh in export_meshes}
-    true_name_to_meshes = {true_name : [mesh for mesh in export_meshes if true_name == re.split('Shape|_VIS_|_O_', mesh.name)[0]] for true_name in true_names}
-    true_name_to_meshes = {k:v for k,v in sorted(true_name_to_meshes.items(), key = lambda item: item[1][0].get("numshb order", 10000))}
+    for group_name, meshes in export_mesh_groups:
+        for i, mesh in enumerate(meshes):
+            '''
+            Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
 
-    pruned_mesh_name_list = []
-    for mesh in [mesh for mesh_list in true_name_to_meshes.values() for mesh in mesh_list]:
-        '''
-        Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
+            list of potential issues that need to validate
+            1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
+            '''
+            mesh_object_copy = mesh.copy() # Copy the Mesh Object
+            mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
+            mesh_data_copy = mesh_object_copy.data
 
-        list of potential issues that need to validate
-        1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
-        '''
-        mesh_object_copy = mesh.copy() # Copy the Mesh Object
-        mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
-        mesh_data_copy = mesh_object_copy.data 
-        # Undo the Matrix axis correction that was done on import
-        # TODO: Is there a way to apply transforms that works as expected without using bpy.ops
-        context.collection.objects.link(mesh_object_copy)
-        context.view_layer.update()
-        context.view_layer.objects.active = mesh_object_copy
-        mesh_object_copy.select_set(True)
-        bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        axis_correction = Matrix.Rotation(math.radians(-90), 4, 'X')  
-        mesh_object_copy.matrix_world = mesh_object_copy.matrix_world @ axis_correction
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+            # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
+            # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
+            # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+            ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(group_name, i)
+            position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
+            # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
+            positions = np.zeros(len(mesh_data_copy.vertices) * 3, dtype=np.float32)
+            mesh_data_copy.vertices.foreach_get("co", positions)
+            # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
+            position0.data = positions.reshape((-1, 3))
+            ssbh_mesh_object.positions = [position0]
 
-        pruned_mesh_name = re.split(r'.\d\d\d', mesh.name)[0] # Un-uniquify the names
+            # Store vertex indices as a numpy array for faster indexing later.
+            vertex_indices = np.zeros(len(mesh_data_copy.loops), dtype=np.uint32)
+            mesh_data_copy.loops.foreach_get("vertex_index", vertex_indices)
+            ssbh_mesh_object.vertex_indices = vertex_indices
 
-        # Quick Detour to file out MODL stuff
-        ssbh_mesh_object_sub_index = pruned_mesh_name_list.count(pruned_mesh_name)
-        pruned_mesh_name_list.append(pruned_mesh_name)
-        mat_label = get_material_label_from_mesh(mesh)
-        ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(pruned_mesh_name, ssbh_mesh_object_sub_index, mat_label)
-        ssbh_modl_data.entries.append(ssbh_modl_entry)
+            # We use the loop normals rather than vertex normals to allow exporting custom normals.
+            mesh.data.calc_normals_split()
 
-        # Back to MESH stuff
-        # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
-        # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
-        # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
-        ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(pruned_mesh_name, ssbh_mesh_object_sub_index)
-        position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
-        # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
-        positions = np.zeros(len(mesh_data_copy.vertices) * 3, dtype=np.float32)
-        mesh_data_copy.vertices.foreach_get("co", positions)
-        # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
-        position0.data = positions.reshape((-1, 3))
-        ssbh_mesh_object.positions = [position0]
+            # Export Normals
+            normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
+            loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
+            mesh.data.loops.foreach_get("normal", loop_normals)
+            normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
 
-        # Store vertex indices as a numpy array for faster indexing later.
-        vertex_indices = np.zeros(len(mesh_data_copy.loops), dtype=np.uint32)
-        mesh_data_copy.loops.foreach_get("vertex_index", vertex_indices)
-        ssbh_mesh_object.vertex_indices = vertex_indices
-
-        # We use the loop normals rather than vertex normals to allow exporting custom normals.
-        mesh_object_copy.data.calc_normals_split()
-
-        # Export Normals
-        normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
-        loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 3, dtype=np.float32)
-        mesh_object_copy.data.loops.foreach_get("normal", loop_normals)
-        normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh_object_copy.data.vertices), 3))
-
-        # Pad normals to 4 components instead of 3 components.
-        # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
-        normals = np.append(normals, np.zeros((normals.shape[0],1)), axis=1)
-        
-        normal0.data = normals
-        ssbh_mesh_object.normals = [normal0]
-
-        # Export Weights
-        # TODO: Research weight layers       
-        # Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
-        # TODO: Does Blender not expose this directly?
-        group_to_weights = { vg.index : (vg.name, []) for vg in mesh_object_copy.vertex_groups }
-        for vertex in mesh_data_copy.vertices:
-            for group in vertex.groups:
-                ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
-                group_to_weights[group.group][1].append(ssbh_vertex_weight)
-        
-        # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
-        skel_bone_names = set([bone.name for bone in ssbh_skel_data.bones])
-        BoneInfluence = ssbh_data_py.mesh_data.BoneInfluence
-        if len([wieghts for index, (name, wieghts) in group_to_weights.items() if len(wieghts) > 0]) == 0:
-            print(f'Found Mesh with no wieghts {mesh.name}, not assigning bone_influences')
-        else:
-            ssbh_mesh_object.bone_influences = [BoneInfluence(name, weights) for name, weights in group_to_weights.values() if name in skel_bone_names]
-
-        '''
-        The uv layer data is actually empty for the active object in edit mode
-        '''
-        #bpy.ops.object.mode_set(mode='EDIT')
-
-        for uv_layer in mesh_object_copy.data.uv_layers:
-            ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
-            loop_uvs = np.zeros(len(mesh_object_copy.data.loops) * 2, dtype=np.float32)
-            uv_layer.data.foreach_get("uv", loop_uvs)
+            # Pad normals to 4 components instead of 3 components.
+            # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
+            normals = np.append(normals, np.zeros((normals.shape[0],1)), axis=1)
             
-            uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh_object_copy.data.vertices), 2))
-            # Flip vertical.
-            uvs[:,1] = 1.0 - uvs[:,1]
-            ssbh_uv_layer.data = uvs
+            normal0.data = normals
+            ssbh_mesh_object.normals = [normal0]
 
-            ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
+            # Export Weights
+            # TODO: Research weight layers       
+            # Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
+            # TODO: Does Blender not expose this directly?
+            group_to_weights = { vg.index : (vg.name, []) for vg in mesh_object_copy.vertex_groups }
+            for vertex in mesh_data_copy.vertices:
+                for group in vertex.groups:
+                    ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
+                    group_to_weights[group.group][1].append(ssbh_vertex_weight)
+            
+            # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
+            # Avoid adding unused influences if there are no weights.
+            # Some meshes are parented to a bone instead of using vertex skinning.
+            # This requires the influence list to be empty to save properly.
+            skel_bone_names = {bone.name for bone in ssbh_skel_data.bones}
+            ssbh_mesh_object.bone_influences = []
+            for name, weights in group_to_weights.values():
+                if name in skel_bone_names and len(weights) > 0:
+                    ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
 
-        # Export Color Set 
-        for color_layer in mesh_object_copy.data.vertex_colors:
-            ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
+            if len(ssbh_mesh_object.bone_influences) == 0:
+                print(f'Mesh {mesh.name} has no bone influences')
 
-            loop_colors = np.zeros(len(mesh_object_copy.data.loops) * 4, dtype=np.float32)
-            color_layer.data.foreach_get("color", loop_colors)
-            ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh_object_copy.data.vertices), 4))
+            context.collection.objects.link(mesh_object_copy)
+            context.view_layer.update()
+            context.view_layer.objects.active = mesh_object_copy
+            bpy.ops.object.mode_set(mode='EDIT')
 
-            ssbh_mesh_object.color_sets.append(ssbh_color_layer)
+            for uv_layer in mesh.data.uv_layers:
+                ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
+                loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
+                uv_layer.data.foreach_get("uv", loop_uvs)
+                
+                uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
+                # Flip vertical.
+                uvs[:,1] = 1.0 - uvs[:,1]
+                ssbh_uv_layer.data = uvs
+
+                ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
+
+            # Export Color Set 
+            for color_layer in mesh.data.vertex_colors:
+                ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
+
+                loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+                color_layer.data.foreach_get("color", loop_colors)
+                ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
+
+                ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
 
-        # Calculate tangents now that the necessary attributes are initialized.
-        # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
-        tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
-        tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
-            ssbh_mesh_object.normals[0].data, 
-            ssbh_mesh_object.texture_coordinates[0].data,
-            ssbh_mesh_object.vertex_indices)
-        ssbh_mesh_object.tangents = [tangent0]
-        
-        bpy.ops.object.mode_set(mode='OBJECT')
+            # Calculate tangents now that the necessary attributes are initialized.
+            # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
+            tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
+            tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
+                ssbh_mesh_object.normals[0].data, 
+                ssbh_mesh_object.texture_coordinates[0].data,
+                ssbh_mesh_object.vertex_indices)
+            ssbh_mesh_object.tangents = [tangent0]
+            
+            bpy.ops.object.mode_set(mode='OBJECT')
 
-        bpy.data.meshes.remove(mesh_data_copy)
-        ssbh_mesh_data.objects.append(ssbh_mesh_object)
+            bpy.data.meshes.remove(mesh_data_copy)
+            ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
-    return ssbh_modl_data, ssbh_mesh_data
+    return ssbh_mesh_data
+
+
+def make_modl_data(context, export_mesh_groups):
+    ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
+
+    ssbh_modl_data.model_name = 'model'
+    ssbh_modl_data.skeleton_file_name = 'model.nusktb'
+    ssbh_modl_data.material_file_names = ['model.numatb']
+    ssbh_modl_data.animation_file_name = None
+    ssbh_modl_data.mesh_file_name = 'model.numshb'
+
+    for group_name, meshes in export_mesh_groups:
+        for i, mesh in enumerate(meshes):
+            mat_label = get_material_label_from_mesh(mesh)
+            ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, i, mat_label)
+            ssbh_modl_data.entries.append(ssbh_modl_entry)
+
+    return ssbh_modl_data
 
 def unreorient_matrix(reoriented_matrix) -> Matrix:
     c00,c01,c02,c03 = reoriented_matrix[0]
@@ -922,7 +630,6 @@ def make_skel(context, linked_nusktb_settings):
                     ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreorient_root(blender_bone.matrix), None)
             ssbh_skel.bones.append(ssbh_bone)    
 
-    #ssbh_skel.save(filepath + 'model.nusktb')
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
@@ -930,30 +637,6 @@ def make_skel(context, linked_nusktb_settings):
     return ssbh_skel
 
 
-
-# TODO: This will eventually be replaced by ssbh_data_py.
-def bounding_sphere(objects):
-    # A fast to compute bounding sphere that will contain all points.
-    # We don't need an optimal solution for visibility tests and depth sorting.
-    # Create a single numpy array for better performance.
-    vertex_count = sum([len(obj.data.vertices) for obj in objects])
-    positions_world_all = np.ones((vertex_count, 4))
-
-    offset = 0
-    for obj in objects:
-        count = len(obj.data.vertices)
-
-        positions = np.zeros(count * 3, dtype=np.float32)
-        obj.data.vertices.foreach_get("co", positions)
-        # TODO: Find a more elegant way to account for world position.
-        positions_world_all[offset:offset+count,:3] = positions.reshape((-1,3)) 
-        positions_world_all[offset:offset+count,:] = positions_world_all[offset:offset+count,:] @ obj.matrix_world
-
-        offset += count
-
-    center = positions_world_all[:,:3].mean(axis=0)
-    radius = np.max(la.norm(positions_world_all[:,:3] - center, 2, axis=1))
-    return center, radius
 
 def save_ssbh_json(ssbh_json, output_file_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
