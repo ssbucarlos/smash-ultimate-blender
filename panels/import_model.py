@@ -862,3 +862,123 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
 
     if 'colorSet5' in required_attributes:
         create_and_enable_color_set('colorSet5', 1)
+
+def read_nuhlpb_json(nuhlpb_path) -> str:
+    import subprocess
+    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
+    output_json_path = nuhlpb_path + '.json'
+    try:
+        subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
+    except:
+        pass # Lol
+    
+    nuhlpb_json = None
+    with open(output_json_path) as f:
+        nuhlpb_json = json.load(f)
+    return nuhlpb_json
+
+def create_new_empty(name, parent, specified_collection=None) -> bpy.types.Object:
+    empty = bpy.data.objects.new('empty', None)
+    empty.name = name
+
+    if specified_collection is None:
+        bpy.context.collection.objects.link(empty)
+    else:
+        specified_collection.objects.link(empty)
+    empty.parent = parent
+    return empty
+
+def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=None) -> bpy.types.Object:
+    for mesh in meshes:
+        if mesh.name.startswith(pruned_name):
+            return mesh
+    return fallback
+
+def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.types.Object:
+    copy = original.copy()
+    if specified_collection is None:
+        bpy.context.collection.objects.link(copy)
+    else:
+        specified_collection.objects.link(copy)
+    return copy
+
+def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
+    '''
+    The nuhlpb data will be stored in a tree of empty objects.
+    '''
+    root_empty = create_new_empty('_NUHLPB', armature)
+    root_empty['major_version'] = nuhlpb_json['data']['Hlpb']['major_version']
+    root_empty['minor_version'] = nuhlpb_json['data']['Hlpb']['minor_version']
+    aim_entries_empty = create_new_empty('aim_entries', root_empty)
+    for aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
+        aim_entry_empty = create_new_empty(aim_entry['name'], aim_entries_empty)
+        aim_entry_empty['aim_bone_name1'] = aim_entry['aim_bone_name1']
+        aim_entry_empty['aim_bone_name2'] = aim_entry['aim_bone_name2'] 
+        aim_entry_empty['aim_type1'] = aim_entry['aim_type1']
+        aim_entry_empty['aim_type2'] = aim_entry['aim_type2']
+        aim_entry_empty['target_bone_name1'] = aim_entry['target_bone_name1'] 
+        aim_entry_empty['target_bone_name2'] = aim_entry['target_bone_name2']
+        for unk_index in range(1, 22+1):
+            aim_entry_empty[f'unk{unk_index}'] = aim_entry[f'unk{unk_index}']
+        create_aim_type_helper_bone_constraints(aim_entry['name'], armature, aim_entry['target_bone_name1'], aim_entry['aim_bone_name1'])
+          
+    interpolation_entries_empty = create_new_empty('interpolation_entries', root_empty)
+    for interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
+        ie = interpolation_entry
+        ie_empty = create_new_empty(ie['name'], interpolation_entries_empty)
+        ie_empty['bone_name'] = ie['bone_name']
+        ie_empty['root_bone_name'] = ie['root_bone_name']
+        ie_empty['parent_bone_name'] = ie['parent_bone_name']
+        ie_empty['driver_bone_name'] = ie['driver_bone_name']
+        ie_empty['unk_type'] = ie['unk_type']
+        aoi = ie['aoi']
+        ie_empty['aoi'] = [aoi['x'], aoi['y'], aoi['z']]
+        quat1 = ie['quat1']
+        ie_empty['quat1'] = [quat1['x'],quat1['y'],quat1['z'],quat1['w']]
+        quat2 = ie['quat2']
+        ie_empty['quat2'] = [quat2['x'],quat2['y'],quat2['z'],quat2['w']]
+        range_min = ie['range_min']
+        ie_empty['range_min'] = [range_min['x'], range_min['y'], range_min['z']]
+        range_max = ie['range_max']
+        ie_empty['range_max'] = [range_max['x'], range_max['y'], range_max['z']]
+        create_interpolation_type_helper_bone_constraints(
+            ie['name'], armature,
+            ie['driver_bone_name'], ie['parent_bone_name'],
+            [aoi['y'], aoi['x'], aoi['z']]
+        )
+    '''
+    list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
+    '''
+
+
+def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    #print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
+    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+    if owner_bone is not None:
+        new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
+        new_constraint.name = constraint_name
+        new_constraint.track_axis = 'TRACK_Y'
+        new_constraint.influence = 1.0
+        new_constraint.target = armature
+        new_constraint.subtarget = target_bone_name
+    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+
+
+def create_interpolation_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name, aoi_xyz_list):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+    if owner_bone is not None:
+        x,y,z = 'X', 'Y', 'Z'
+        for index, axis in enumerate([x,y,z]):
+            crc = owner_bone.constraints.new('COPY_ROTATION')
+            crc.name = f'{constraint_name}.{axis}'
+            crc.target = armature
+            crc.subtarget =  target_bone_name
+            crc.target_space = 'LOCAL_OWNER_ORIENT'
+            crc.owner_space = 'LOCAL'
+            crc.use_x = True if axis is x else False
+            crc.use_y = True if axis is y else False
+            crc.use_z = True if axis is z else False
+            crc.influence = aoi_xyz_list[index]
+    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
