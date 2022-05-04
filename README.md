@@ -6,7 +6,7 @@ Blender Plugin that contains utilities for Smash Ultimate Models and (eventually
 2. Install the .ZIP in Blender under Edit > Preferences > Addons > Install. 
 3. Make sure the addon is enabled by searching for "Smash Ultimate".
 
-The plugin supports 64-bit versions of Blender 2.93 or 3.0 for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
+The plugin supports 64-bit versions of Blender 3.0 for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
 If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues). The exo skel features still require a windows machine, but it's possible to build [ssbh_lib_json](https://github.com/ultimate-research/ssbh_lib) from source for Linux or MacOS with Rust installed.
 
 Blender 3.1 support is planned for a future update but not supported at this time. You can download Blender 3.0 from https://download.blender.org/release/Blender3.0/
