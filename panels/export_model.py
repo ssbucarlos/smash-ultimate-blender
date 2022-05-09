@@ -123,11 +123,12 @@ class ModelExporterOperator(Operator, ImportHelper):
     )
     
     def execute(self, context):
-        export_model(context, self.filepath, self.include_numdlb, self.include_numshb, self.include_numshexb,
+        export_model(self, context, self.filepath, self.include_numdlb, self.include_numshb, self.include_numshexb,
                      self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings)
         return {'FINISHED'}
 
-def export_model(context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
+
+def export_model(operator, context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     '''
     numdlb and numshb are inherently linked, must export both if exporting one
     if include_numdlb:
@@ -167,7 +168,7 @@ def export_model(context, filepath, include_numdlb, include_numshb, include_nums
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
     if include_numdlb:
-        ssbh_modl_data = make_modl_data(context, export_mesh_groups)
+        ssbh_modl_data = make_modl_data(operator, context, export_mesh_groups)
         ssbh_modl_data.save(filepath + 'model.numdlb')
     if include_numshb:
         ssbh_mesh_data.save(filepath + 'model.numshb')
@@ -197,20 +198,16 @@ def create_and_save_matl(filepath, export_meshes):
     ssbh_matl.save(filepath + 'model.numatb')
 
 
-'''
-def export_numdlb(context, filepath):
-    arma = context.scene.sub_model_export_armature
-    ssbh_model = ssbh_data_py.modl_data.ModlData()
-    ssbh_model.model_name = 'model'
-    ssbh_model.skeleton_file_name = 'model.nusktb'
-    ssbh_model.material_file_names = ['model.numatb']
-    ssbh_model.animation_file_name = None
-'''
-def get_material_label_from_mesh(mesh):
+def get_material_label_from_mesh(operator, mesh):
     material = mesh.material_slots[0].material
-    nodes = material.node_tree.nodes
-    node_group_node = nodes['smash_ultimate_shader']
-    mat_label = node_group_node.inputs['Material Name'].default_value
+    try:
+        nodes = material.node_tree.nodes
+        node_group_node = nodes['smash_ultimate_shader']
+        mat_label = node_group_node.inputs['Material Name'].default_value
+    except:
+        # Use the Blender material name as a fallback.
+        mat_label = material.name
+        operator.report({'WARNING'}, f'Missing Smash Ultimate node group for {mesh.name}. Assigning {mat_label} by material name.')
 
     return mat_label
 
@@ -225,6 +222,7 @@ def make_matl(materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
     for material in materials:
+        # TODO: Raise a warning and export a default material if the node group is missing.
         node = material.node_tree.nodes.get('smash_ultimate_shader', None)
         if node is None:
             raise RuntimeError(f'The material {material.name} does not have the smash ultimate shader, cannot export materials!')
@@ -467,7 +465,7 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
     return ssbh_mesh_data
 
 
-def make_modl_data(context, export_mesh_groups):
+def make_modl_data(operator, context, export_mesh_groups):
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
 
     ssbh_modl_data.model_name = 'model'
@@ -478,7 +476,7 @@ def make_modl_data(context, export_mesh_groups):
 
     for group_name, meshes in export_mesh_groups:
         for i, mesh in enumerate(meshes):
-            mat_label = get_material_label_from_mesh(mesh)
+            mat_label = get_material_label_from_mesh(operator, mesh)
             ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, i, mat_label)
             ssbh_modl_data.entries.append(ssbh_modl_entry)
 
