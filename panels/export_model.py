@@ -175,7 +175,7 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     if include_nusktb:
         ssbh_skel_data.save(filepath + 'model.nusktb')
     if include_numatb:
-        create_and_save_matl(filepath, export_meshes)
+        create_and_save_matl(operator, filepath, export_meshes)
     if include_numshexb:
         create_and_save_meshex(filepath, ssbh_mesh_data)
     if include_nuhlpb:
@@ -190,10 +190,10 @@ def create_and_save_meshex(filepath, ssbh_mesh_data):
     meshex.save(filepath + 'model.numshexb')
 
 
-def create_and_save_matl(filepath, export_meshes):
+def create_and_save_matl(operator, filepath, export_meshes):
     #  Gather Material Info
     materials = {mesh.data.materials[0] for mesh in export_meshes}
-    ssbh_matl = make_matl(materials)
+    ssbh_matl = make_matl(operator, materials)
 
     ssbh_matl.save(filepath + 'model.numatb')
 
@@ -218,108 +218,158 @@ def find_bone_index(skel, name):
 
     return None
 
-def make_matl(materials):
+
+def default_ssbh_material(material_label):
+    # Mario's phong0_sfx_0x9a011063_____VTC___TANGENT___BINORMAL_101 material.
+    # This is a good default for fighters since the user can just assign textures in another application.
+    entry = ssbh_data_py.matl_data.MatlEntryData(material_label, 'SFX_PBS_0100000008008269_opaque')
+    entry.blend_states = [ssbh_data_py.matl_data.BlendStateParam(
+        ssbh_data_py.matl_data.ParamId.BlendState0,
+        ssbh_data_py.matl_data.BlendStateData()
+    )]
+    entry.floats = [ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.CustomFloat0, 0.8)]
+    entry.booleans = [
+        ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.CustomBoolean1, True),
+        ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.CustomBoolean3, True),
+        ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.CustomBoolean4, True),
+    ]
+    entry.vectors = [
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector0, [1.0, 0.0, 0.0, 0.0]),
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector13, [1.0, 1.0, 1.0, 1.0]),
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector14, [1.0, 1.0, 1.0, 1.0]),
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector8, [1.0, 1.0, 1.0, 1.0]),
+    ]
+    entry.rasterizer_states = [ssbh_data_py.matl_data.RasterizerStateParam(
+        ssbh_data_py.matl_data.ParamId.RasterizerState0,
+        ssbh_data_py.matl_data.RasterizerStateData()
+    )]
+    entry.samplers = [
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler0, ssbh_data_py.matl_data.SamplerData()),
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler4, ssbh_data_py.matl_data.SamplerData()),
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler6, ssbh_data_py.matl_data.SamplerData()),
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler7, ssbh_data_py.matl_data.SamplerData()),
+    ]
+    # Use magenta for the albedo/base color to avoid confusion with existing error colors like white, yellow, or red.
+    # Magenta is commonly used to indicate missing/invalid textures in applications and game engines.
+    entry.textures = [
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture0, '/common/shader/sfxpbs/default_params_r100_g025_b100'),
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture4, '/common/shader/sfxpbs/fighter/default_normal'),
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture6, '/common/shader/sfxpbs/fighter/default_params'),
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture7, '#replace_cubemap'),
+    ]
+    return entry
+
+
+def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
     for material in materials:
-        # TODO: Raise a warning and export a default material if the node group is missing.
         node = material.node_tree.nodes.get('smash_ultimate_shader', None)
-        if node is None:
-            raise RuntimeError(f'The material {material.name} does not have the smash ultimate shader, cannot export materials!')
-        entry = ssbh_data_py.matl_data.MatlEntryData(node.inputs['Material Name'].default_value, node.inputs['Shader Label'].default_value)
+        if node is not None:
+            entry = create_material_entry_from_node_group(node)
+        else:
+            # Materials are often edited in external applications.
+            # Use a default to allow exporting to proceed.
+            entry = default_ssbh_material(material.name)
+            operator.report({'WARNING'}, f'Missing Smash Ultimate node group for {material.name}. Creating default material.')
 
-        inputs = [input for input in node.inputs if input.hide == False]
-        skip = ['Material Name', 'Shader Label']
-
-        # Multiple inputs may correspond to a single parameter.
-        # Avoid exporting the same parameter more than once.
-        exported_params = set()
-        for input in inputs:
-            name = input.name
-            param_name = name.split(' ')[0]
-
-            if name in skip or param_name in exported_params:
-                continue
-
-            elif name == 'BlendState0 Field1 (Source Color)':
-                data = ssbh_data_py.matl_data.BlendStateData()                          
-                data.source_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field1 (Source Color)'].default_value)
-                data.destination_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field3 (Destination Color)'].default_value)
-                data.alpha_sample_to_coverage = node.inputs['BlendState0 Field7 (Alpha to Coverage)'].default_value
-
-                attribute = ssbh_data_py.matl_data.BlendStateParam(ssbh_data_py.matl_data.ParamId.BlendState0, data)
-                entry.blend_states.append(attribute)
-            elif name == 'RasterizerState0 Field1 (Polygon Fill)':
-                data = ssbh_data_py.matl_data.RasterizerStateData()
-                data.fill_mode = ssbh_data_py.matl_data.FillMode.from_str(node.inputs['RasterizerState0 Field1 (Polygon Fill)'].default_value)
-                data.cull_mode = ssbh_data_py.matl_data.CullMode.from_str(node.inputs['RasterizerState0 Field2 (Cull Mode)'].default_value)
-                data.depth_bias = node.inputs['RasterizerState0 Field3 (Depth Bias)'].default_value
-
-                attribute = ssbh_data_py.matl_data.RasterizerStateParam(ssbh_data_py.matl_data.ParamId.RasterizerState0, data)
-                entry.rasterizer_states.append(attribute)
-            elif 'Texture' in param_name and 'RGB' in name.split(' ')[1]:
-                texture_node = input.links[0].from_node
-
-                texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), texture_node.label)
-                entry.textures.append(texture_attribute)
-
-                sampler_number = param_name.split('Texture')[1]
-                sampler_param_id_text = f'Sampler{sampler_number}'
-
-                # Sampler Data
-                # TODO: Use the default if the sampler is missing.
-                sampler_data = ssbh_data_py.matl_data.SamplerData()
-
-                sampler_node = texture_node.inputs[0].links[0].from_node
-                # TODO: These conversions may return None on error.
-                sampler_data.wraps = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_s)
-                sampler_data.wrapt = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_t)
-                sampler_data.wrapr = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_r)
-                sampler_data.min_filter = ssbh_data_py.matl_data.MinFilter.from_str(sampler_node.min_filter)
-                sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
-                sampler_data.border_color = sampler_node.border_color
-                sampler_data.lod_bias = sampler_node.lod_bias
-                sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
-         
-                sampler_attribute = ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.from_str(sampler_param_id_text), sampler_data)
-                entry.samplers.append(sampler_attribute)
-            elif 'Sampler' in param_name:
-                # Samplers are not their own input in the master node, rather they are a seperate node entirely
-                pass
-            elif 'Boolean' in param_name:
-                attribute = ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
-                entry.booleans.append(attribute)
-            elif 'Float' in param_name:
-                attribute = ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
-                entry.floats.append(attribute)
-            elif 'Vector' in param_name:
-                if param_name in material_inputs.vec4_param_to_inputs:
-                    attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(param_name), [0.0, 0.0, 0.0, 0.0])        
-
-                    inputs = [node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
-                    
-                    # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
-                    if len(inputs) == 1:
-                        attribute.data = inputs[0].default_value
-                    elif len(inputs) == 2:
-                        # Discard the 4th RGB component and use the explicit alpha instead.
-                        attribute.data[:3] = list(inputs[0].default_value)[:3]
-                        attribute.data[3] = inputs[1].default_value
-                    elif len(inputs) == 4:
-                        attribute.data[0] = inputs[0].default_value
-                        attribute.data[1] = inputs[1].default_value
-                        attribute.data[2] = inputs[2].default_value
-                        attribute.data[3] = inputs[3].default_value
-
-                    entry.vectors.append(attribute)
-            else:
-                continue
-
-            exported_params.add(param_name)
-        
         matl.entries.append(entry)
 
     return matl
+
+
+def create_material_entry_from_node_group(node):
+    entry = ssbh_data_py.matl_data.MatlEntryData(node.inputs['Material Name'].default_value, node.inputs['Shader Label'].default_value)
+
+    inputs = [input for input in node.inputs if input.hide == False]
+    skip = ['Material Name', 'Shader Label']
+
+        # Multiple inputs may correspond to a single parameter.
+        # Avoid exporting the same parameter more than once.
+    exported_params = set()
+    for input in inputs:
+        name = input.name
+        param_name = name.split(' ')[0]
+
+        if name in skip or param_name in exported_params:
+            continue
+
+        elif name == 'BlendState0 Field1 (Source Color)':
+            data = ssbh_data_py.matl_data.BlendStateData()                          
+            data.source_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field1 (Source Color)'].default_value)
+            data.destination_color = ssbh_data_py.matl_data.BlendFactor.from_str(node.inputs['BlendState0 Field3 (Destination Color)'].default_value)
+            data.alpha_sample_to_coverage = node.inputs['BlendState0 Field7 (Alpha to Coverage)'].default_value
+
+            attribute = ssbh_data_py.matl_data.BlendStateParam(ssbh_data_py.matl_data.ParamId.BlendState0, data)
+            entry.blend_states.append(attribute)
+        elif name == 'RasterizerState0 Field1 (Polygon Fill)':
+            data = ssbh_data_py.matl_data.RasterizerStateData()
+            data.fill_mode = ssbh_data_py.matl_data.FillMode.from_str(node.inputs['RasterizerState0 Field1 (Polygon Fill)'].default_value)
+            data.cull_mode = ssbh_data_py.matl_data.CullMode.from_str(node.inputs['RasterizerState0 Field2 (Cull Mode)'].default_value)
+            data.depth_bias = node.inputs['RasterizerState0 Field3 (Depth Bias)'].default_value
+
+            attribute = ssbh_data_py.matl_data.RasterizerStateParam(ssbh_data_py.matl_data.ParamId.RasterizerState0, data)
+            entry.rasterizer_states.append(attribute)
+        elif 'Texture' in param_name and 'RGB' in name.split(' ')[1]:
+            texture_node = input.links[0].from_node
+
+            texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), texture_node.label)
+            entry.textures.append(texture_attribute)
+
+            sampler_number = param_name.split('Texture')[1]
+            sampler_param_id_text = f'Sampler{sampler_number}'
+
+                # Sampler Data
+                # TODO: Use the default if the sampler is missing.
+            sampler_data = ssbh_data_py.matl_data.SamplerData()
+
+            sampler_node = texture_node.inputs[0].links[0].from_node
+                # TODO: These conversions may return None on error.
+            sampler_data.wraps = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_s)
+            sampler_data.wrapt = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_t)
+            sampler_data.wrapr = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_r)
+            sampler_data.min_filter = ssbh_data_py.matl_data.MinFilter.from_str(sampler_node.min_filter)
+            sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
+            sampler_data.border_color = sampler_node.border_color
+            sampler_data.lod_bias = sampler_node.lod_bias
+            sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
+         
+            sampler_attribute = ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.from_str(sampler_param_id_text), sampler_data)
+            entry.samplers.append(sampler_attribute)
+        elif 'Sampler' in param_name:
+                # Samplers are not their own input in the master node, rather they are a seperate node entirely
+            pass
+        elif 'Boolean' in param_name:
+            attribute = ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
+            entry.booleans.append(attribute)
+        elif 'Float' in param_name:
+            attribute = ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
+            entry.floats.append(attribute)
+        elif 'Vector' in param_name:
+            if param_name in material_inputs.vec4_param_to_inputs:
+                attribute = ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.from_str(param_name), [0.0, 0.0, 0.0, 0.0])        
+
+                inputs = [node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
+                    
+                    # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
+                if len(inputs) == 1:
+                    attribute.data = inputs[0].default_value
+                elif len(inputs) == 2:
+                        # Discard the 4th RGB component and use the explicit alpha instead.
+                    attribute.data[:3] = list(inputs[0].default_value)[:3]
+                    attribute.data[3] = inputs[1].default_value
+                elif len(inputs) == 4:
+                    attribute.data[0] = inputs[0].default_value
+                    attribute.data[1] = inputs[1].default_value
+                    attribute.data[2] = inputs[2].default_value
+                    attribute.data[3] = inputs[3].default_value
+
+                entry.vectors.append(attribute)
+        else:
+            continue
+
+        exported_params.add(param_name)
+    return entry
 
 
 def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
