@@ -539,10 +539,20 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             # Calculate tangents now that the necessary attributes are initialized.
             # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
             tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
-            tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
-                ssbh_mesh_object.normals[0].data, 
-                ssbh_mesh_object.texture_coordinates[0].data,
-                ssbh_mesh_object.vertex_indices)
+            try:
+                tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
+                    ssbh_mesh_object.normals[0].data, 
+                    ssbh_mesh_object.texture_coordinates[0].data,
+                    ssbh_mesh_object.vertex_indices)
+            except:
+                # TODO (SMG): Only catch ssbh_data_py.MeshDataError once ssbh_data_py is updated.
+                # TODO: Find an easier way to ensure the meshes get cleaned up.
+                # TODO: Use try/finally for all the code after creating the mesh copy?
+                bpy.data.meshes.remove(mesh_data_copy)
+                message = f'Failed to calculate tangents for {mesh.name}.\n'
+                message += 'Ensure the mesh is triangulated by selecting all in Edit Mode and clicking Face > Triangulate Faces.'
+                raise RuntimeError(message)
+    
             ssbh_mesh_object.tangents = [tangent0]
             
             bpy.ops.object.mode_set(mode='OBJECT')
