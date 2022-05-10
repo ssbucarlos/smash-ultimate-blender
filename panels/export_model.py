@@ -136,6 +136,8 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     '''
     # TODO: This only needs to be made for include_numshb or include_nusktb or include_numshexb.
     # The skel needs to be made first to determine the mesh's bone influences.
+
+    # TODO: Check the bone count?
     ssbh_skel_data = None
     if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
         ssbh_skel_data = make_skel_no_link(context)
@@ -162,8 +164,12 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     start = time.time()
 
-    # TODO: This is only needed for include_numshb or include_numshexb.
-    ssbh_mesh_data = make_mesh_data(context, export_mesh_groups, ssbh_skel_data)
+    try:
+        # TODO: The mesh is only needed for include_numshb or include_numshexb.
+        ssbh_mesh_data = make_mesh_data(context, export_mesh_groups, ssbh_skel_data)
+    except RuntimeError as e:
+        operator.report({'ERROR'}, str(e))
+        return
 
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
@@ -210,6 +216,7 @@ def get_material_label_from_mesh(operator, mesh):
     if len(mesh.material_slots) == 0:
         return None
 
+    # TODO: How to handle the case where the first slot is empty?
     material = mesh.material_slots[0].material
     try:
         nodes = material.node_tree.nodes
@@ -486,7 +493,17 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             context.view_layer.objects.active = mesh_object_copy
             bpy.ops.object.mode_set(mode='EDIT')
 
+            smash_uv_names = ['map1', 'bake1', 'uvSet', 'uvSet1', 'uvSet2']
             for uv_layer in mesh.data.uv_layers:
+                if uv_layer.name not in smash_uv_names:
+                    # TODO: Use more specific exception classes?
+                    valid_attribute_list = ', '.join(smash_uv_names)
+                    message = f'Mesh {mesh.name} has invalid UV map name {uv_layer.name}. Valid names are {valid_attribute_list}.'
+
+                    # TODO: Find an easier way to ensure the meshes get cleaned up.
+                    bpy.data.meshes.remove(mesh_data_copy)
+                    raise RuntimeError(message)
+
                 ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
                 loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
                 uv_layer.data.foreach_get("uv", loop_uvs)
@@ -498,8 +515,18 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
 
                 ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
 
-            # Export Color Set 
+            # Export Color Set
+            smash_color_names = ['colorSet1', 'colorSet2', 'colorSet2_1', 'colorSet2_2', 'colorSet2_3', 'colorSet3', 'colorSet4', 'colorSet5', 'colorSet6', 'colorSet7']
             for color_layer in mesh.data.vertex_colors:
+                if color_layer.name not in smash_color_names:
+                    # TODO: Use more specific exception classes?
+                    valid_attribute_list = ', '.join(smash_color_names)
+                    message = f'Mesh {mesh.name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
+
+                    # TODO: Find an easier way to ensure the meshes get cleaned up.
+                    bpy.data.meshes.remove(mesh_data_copy)
+                    raise RuntimeError(message)
+
                 ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
 
                 loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
@@ -573,7 +600,9 @@ def unreorient_root(reoriented_matrix) -> Matrix:
     return m
 
 
+# TODO: Can these functions share code?
 def make_skel_no_link(context):
+    # TODO: Report error if a valid skel is not selected.
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
     arma.select_set(True)
@@ -593,8 +622,6 @@ def make_skel_no_link(context):
             ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, unreorient_root(edit_bone.matrix), None)
         ssbh_skel.bones.append(ssbh_bone) 
 
-    #ssbh_skel.save(filepath + 'model.nusktb')
-
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
     bpy.context.view_layer.objects.active = None
@@ -604,6 +631,7 @@ def make_skel(context, linked_nusktb_settings):
     '''
     Wow i wrote this terribly lol, #TODO ReWrite this
     '''
+    # TODO: Report error if a valid skel is not selected.
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
     arma.select_set(True)
