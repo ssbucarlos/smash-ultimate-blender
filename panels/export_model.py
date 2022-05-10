@@ -168,16 +168,23 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
     if include_numdlb:
+        # TODO: Do we want to use exceptions instead of None for stopping export early?
         ssbh_modl_data = make_modl_data(operator, context, export_mesh_groups)
-        ssbh_modl_data.save(filepath + 'model.numdlb')
+        if ssbh_modl_data is not None:
+            ssbh_modl_data.save(filepath + 'model.numdlb')
+
     if include_numshb:
         ssbh_mesh_data.save(filepath + 'model.numshb')
+
     if include_nusktb:
         ssbh_skel_data.save(filepath + 'model.nusktb')
+
     if include_numatb:
         create_and_save_matl(operator, filepath, export_meshes)
+
     if include_numshexb:
         create_and_save_meshex(filepath, ssbh_mesh_data)
+
     if include_nuhlpb:
         create_and_save_nuhlpb(filepath, arma)
 
@@ -192,13 +199,17 @@ def create_and_save_meshex(filepath, ssbh_mesh_data):
 
 def create_and_save_matl(operator, filepath, export_meshes):
     #  Gather Material Info
-    materials = {mesh.data.materials[0] for mesh in export_meshes}
+    # TODO: Report a warning if there are multiple materials per mesh?
+    materials = {mesh.data.materials[0] for mesh in export_meshes if len(mesh.data.materials) > 0}
     ssbh_matl = make_matl(operator, materials)
 
     ssbh_matl.save(filepath + 'model.numatb')
 
 
 def get_material_label_from_mesh(operator, mesh):
+    if len(mesh.material_slots) == 0:
+        return None
+
     material = mesh.material_slots[0].material
     try:
         nodes = material.node_tree.nodes
@@ -527,8 +538,14 @@ def make_modl_data(operator, context, export_mesh_groups):
     for group_name, meshes in export_mesh_groups:
         for i, mesh in enumerate(meshes):
             mat_label = get_material_label_from_mesh(operator, mesh)
-            ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, i, mat_label)
-            ssbh_modl_data.entries.append(ssbh_modl_entry)
+            if mat_label is not None:
+                ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, i, mat_label)
+                ssbh_modl_data.entries.append(ssbh_modl_entry)
+            else:
+                # TODO: Should this stop exporting entirely?
+                message = f'No material assigned for {mesh.name}. Cannot create model.numdlb. Assign a material or disable .NUMDLB export.'
+                operator.report({'ERROR'}, message)
+                return None
 
     return ssbh_modl_data
 
