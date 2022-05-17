@@ -549,7 +549,7 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
                 # TODO: Find an easier way to ensure the meshes get cleaned up.
                 # TODO: Use try/finally for all the code after creating the mesh copy?
                 bpy.data.meshes.remove(mesh_data_copy)
-                message = f'Failed to calculate tangents for {mesh.name}.\n'
+                message = f'Failed to calculate tangents for mesh {mesh.name}.\n'
                 message += 'Ensure the mesh is triangulated by selecting all in Edit Mode and clicking Face > Triangulate Faces.'
                 raise RuntimeError(message)
     
