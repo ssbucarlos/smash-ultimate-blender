@@ -975,8 +975,8 @@ def create_interpolation_type_helper_bone_constraints(constraint_name, armature,
             crc.name = f'{constraint_name}.{axis}'
             crc.target = armature
             crc.subtarget =  target_bone_name
-            crc.target_space = 'LOCAL_OWNER_ORIENT'
-            crc.owner_space = 'LOCAL'
+            crc.target_space = 'WORLD'
+            crc.owner_space = 'WORLD'
             crc.use_x = True if axis is x else False
             crc.use_y = True if axis is y else False
             crc.use_z = True if axis is z else False
