@@ -40,8 +40,6 @@ classes = [
     panels.exo_skel.BoneListItem,
     panels.exo_skel.SUB_UL_BoneList,
     panels.exo_skel.MakeCombinedSkeleton,
-    panels.exo_skel.ExportHelperBoneJson,
-    panels.exo_skel.ExportSkelJson,
     panels.import_anim.ImportAnimPanel,
     panels.import_anim.AnimArmatureClearOperator,
     panels.import_anim.AnimCameraClearOperator,
