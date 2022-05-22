@@ -4,7 +4,7 @@ from .import_model import get_ssbh_lib_json_exe_path
 import bpy
 import os.path
 import numpy as np
-import numpy.linalg as la
+from pathlib import Path
 
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
@@ -134,9 +134,14 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     if include_numdlb:
         export_numdlb(context, filepath)
     '''
+    # Make sure this is a folder instead of a file.
+    # TODO: This doesn't work if the file path isn't actually a file on disk?
+    folder = Path(filepath)
+    if folder.is_file():
+        folder = folder.parent
+
     # TODO: This only needs to be made for include_numshb or include_nusktb or include_numshexb.
     # The skel needs to be made first to determine the mesh's bone influences.
-
     # TODO: Check the bone count?
     ssbh_skel_data = None
     if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
@@ -177,39 +182,40 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
         # TODO: Do we want to use exceptions instead of None for stopping export early?
         ssbh_modl_data = make_modl_data(operator, context, export_mesh_groups)
         if ssbh_modl_data is not None:
-            ssbh_modl_data.save(filepath + 'model.numdlb')
+            print(str(folder.joinpath('model.numdlb')))
+            ssbh_modl_data.save(str(folder.joinpath('model.numdlb')))
 
     if include_numshb:
-        ssbh_mesh_data.save(filepath + 'model.numshb')
+        ssbh_mesh_data.save(str(folder.joinpath('model.numshb')))
 
     if include_nusktb:
-        ssbh_skel_data.save(filepath + 'model.nusktb')
+        ssbh_skel_data.save(str(folder.joinpath('model.nusktb')))
 
     if include_numatb:
-        create_and_save_matl(operator, filepath, export_meshes)
+        create_and_save_matl(operator, folder, export_meshes)
 
     if include_numshexb:
-        create_and_save_meshex(filepath, ssbh_mesh_data)
+        create_and_save_meshex(folder, ssbh_mesh_data)
 
     if include_nuhlpb:
-        create_and_save_nuhlpb(filepath, arma)
+        create_and_save_nuhlpb(folder, arma)
 
     end = time.time()
     print(f'Create and save export files in {end - start} seconds')
 
 
-def create_and_save_meshex(filepath, ssbh_mesh_data):
+def create_and_save_meshex(folder, ssbh_mesh_data):
     meshex = ssbh_data_py.meshex_data.MeshExData.from_mesh_objects(ssbh_mesh_data.objects)
-    meshex.save(filepath + 'model.numshexb')
+    meshex.save(str(folder.joinpath('model.numshexb')))
 
 
-def create_and_save_matl(operator, filepath, export_meshes):
+def create_and_save_matl(operator, folder, export_meshes):
     #  Gather Material Info
     # TODO: Report a warning if there are multiple materials per mesh?
     materials = {mesh.data.materials[0] for mesh in export_meshes if len(mesh.data.materials) > 0}
     ssbh_matl = make_matl(operator, materials)
 
-    ssbh_matl.save(filepath + 'model.numatb')
+    ssbh_matl.save(str(folder.joinpath('model.numatb')))
 
 
 def get_material_label_from_mesh(operator, mesh):
@@ -740,17 +746,16 @@ def make_skel(context, linked_nusktb_settings):
     return ssbh_skel
 
 
-
 def save_ssbh_json(ssbh_json, output_file_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
-    dumped_json_file_path = output_file_path + '.tmp.json'
-    with open(dumped_json_file_path, 'w') as f:
+    with open(output_file_path, 'w') as f:
         json.dump(ssbh_json, f, indent=2)
-    subprocess.run([ssbh_lib_json_exe_path, dumped_json_file_path, output_file_path])
+    subprocess.run([ssbh_lib_json_exe_path, output_file_path, output_file_path])
     #os.remove(dumped_json_file_path)
     return
 
-def create_and_save_nuhlpb(filepath, armature:bpy.types.Object):
+
+def create_and_save_nuhlpb(folder, armature:bpy.types.Object):
     root_empty = None
     for child in armature.children:
         if child.name.startswith('_NUHLPB') and child.type == 'EMPTY':
@@ -831,10 +836,5 @@ def create_and_save_nuhlpb(filepath, armature:bpy.types.Object):
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(1)
 
-    save_ssbh_json(nuhlpb_json, filepath + 'model.nuhlpb')
-
-
-    
-
-
+    save_ssbh_json(nuhlpb_json, str(folder.joinpath('model.nuhlpb.tmp.json')))
 
