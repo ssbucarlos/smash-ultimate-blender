@@ -843,5 +843,5 @@ def create_and_save_nuhlpb(folder, armature:bpy.types.Object):
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(1)
 
-    save_ssbh_json(nuhlpb_json, str(folder.joinpath('model.nuhlpb.tmp.json')))
+    save_ssbh_json(nuhlpb_json, str(folder.joinpath('model.nuhlpb')))
 
