@@ -252,25 +252,27 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             if paired_bone is None:
                 continue
             
-            self.create_constraints(new_arma, new_bone, paired_bone)
-            new_interpolation_entry_empty = create_new_empty(f'nuHelperBoneRotateInterp{3000+index}', new_interpolation_entries_empty, output_collection)
-            new_interpolation_entry_empty['bone_name'] = paired_bone.parent.name
-            new_interpolation_entry_empty['root_bone_name'] = paired_bone.parent.name
-            new_interpolation_entry_empty['parent_bone_name'] = paired_bone.name
-            new_interpolation_entry_empty['driver_bone_name'] = new_bone.name
-            new_interpolation_entry_empty['unk_type'] = 1
-            new_interpolation_entry_empty['aoi'] = [1.0, 1.0, 1.0]
-            new_interpolation_entry_empty['quat1'] = [0.0, 0.0, 0.0, 1.0]
-            new_interpolation_entry_empty['quat2'] = [0.0, 0.0, 0.0, 1.0]
-            new_interpolation_entry_empty['range_min'] = [-180, -180, -180]
-            new_interpolation_entry_empty['range_max'] = [180, 180, 180]
+            if paired_bone.parent:
+                self.create_constraints(new_arma, new_bone, paired_bone)
+                new_interpolation_entry_empty = create_new_empty(f'nuHelperBoneRotateInterp{3000+index}', new_interpolation_entries_empty, output_collection)
+                new_interpolation_entry_empty['bone_name'] = paired_bone.parent.name
+                new_interpolation_entry_empty['root_bone_name'] = paired_bone.parent.name
+                new_interpolation_entry_empty['parent_bone_name'] = paired_bone.name
+                new_interpolation_entry_empty['driver_bone_name'] = new_bone.name
+                new_interpolation_entry_empty['unk_type'] = 1
+                new_interpolation_entry_empty['aoi'] = [1.0, 1.0, 1.0]
+                new_interpolation_entry_empty['quat1'] = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry_empty['quat2'] = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry_empty['range_min'] = [-180, -180, -180]
+                new_interpolation_entry_empty['range_max'] = [180, 180, 180]
+            else:
+                self.report({'ERROR'}, f'Cannot pair {new_bone.name} to {paired_bone.name}. {paired_bone.name} has no parent.')
 
         return {'FINISHED'}
 
 
 class SUB_UL_BoneList(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        #other_armature = get_other_armature()
         other_armature = get_other_armature()
         smash_armature = get_smash_armature()
         
