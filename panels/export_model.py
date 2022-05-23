@@ -753,11 +753,11 @@ def make_skel(context, linked_nusktb_settings):
     return ssbh_skel
 
 
-def save_ssbh_json(ssbh_json, output_file_path):
+def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
-    with open(output_file_path, 'w') as f:
+    with open(dumped_json_path, 'w') as f:
         json.dump(ssbh_json, f, indent=2)
-    subprocess.run([ssbh_lib_json_exe_path, output_file_path, output_file_path])
+    subprocess.run([ssbh_lib_json_exe_path, dumped_json_path, output_file_path])
     #os.remove(dumped_json_file_path)
     return
 
@@ -843,5 +843,5 @@ def create_and_save_nuhlpb(folder, armature:bpy.types.Object):
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(1)
 
-    save_ssbh_json(nuhlpb_json, str(folder.joinpath('model.nuhlpb.tmp.json')))
+    save_ssbh_json(nuhlpb_json, str(folder.joinpath('model.nuhlpb.tmp.json')), str(folder.joinpath('model.nuhlpb')))
 
