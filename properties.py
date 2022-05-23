@@ -1,4 +1,4 @@
-from bpy.types import Scene, Object
+from bpy.types import Scene, Object, PoseBone
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 
 from .panels import exo_skel, io_matl, import_anim
@@ -27,6 +27,10 @@ def register():
     Scene.bone_list_index = IntProperty(
         name="Index for the exo bone list",
         default=0
+    )
+
+    Scene.pairable_bone_list = CollectionProperty(
+        type=exo_skel.PairableBoneListItem
     )
 
     Scene.armature_prefix = StringProperty(

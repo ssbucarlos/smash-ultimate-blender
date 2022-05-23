@@ -758,7 +758,7 @@ def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
     with open(dumped_json_path, 'w') as f:
         json.dump(ssbh_json, f, indent=2)
     subprocess.run([ssbh_lib_json_exe_path, dumped_json_path, output_file_path])
-    #os.remove(dumped_json_file_path)
+    os.remove(dumped_json_path)
     return
 
 

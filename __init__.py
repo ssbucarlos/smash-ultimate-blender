@@ -38,6 +38,7 @@ classes = [
     panels.exo_skel.RenameOtherBones,
     panels.exo_skel.VIEW3D_PT_ultimate_exo_skel,
     panels.exo_skel.BoneListItem,
+    panels.exo_skel.PairableBoneListItem,
     panels.exo_skel.SUB_UL_BoneList,
     panels.exo_skel.MakeCombinedSkeleton,
     panels.import_anim.ImportAnimPanel,

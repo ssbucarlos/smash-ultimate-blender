@@ -56,6 +56,10 @@ class BoneListItem(PropertyGroup):
         default=''
     )
 
+
+class PairableBoneListItem(PropertyGroup):
+    name: StringProperty('bone name')
+
 class RenameOtherBones(bpy.types.Operator):
     bl_idname = 'sub.rename_other_bones'
     bl_label = 'Rename Other Bones'
@@ -81,14 +85,21 @@ class BuildBoneList(bpy.types.Operator):
         armature_other = get_other_armature()
         
         context.scene.bone_list.clear()
-        
-        #for bone in armature_smash.data.bones:
+
         for bone in armature_other.data.bones:
             if not bone.name.startswith('H_'):
                 continue
             bone_item = context.scene.bone_list.add()
-            #bone_item.bone_name_smash = bone.name
             bone_item.bone_name_other = bone.name
+
+        context.scene.pairable_bone_list.clear()
+
+        for bone in armature_smash.data.bones:
+            # Prevent users from pairing bones with no parent.
+            # This ensure the nuhlpb entries can be initialized later.
+            if bone.parent:
+                bone_item = context.scene.pairable_bone_list.add()
+                bone_item.name = bone.name
             
         return {'FINISHED'}
     
@@ -275,12 +286,14 @@ class SUB_UL_BoneList(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         other_armature = get_other_armature()
         smash_armature = get_smash_armature()
-        
+
         layout = layout.split(factor=0.36, align=True)
         layout.label(text=item.bone_name_other)
         if other_armature and smash_armature:
-            layout.prop_search(item, 'bone_name_smash', smash_armature.pose, 'bones', text='')
-    
+            # Use a custom collection property to allow for filtering out unwanted bones.
+            layout.prop_search(item, 'bone_name_smash', context.scene, 'pairable_bone_list', text='', icon='BONE_DATA')
+
+
 class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
