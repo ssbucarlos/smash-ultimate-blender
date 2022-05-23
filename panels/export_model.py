@@ -142,13 +142,18 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     # TODO: This only needs to be made for include_numshb or include_nusktb or include_numshexb.
     # The skel needs to be made first to determine the mesh's bone influences.
-    # TODO: Check the bone count?
     ssbh_skel_data = None
     if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
         ssbh_skel_data = make_skel_no_link(context)
     else:
         ssbh_skel_data = make_skel(context, linked_nusktb_settings)
-    
+
+    # The uniform buffer for bone transformations in the skinning shader has a fixed size.
+    # Limit exports to 511 bones to prevent rendering issues and crashes in game.
+    if len(ssbh_skel_data.bones) >= 512:
+        operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
+        return
+
     # Prepare the scene for export and find the meshes to export.
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
@@ -171,6 +176,7 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     try:
         # TODO: The mesh is only needed for include_numshb or include_numshexb.
+        # TODO: We wouldn't need the skel here if we don't validate influence names for skinning.
         ssbh_mesh_data = make_mesh_data(context, export_mesh_groups, ssbh_skel_data)
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
@@ -488,6 +494,7 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             skel_bone_names = {bone.name for bone in ssbh_skel_data.bones}
             ssbh_mesh_object.bone_influences = []
             for name, weights in group_to_weights.values():
+                # TODO: Some objects have influences not in the bone (fighter/miifighter/model/b_deacon_m).
                 if name in skel_bone_names and len(weights) > 0:
                     ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
 
