@@ -218,26 +218,33 @@ def create_and_save_meshex(folder, ssbh_mesh_data):
 def create_and_save_matl(operator, folder, export_meshes):
     #  Gather Material Info
     # TODO: Report a warning if there are multiple materials per mesh?
-    materials = {mesh.data.materials[0] for mesh in export_meshes if len(mesh.data.materials) > 0}
-    ssbh_matl = make_matl(operator, materials)
-
-    ssbh_matl.save(str(folder.joinpath('model.numatb')))
-
+    materials = {(mesh.name, mesh.data.materials[0]) for mesh in export_meshes if len(mesh.data.materials) > 0}
+    try:
+        ssbh_matl = make_matl(operator, materials)
+        ssbh_matl.save(str(folder.joinpath('model.numatb')))
+    except RuntimeError as e:
+        operator.report({'ERROR'}, str(e))
+        
 
 def get_material_label_from_mesh(operator, mesh):
     if len(mesh.material_slots) == 0:
-        return None
+        message = f'No material assigned for {mesh.name}. Cannot create model.numdlb. Assign a material or disable .NUMDLB export.'
+        raise RuntimeError(message)
 
-    # TODO: How to handle the case where the first slot is empty?
+    mat_label = None
     material = mesh.material_slots[0].material
     try:
         nodes = material.node_tree.nodes
         node_group_node = nodes['smash_ultimate_shader']
         mat_label = node_group_node.inputs['Material Name'].default_value
     except:
+        if not material:
+            message = f'The mesh {mesh.name} has no material created for the first material slot. Cannot create model.numdlb. Create a material or disable .NUMDLB export.'
+            raise RuntimeError(message)
+
         # Use the Blender material name as a fallback.
         mat_label = material.name
-        operator.report({'WARNING'}, f'Missing Smash Ultimate node group for {mesh.name}. Assigning {mat_label} by material name.')
+        operator.report({'WARNING'}, f'Missing Smash Ultimate node group for the mesh {mesh.name}. Assigning {mat_label} by material name.')
 
     return mat_label
 
@@ -293,16 +300,20 @@ def default_ssbh_material(material_label):
 def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
-    for material in materials:
-        node = material.node_tree.nodes.get('smash_ultimate_shader', None)
-        if node is not None:
-            entry = create_material_entry_from_node_group(node)
+    for mesh_name, material in materials:
+        if material is not None:
+            node = material.node_tree.nodes.get('smash_ultimate_shader', None)
+            if node is not None:
+                entry = create_material_entry_from_node_group(node)
+            else:
+                # Materials are often edited in external applications.
+                # Use a default for missing node groups to allow exporting to proceed.
+                entry = default_ssbh_material(material.name)
+                operator.report({'WARNING'}, f'Missing Smash Ultimate node group for {material.name}. Creating default material.')
         else:
-            # Materials are often edited in external applications.
-            # Use a default to allow exporting to proceed.
-            entry = default_ssbh_material(material.name)
-            operator.report({'WARNING'}, f'Missing Smash Ultimate node group for {material.name}. Creating default material.')
-
+            message = f'The mesh {mesh_name} has no material created for the first material slot. Cannot create model.numatb. Create a material or disable .NUMATB export.'
+            raise RuntimeError(message)
+    
         matl.entries.append(entry)
 
     return matl
@@ -587,14 +598,13 @@ def make_modl_data(operator, context, export_mesh_groups):
 
     for group_name, meshes in export_mesh_groups:
         for i, mesh in enumerate(meshes):
-            mat_label = get_material_label_from_mesh(operator, mesh)
-            if mat_label is not None:
+            try:
+                mat_label = get_material_label_from_mesh(operator, mesh)
                 ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, i, mat_label)
                 ssbh_modl_data.entries.append(ssbh_modl_entry)
-            else:
+            except RuntimeError as e:
                 # TODO: Should this stop exporting entirely?
-                message = f'No material assigned for {mesh.name}. Cannot create model.numdlb. Assign a material or disable .NUMDLB export.'
-                operator.report({'ERROR'}, message)
+                operator.report({'ERROR'}, str(e))
                 return None
 
     return ssbh_modl_data
