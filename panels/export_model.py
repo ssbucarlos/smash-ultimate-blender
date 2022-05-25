@@ -635,10 +635,11 @@ def unreorient_root(reoriented_matrix) -> Matrix:
 
 # TODO: Can these functions share code?
 def make_skel_no_link(context):
-    # TODO: Report error if a valid skel is not selected.
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
+    # The object should be selected and visible before entering edit mode.
     arma.select_set(True)
+    arma.hide_set(False)
     bpy.ops.object.mode_set(mode='EDIT')
 
     ssbh_skel = ssbh_data_py.skel_data.SkelData()
@@ -660,6 +661,7 @@ def make_skel_no_link(context):
     bpy.context.view_layer.objects.active = None
     return ssbh_skel
 
+
 def make_skel(context, linked_nusktb_settings):
     '''
     Wow i wrote this terribly lol, #TODO ReWrite this
@@ -667,10 +669,11 @@ def make_skel(context, linked_nusktb_settings):
     # TODO: Report error if a valid skel is not selected.
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
+    # The object should be selected and visible before entering edit mode.
     arma.select_set(True)
+    arma.hide_set(False)
     bpy.ops.object.mode_set(mode='EDIT')
 
-    
     normal_bones = []
     swing_bones = []
     misc_bones = []
