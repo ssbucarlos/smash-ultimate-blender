@@ -1,5 +1,6 @@
 # smash-ultimate-blender 
 [![wiki](https://img.shields.io/badge/wiki-guide-forestgreen)]((https://github.com/ssbucarlos/smash-ultimate-blender/wiki))
+
 Blender Plugin that contains utilities for Smash Ultimate Models and (eventually) Animations.
 
 **Blender 3.1 support is planned for a future update but not supported at this time. You can download Blender 3.0 from https://download.blender.org/release/Blender3.0/**
