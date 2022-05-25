@@ -29,13 +29,11 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 2.  .NUMDLB, .NUMSHB, .NUSKTB, .NUMATB, .NUMSHEXB Import And Export
 
 ## Planned Features
-1. Complete Import - Export of Models, Materials, Animations
-2. Helper Bone visualization
-3. Swing Bone visualization
+1. Animation export
+2. Swing bone visualization
 
-## Dependencies
-1. ssbh_lib_json.exe is currently needed for the EXO SKEL only, to convert the outputted .JSON https://github.com/ultimate-research/ssbh_lib Eventually, ssbh_lib will be called directly without needing the user to convert exported JSON
-2. Switch Toolbox (to convert .NUTEXBS to .PNGS) https://github.com/KillzXGaming/Switch-Toolbox
+## Useful Tools
+* Switch Toolbox (to convert .NUTEXBS to .PNGS) https://github.com/KillzXGaming/Switch-Toolbox
 
 ## Special Thanks
 * SMG for creating SSBH_DATA_PY, which without it none of this would be possible https://github.com/ScanMountGoat/ssbh_data_py
