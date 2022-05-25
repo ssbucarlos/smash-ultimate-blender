@@ -1,5 +1,5 @@
 # smash-ultimate-blender 
-[![wiki](https://img.shields.io/badge/wiki-guide-forestgreen)]((https://github.com/ssbucarlos/smash-ultimate-blender/wiki))
+[![wiki](https://img.shields.io/badge/wiki-guide-forestgreen)](https://github.com/ssbucarlos/smash-ultimate-blender/wiki)
 
 Blender Plugin that contains utilities for Smash Ultimate Models and (eventually) Animations.
 
