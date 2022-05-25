@@ -81,6 +81,8 @@ class BuildBoneList(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
     
     def execute(self, context):
+        bpy.ops.wm.save_mainfile()
+
         armature_smash = get_smash_armature()
         armature_other = get_other_armature()
         
@@ -101,6 +103,34 @@ class BuildBoneList(bpy.types.Operator):
                 bone_item = context.scene.pairable_bone_list.add()
                 bone_item.name = bone.name
             
+        return {'FINISHED'}
+
+class UpdateBoneList(bpy.types.Operator):
+    bl_idname = 'sub.update_bone_list'
+    bl_label = 'Update Bone Pairing List'
+    bl_description = 'Updates the current pairing list where you match bones from the smash armature to the other armature'
+    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}  
+    
+    def execute(self, context):
+        context.scene.saved_bone_list.clear()
+        for bone_item in context.scene.bone_list:
+            if bone_item.bone_name_smash:
+                saved_bone_item = context.scene.saved_bone_list.add()
+                saved_bone_item.bone_name_other = bone_item.bone_name_other
+                saved_bone_item.bone_name_smash = bone_item.bone_name_smash
+
+        BuildBoneList.execute(self, context)
+
+        cur_bone_other_list = [bone_item.bone_name_other for bone_item in context.scene.bone_list]
+        
+        if not context.scene.saved_bone_list:
+            self.report({'ERROR'}, "Couldn't save current bone list because it was empty")
+        else:
+            for saved_bone_item in context.scene.saved_bone_list:
+                if saved_bone_item.bone_name_other in cur_bone_other_list:
+                    index = cur_bone_other_list.index(saved_bone_item.bone_name_other)
+                    context.scene.bone_list[index].bone_name_smash = saved_bone_item.bone_name_smash
+        
         return {'FINISHED'}
     
 class MakeCombinedSkeleton(bpy.types.Operator):
@@ -329,6 +359,9 @@ class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
         
         row = layout.row(align=True)
         row.operator(BuildBoneList.bl_idname, text='Rebuild Bone List')
+
+        row = layout.row(align=True)
+        row.operator(UpdateBoneList.bl_idname)
         
         layout.separator()
         

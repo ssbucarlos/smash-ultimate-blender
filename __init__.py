@@ -35,6 +35,7 @@ classes = [
     panels.io_matl.NumatbFileSelector,
     panels.io_matl.MatlReimporter,
     panels.exo_skel.BuildBoneList,
+    panels.exo_skel.UpdateBoneList,
     panels.exo_skel.RenameOtherBones,
     panels.exo_skel.VIEW3D_PT_ultimate_exo_skel,
     panels.exo_skel.BoneListItem,
