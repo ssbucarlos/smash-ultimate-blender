@@ -63,6 +63,7 @@ def register():
 def unregister():
     print('Unloading Smash Ultimate Blender Tools')
 
+    shaders.custom_sampler_node.unregister()
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
