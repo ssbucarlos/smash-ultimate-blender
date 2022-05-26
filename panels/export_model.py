@@ -121,6 +121,12 @@ class ModelExporterOperator(Operator, ImportHelper):
         ),
         default='ORDER_AND_VALUES',
     )
+
+    # Initially set the filename field to be nothing
+    def invoke(self, context, _event):
+        self.filepath = ""
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
     
     def execute(self, context):
         export_model(self, context, self.filepath, self.include_numdlb, self.include_numshb, self.include_numshexb,
