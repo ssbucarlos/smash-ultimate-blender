@@ -470,7 +470,7 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             context.view_layer.update()
 
             try:
-                ssbh_mesh_object = make_mesh(context, mesh_object_copy, ssbh_skel_data, group_name, i)
+                ssbh_mesh_object = make_mesh_object(context, mesh_object_copy, ssbh_skel_data, group_name, i)
             finally:
                 bpy.data.meshes.remove(mesh_object_copy.data)
 
@@ -479,7 +479,7 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
     return ssbh_mesh_data
 
 
-def make_mesh(context, mesh, ssbh_skel_data, group_name, i):
+def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i):
     # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
     # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
@@ -549,7 +549,12 @@ def make_mesh(context, mesh, ssbh_skel_data, group_name, i):
         ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
         loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
         uv_layer.data.foreach_get("uv", loop_uvs)
-                
+
+        if has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
+            message = f'UV map {uv_layer.name} for mesh {mesh.name} has more than one UV coord per vertex.\n'
+            message += 'Split the edges at UV seams to ensure a one-to-one mapping between vertices and UV coords.'
+            raise RuntimeError(message)
+
         uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
         # Flip vertical.
         uvs[:,1] = 1.0 - uvs[:,1]
@@ -591,6 +596,21 @@ def make_mesh(context, mesh, ssbh_skel_data, group_name, i):
     ssbh_mesh_object.tangents = [tangent0]
             
     return ssbh_mesh_object
+
+
+def has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
+    # TODO: Can this be done faster using numpy?
+    index_to_uv = {}
+    for i in range(len(mesh.data.loops)):
+        vertex_index = vertex_indices[i]
+        uv = (loop_uvs[i*2], loop_uvs[i*2+1])
+        if vertex_index not in index_to_uv:
+            index_to_uv[vertex_index] = uv
+        else:
+            if uv != index_to_uv[vertex_index]:
+                return True
+
+    return False
 
 
 def make_modl_data(operator, context, export_mesh_groups):
