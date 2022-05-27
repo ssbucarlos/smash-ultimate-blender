@@ -457,6 +457,21 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             list of potential issues that need to validate
             1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
             '''
+
+            # Check if any of the faces are quads, and converts them into tris
+            if any(len(f.vertices) == 4 for f in mesh.data.polygons):
+                # https://blender.stackexchange.com/questions/45698
+                me = mesh.data
+                # Get a BMesh representation
+                bm = bmesh.new()
+                bm.from_mesh(me)
+
+                bmesh.ops.triangulate(bm, faces=bm.faces[:])
+
+                # Finish up, write the bmesh back to the mesh
+                bm.to_mesh(me)
+                bm.free()
+
             mesh_object_copy = mesh.copy() # Copy the Mesh Object
             mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
             mesh_data_copy = mesh_object_copy.data
