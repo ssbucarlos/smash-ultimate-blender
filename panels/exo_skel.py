@@ -81,7 +81,8 @@ class BuildBoneList(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
     
     def execute(self, context):
-        bpy.ops.wm.save_mainfile()
+        current_mode = context.object.mode
+        bpy.ops.object.mode_set(mode='OBJECT')
 
         armature_smash = get_smash_armature()
         armature_other = get_other_armature()
@@ -102,7 +103,8 @@ class BuildBoneList(bpy.types.Operator):
             if bone.parent:
                 bone_item = context.scene.pairable_bone_list.add()
                 bone_item.name = bone.name
-            
+        
+        bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
 
 class UpdateBoneList(bpy.types.Operator):
@@ -123,9 +125,7 @@ class UpdateBoneList(bpy.types.Operator):
 
         cur_bone_other_list = [bone_item.bone_name_other for bone_item in context.scene.bone_list]
         
-        if not context.scene.saved_bone_list:
-            self.report({'ERROR'}, "Couldn't save current bone list because it was empty")
-        else:
+        if context.scene.saved_bone_list:
             for saved_bone_item in context.scene.saved_bone_list:
                 if saved_bone_item.bone_name_other in cur_bone_other_list:
                     index = cur_bone_other_list.index(saved_bone_item.bone_name_other)
