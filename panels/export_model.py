@@ -441,27 +441,24 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
 def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
-    '''
-    # TODO split meshes
-    Potential uv_layer clean_up code?
-    remove = [uv_layer for uv_layer in mesh.data.uv_layers if all([uv == 0.0 for data in uv_layer.data for uv in data.uv])]
-    for l in remove:
-        mesh.data.uv_layers.remove(l)
-    '''
-
     for group_name, meshes in export_mesh_groups:
         for i, mesh in enumerate(meshes):
             '''
             Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
-
             list of potential issues that need to validate
             1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
-            '''
+            '''   
+            # We use the loop normals rather than vertex normals to allow exporting custom normals.
+            mesh.data.calc_normals_split()
 
-            # Check if any of the faces are quads, and converts them into tris
-            if any(len(f.vertices) == 4 for f in mesh.data.polygons):
+            # Make a copy of the so that the original remains unmodified.
+            mesh_object_copy = mesh.copy()
+            mesh_object_copy.data = mesh.data.copy()
+
+            # Check if any of the faces are not tris, and converts them into tris
+            if any(len(f.vertices) != 3 for f in mesh_object_copy.data.polygons):
                 # https://blender.stackexchange.com/questions/45698
-                me = mesh.data
+                me = mesh_object_copy.data
                 # Get a BMesh representation
                 bm = bmesh.new()
                 bm.from_mesh(me)
@@ -472,140 +469,128 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
                 bm.to_mesh(me)
                 bm.free()
 
-            mesh_object_copy = mesh.copy() # Copy the Mesh Object
-            mesh_object_copy.data = mesh.data.copy() # Make a copy of the mesh DATA, so that the original remains unmodified
-            mesh_data_copy = mesh_object_copy.data
-
-            # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
-            # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
-            # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
-            ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(group_name, i)
-            position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
-            # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
-            positions = np.zeros(len(mesh_data_copy.vertices) * 3, dtype=np.float32)
-            mesh_data_copy.vertices.foreach_get("co", positions)
-            # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
-            position0.data = positions.reshape((-1, 3))
-            ssbh_mesh_object.positions = [position0]
-
-            # Store vertex indices as a numpy array for faster indexing later.
-            vertex_indices = np.zeros(len(mesh_data_copy.loops), dtype=np.uint32)
-            mesh_data_copy.loops.foreach_get("vertex_index", vertex_indices)
-            ssbh_mesh_object.vertex_indices = vertex_indices
-
-            # We use the loop normals rather than vertex normals to allow exporting custom normals.
-            mesh.data.calc_normals_split()
-
-            # Export Normals
-            normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
-            loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
-            mesh.data.loops.foreach_get("normal", loop_normals)
-            normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
-
-            # Pad normals to 4 components instead of 3 components.
-            # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
-            normals = np.append(normals, np.zeros((normals.shape[0],1)), axis=1)
-            
-            normal0.data = normals
-            ssbh_mesh_object.normals = [normal0]
-
-            # Export Weights
-            # TODO: Research weight layers       
-            # Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
-            # TODO: Does Blender not expose this directly?
-            group_to_weights = { vg.index : (vg.name, []) for vg in mesh_object_copy.vertex_groups }
-            for vertex in mesh_data_copy.vertices:
-                for group in vertex.groups:
-                    ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
-                    group_to_weights[group.group][1].append(ssbh_vertex_weight)
-            
-            # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
-            # Avoid adding unused influences if there are no weights.
-            # Some meshes are parented to a bone instead of using vertex skinning.
-            # This requires the influence list to be empty to save properly.
-            skel_bone_names = {bone.name for bone in ssbh_skel_data.bones}
-            ssbh_mesh_object.bone_influences = []
-            for name, weights in group_to_weights.values():
-                # TODO: Some objects have influences not in the bone (fighter/miifighter/model/b_deacon_m).
-                if name in skel_bone_names and len(weights) > 0:
-                    ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
-
-            if len(ssbh_mesh_object.bone_influences) == 0:
-                print(f'Mesh {mesh.name} has no bone influences')
-
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
-            context.view_layer.objects.active = mesh_object_copy
-            bpy.ops.object.mode_set(mode='EDIT')
 
-            smash_uv_names = ['map1', 'bake1', 'uvSet', 'uvSet1', 'uvSet2']
-            for uv_layer in mesh.data.uv_layers:
-                if uv_layer.name not in smash_uv_names:
-                    # TODO: Use more specific exception classes?
-                    valid_attribute_list = ', '.join(smash_uv_names)
-                    message = f'Mesh {mesh.name} has invalid UV map name {uv_layer.name}. Valid names are {valid_attribute_list}.'
-
-                    # TODO: Find an easier way to ensure the meshes get cleaned up.
-                    bpy.data.meshes.remove(mesh_data_copy)
-                    raise RuntimeError(message)
-
-                ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
-                loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
-                uv_layer.data.foreach_get("uv", loop_uvs)
-                
-                uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
-                # Flip vertical.
-                uvs[:,1] = 1.0 - uvs[:,1]
-                ssbh_uv_layer.data = uvs
-
-                ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
-
-            # Export Color Set
-            smash_color_names = ['colorSet1', 'colorSet2', 'colorSet2_1', 'colorSet2_2', 'colorSet2_3', 'colorSet3', 'colorSet4', 'colorSet5', 'colorSet6', 'colorSet7']
-            for color_layer in mesh.data.vertex_colors:
-                if color_layer.name not in smash_color_names:
-                    # TODO: Use more specific exception classes?
-                    valid_attribute_list = ', '.join(smash_color_names)
-                    message = f'Mesh {mesh.name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
-
-                    # TODO: Find an easier way to ensure the meshes get cleaned up.
-                    bpy.data.meshes.remove(mesh_data_copy)
-                    raise RuntimeError(message)
-
-                ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
-
-                loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
-                color_layer.data.foreach_get("color", loop_colors)
-                ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
-
-                ssbh_mesh_object.color_sets.append(ssbh_color_layer)
-
-
-            # Calculate tangents now that the necessary attributes are initialized.
-            # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
-            tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
             try:
-                tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
-                    ssbh_mesh_object.normals[0].data, 
-                    ssbh_mesh_object.texture_coordinates[0].data,
-                    ssbh_mesh_object.vertex_indices)
-            except:
-                # TODO (SMG): Only catch ssbh_data_py.MeshDataError once ssbh_data_py is updated.
-                # TODO: Find an easier way to ensure the meshes get cleaned up.
-                # TODO: Use try/finally for all the code after creating the mesh copy?
-                bpy.data.meshes.remove(mesh_data_copy)
-                message = f'Failed to calculate tangents for mesh {mesh.name}.\n'
-                message += 'Ensure the mesh is triangulated by selecting all in Edit Mode and clicking Face > Triangulate Faces.'
-                raise RuntimeError(message)
-    
-            ssbh_mesh_object.tangents = [tangent0]
-            
-            bpy.ops.object.mode_set(mode='OBJECT')
+                ssbh_mesh_object = make_mesh(context, mesh_object_copy, ssbh_skel_data, group_name, i)
+            finally:
+                bpy.data.meshes.remove(mesh_object_copy.data)
 
-            bpy.data.meshes.remove(mesh_data_copy)
             ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
     return ssbh_mesh_data
+
+
+def make_mesh(context, mesh, ssbh_skel_data, group_name, i):
+    # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
+    # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
+    # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+    ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(group_name, i)
+    position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
+
+    # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
+    positions = np.zeros(len(mesh.data.vertices) * 3, dtype=np.float32)
+    mesh.data.vertices.foreach_get("co", positions)
+    # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
+    position0.data = positions.reshape((-1, 3))
+    ssbh_mesh_object.positions = [position0]
+
+    # Store vertex indices as a numpy array for faster indexing later.
+    vertex_indices = np.zeros(len(mesh.data.loops), dtype=np.uint32)
+    mesh.data.loops.foreach_get("vertex_index", vertex_indices)
+    ssbh_mesh_object.vertex_indices = vertex_indices
+
+    # Export Normals
+    normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
+    loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
+    mesh.data.loops.foreach_get("normal", loop_normals)
+    normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
+
+    # Pad normals to 4 components instead of 3 components.
+    # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
+    normals = np.append(normals, np.zeros((normals.shape[0],1)), axis=1)
+            
+    normal0.data = normals
+    ssbh_mesh_object.normals = [normal0]
+
+    # Export Weights
+    # TODO: Research weight layers       
+    # Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
+    # TODO: Does Blender not expose this directly?
+    group_to_weights = { vg.index : (vg.name, []) for vg in mesh.vertex_groups }
+    for vertex in mesh.data.vertices:
+        for group in vertex.groups:
+            ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
+            group_to_weights[group.group][1].append(ssbh_vertex_weight)
+            
+    # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
+    # Avoid adding unused influences if there are no weights.
+    # Some meshes are parented to a bone instead of using vertex skinning.
+    # This requires the influence list to be empty to save properly.
+    skel_bone_names = {bone.name for bone in ssbh_skel_data.bones}
+    ssbh_mesh_object.bone_influences = []
+    for name, weights in group_to_weights.values():
+        # TODO: Some objects have influences not in the bone (fighter/miifighter/model/b_deacon_m).
+        if name in skel_bone_names and len(weights) > 0:
+            ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
+
+    if len(ssbh_mesh_object.bone_influences) == 0:
+        print(f'Mesh {mesh.name} has no bone influences')
+
+    smash_uv_names = ['map1', 'bake1', 'uvSet', 'uvSet1', 'uvSet2']
+    for uv_layer in mesh.data.uv_layers:
+        if uv_layer.name not in smash_uv_names:
+            # TODO: Use more specific exception classes?
+            valid_attribute_list = ', '.join(smash_uv_names)
+            message = f'Mesh {mesh.name} has invalid UV map name {uv_layer.name}. Valid names are {valid_attribute_list}.'
+            raise RuntimeError(message)
+
+        ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
+        loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
+        uv_layer.data.foreach_get("uv", loop_uvs)
+                
+        uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
+        # Flip vertical.
+        uvs[:,1] = 1.0 - uvs[:,1]
+        ssbh_uv_layer.data = uvs
+
+        ssbh_mesh_object.texture_coordinates.append(ssbh_uv_layer)
+
+    # Export Color Set
+    smash_color_names = ['colorSet1', 'colorSet2', 'colorSet2_1', 'colorSet2_2', 'colorSet2_3', 'colorSet3', 'colorSet4', 'colorSet5', 'colorSet6', 'colorSet7']
+    for color_layer in mesh.data.vertex_colors:
+        if color_layer.name not in smash_color_names:
+            # TODO: Use more specific exception classes?
+            valid_attribute_list = ', '.join(smash_color_names)
+            message = f'Mesh {mesh.name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
+            raise RuntimeError(message)
+
+        ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
+
+        loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+        color_layer.data.foreach_get("color", loop_colors)
+        ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
+
+        ssbh_mesh_object.color_sets.append(ssbh_color_layer)
+
+    # Calculate tangents now that the necessary attributes are initialized.
+    # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
+    tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
+    try:
+        tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
+                    ssbh_mesh_object.normals[0].data, 
+                    ssbh_mesh_object.texture_coordinates[0].data,
+                    ssbh_mesh_object.vertex_indices)
+    except:
+        # TODO (SMG): Only catch ssbh_data_py.MeshDataError once ssbh_data_py is updated.
+        message = f'Failed to calculate tangents for mesh {mesh.name}.\n'
+        message += 'Ensure the mesh is triangulated by selecting all in Edit Mode and clicking Face > Triangulate Faces.'
+        raise RuntimeError(message)
+    
+    ssbh_mesh_object.tangents = [tangent0]
+            
+    return ssbh_mesh_object
 
 
 def make_modl_data(operator, context, export_mesh_groups):
