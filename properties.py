@@ -24,6 +24,10 @@ def register():
         type=exo_skel.BoneListItem
     )
 
+    Scene.saved_bone_list = CollectionProperty(
+        type=exo_skel.BoneListItem
+    )
+
     Scene.bone_list_index = IntProperty(
         name="Index for the exo bone list",
         default=0
