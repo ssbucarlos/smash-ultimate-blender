@@ -455,6 +455,20 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             mesh_object_copy = mesh.copy()
             mesh_object_copy.data = mesh.data.copy()
 
+            # Check if any of the faces are not tris, and converts them into tris
+            if any(len(f.vertices) != 3 for f in mesh_object_copy.data.polygons):
+                # https://blender.stackexchange.com/questions/45698
+                me = mesh_object_copy.data
+                # Get a BMesh representation
+                bm = bmesh.new()
+                bm.from_mesh(me)
+
+                bmesh.ops.triangulate(bm, faces=bm.faces[:])
+
+                # Finish up, write the bmesh back to the mesh
+                bm.to_mesh(me)
+                bm.free()
+
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
