@@ -130,6 +130,12 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
     )   
     """
 
+    # Initially set the filename field to be nothing
+    def invoke(self, context, _event):
+        self.filepath = ""
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
     def execute(self, context):
         context.scene.sub_model_numshb_file_name = '' 
         context.scene.sub_model_nusktb_file_name = '' 

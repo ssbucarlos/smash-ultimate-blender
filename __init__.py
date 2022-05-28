@@ -7,6 +7,8 @@ bl_info = {
     'version': (0, 9, 0),
     'blender': (2, 93, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
+    'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
+    'tracker_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/issues',
     'special thanks': 'SMG for making SSBH_DATA_PY, which none of this would be possible without. and also the rokoko plugin for being the reference used to make this UI'
 }
 
@@ -64,6 +66,7 @@ def register():
 def unregister():
     print('Unloading Smash Ultimate Blender Tools')
 
+    shaders.custom_sampler_node.unregister()
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
