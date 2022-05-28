@@ -448,7 +448,7 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             list of potential issues that need to validate
             1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
             '''   
-            # Make a copy of the so that the original remains unmodified.
+            # Make a copy of the mesh so that the original remains unmodified.
             mesh_object_copy = mesh.copy()
             mesh_object_copy.data = mesh.data.copy()
 
@@ -470,7 +470,8 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             context.view_layer.update()
 
             try:
-                ssbh_mesh_object = make_mesh_object(context, mesh_object_copy, ssbh_skel_data, group_name, i)
+                # Use the original mesh name since the copy will have strings like ".001" appended.
+                ssbh_mesh_object = make_mesh_object(context, mesh_object_copy, ssbh_skel_data, group_name, i, mesh.name)
             finally:
                 bpy.data.meshes.remove(mesh_object_copy.data)
 
@@ -479,7 +480,7 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
     return ssbh_mesh_data
 
 
-def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i):
+def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
     # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
     # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
@@ -536,14 +537,14 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i):
             ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
 
     if len(ssbh_mesh_object.bone_influences) == 0:
-        print(f'Mesh {mesh.name} has no bone influences')
+        print(f'Mesh {mesh_name} has no bone influences')
 
     smash_uv_names = ['map1', 'bake1', 'uvSet', 'uvSet1', 'uvSet2']
     for uv_layer in mesh.data.uv_layers:
         if uv_layer.name not in smash_uv_names:
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_uv_names)
-            message = f'Mesh {mesh.name} has invalid UV map name {uv_layer.name}. Valid names are {valid_attribute_list}.'
+            message = f'Mesh {mesh_name} has invalid UV map name {uv_layer.name}. Valid names are {valid_attribute_list}.'
             raise RuntimeError(message)
 
         ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
@@ -551,8 +552,8 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i):
         uv_layer.data.foreach_get("uv", loop_uvs)
 
         if has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
-            message = f'UV map {uv_layer.name} for mesh {mesh.name} has more than one UV coord per vertex.\n'
-            message += 'Split the edges at UV seams to ensure a one-to-one mapping between vertices and UV coords.'
+            message = f'UV map {uv_layer.name} for mesh {mesh_name} has more than one UV coord per vertex.'
+            message += ' Split the edges at UV seams to ensure a one-to-one mapping between vertices and UV coords.'
             raise RuntimeError(message)
 
         uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
@@ -568,7 +569,7 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i):
         if color_layer.name not in smash_color_names:
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_color_names)
-            message = f'Mesh {mesh.name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
+            message = f'Mesh {mesh_name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
             raise RuntimeError(message)
 
         ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
@@ -589,8 +590,8 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i):
                     ssbh_mesh_object.vertex_indices)
     except:
         # TODO (SMG): Only catch ssbh_data_py.MeshDataError once ssbh_data_py is updated.
-        message = f'Failed to calculate tangents for mesh {mesh.name}.\n'
-        message += 'Ensure the mesh is triangulated by selecting all in Edit Mode and clicking Face > Triangulate Faces.'
+        message = f'Failed to calculate tangents for mesh {mesh_name}.'
+        message += ' Ensure the mesh is triangulated by selecting all in Edit Mode and clicking Face > Triangulate Faces.'
         raise RuntimeError(message)
     
     ssbh_mesh_object.tangents = [tangent0]
