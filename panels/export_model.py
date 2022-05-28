@@ -448,9 +448,6 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
             list of potential issues that need to validate
             1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
             '''   
-            # We use the loop normals rather than vertex normals to allow exporting custom normals.
-            mesh.data.calc_normals_split()
-
             # Make a copy of the so that the original remains unmodified.
             mesh_object_copy = mesh.copy()
             mesh_object_copy.data = mesh.data.copy()
@@ -500,6 +497,9 @@ def make_mesh(context, mesh, ssbh_skel_data, group_name, i):
     vertex_indices = np.zeros(len(mesh.data.loops), dtype=np.uint32)
     mesh.data.loops.foreach_get("vertex_index", vertex_indices)
     ssbh_mesh_object.vertex_indices = vertex_indices
+
+    # We use the loop normals rather than vertex normals to allow exporting custom normals.
+    mesh.data.calc_normals_split()
 
     # Export Normals
     normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
