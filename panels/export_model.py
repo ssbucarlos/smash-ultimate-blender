@@ -183,7 +183,7 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     try:
         # TODO: The mesh is only needed for include_numshb or include_numshexb.
         # TODO: We wouldn't need the skel here if we don't validate influence names for skinning.
-        ssbh_mesh_data = make_mesh_data(context, export_mesh_groups, ssbh_skel_data)
+        ssbh_mesh_data = make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data)
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
         return
@@ -438,7 +438,7 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     return per_vertex
 
 
-def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
+def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
     for group_name, meshes in export_mesh_groups:
@@ -454,6 +454,8 @@ def make_mesh_data(context, export_mesh_groups, ssbh_skel_data):
 
             # Check if any of the faces are not tris, and converts them into tris
             if any(len(f.vertices) != 3 for f in mesh_object_copy.data.polygons):
+                operator.report({'WARNING'}, f'Mesh {mesh.name} has non triangular faces. Triangulating a temporary mesh for export.')
+
                 # https://blender.stackexchange.com/questions/45698
                 me = mesh_object_copy.data
                 # Get a BMesh representation
