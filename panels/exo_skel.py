@@ -107,6 +107,27 @@ class BuildBoneList(bpy.types.Operator):
         bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
 
+class PopulateBoneList(bpy.types.Operator):
+    bl_idname = 'sub.populate_bone_list'
+    bl_label = 'Auto Populate Bone List'    
+    bl_description = 'Automatically assign a smash bone to an entry if its name matches with the prefix removed.'
+    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
+    
+    def execute(self, context):
+        current_mode = context.object.mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        armature_smash = get_smash_armature()
+        prefix = bpy.context.scene.armature_prefix
+        
+        for bone_item in context.scene.bone_list:
+            #Auto populate list if bone's name without the prefix is in the Smash Armature.
+            if bone_item.bone_name_other.replace(prefix,'',1) in armature_smash.data.bones and not bone_item.bone_name_smash:
+                bone_item.bone_name_smash=bone_item.bone_name_other.replace(prefix,'',1)
+        
+        bpy.ops.object.mode_set(mode=current_mode)
+        return {'FINISHED'}
+
 class UpdateBoneList(bpy.types.Operator):
     bl_idname = 'sub.update_bone_list'
     bl_label = 'Update Bone Pairing List'
@@ -130,7 +151,7 @@ class UpdateBoneList(bpy.types.Operator):
                 if saved_bone_item.bone_name_other in cur_bone_other_list:
                     index = cur_bone_other_list.index(saved_bone_item.bone_name_other)
                     context.scene.bone_list[index].bone_name_smash = saved_bone_item.bone_name_smash
-        
+          
         return {'FINISHED'}
     
 class MakeCombinedSkeleton(bpy.types.Operator):
@@ -359,6 +380,9 @@ class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
         
         row = layout.row(align=True)
         row.operator(BuildBoneList.bl_idname, text='Rebuild Bone List')
+        
+        row = layout.row(align=True)
+        row.operator(PopulateBoneList.bl_idname)
 
         row = layout.row(align=True)
         row.operator(UpdateBoneList.bl_idname)
