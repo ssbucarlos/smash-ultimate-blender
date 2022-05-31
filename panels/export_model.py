@@ -471,6 +471,20 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
+            vertex_indices = np.zeros(len(mesh_object_copy.data.loops), dtype=np.uint32)
+            mesh_object_copy.data.loops.foreach_get("vertex_index", vertex_indices)
+
+            for uv_layer in mesh_object_copy.data.uv_layers:
+                loop_uvs = np.zeros(len(mesh_object_copy.data.loops) * 2, dtype=np.float32)
+                uv_layer.data.foreach_get("uv", loop_uvs)
+
+                if has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
+                    message = f'UV map {uv_layer.name} for mesh {mesh.name} has more than one UV coord per vertex.'
+                    message += ' Splitting the edges at UV seams on temporary mesh for export'
+                    operator.report({'WARNING'}, message)
+                    
+                    split_at_seams(mesh_object_copy)
+
             try:
                 # Use the original mesh name since the copy will have strings like ".001" appended.
                 ssbh_mesh_object = make_mesh_object(context, mesh_object_copy, ssbh_skel_data, group_name, i, mesh.name)
@@ -480,6 +494,32 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
             ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
     return ssbh_mesh_data
+
+
+def split_at_seams(mesh):
+    bpy.context.view_layer.objects.active = mesh
+    bpy.ops.object.mode_set(mode = 'EDIT')
+
+    me = mesh.data
+    bm = bmesh.from_edit_mesh(me)
+    
+    # Clear current seams
+    for edge in bm.edges:
+        edge.seam = False
+
+    # Create seams from UV islands
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.seams_from_islands()
+    
+    seams = [e for e in bm.edges if e.seam]
+    # split on seams
+    bmesh.ops.split_edges(bm, edges=seams)
+
+    bmesh.update_edit_mesh(me)
+    bm.free()
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.context.view_layer.objects.active = None
 
 
 def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
@@ -554,8 +594,7 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
         uv_layer.data.foreach_get("uv", loop_uvs)
 
         if has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
-            message = f'UV map {uv_layer.name} for mesh {mesh_name} has more than one UV coord per vertex.'
-            message += ' Split the edges at UV seams to ensure a one-to-one mapping between vertices and UV coords.'
+            message = f'Failed to split the edges at UV seems for UV map {uv_layer.name} for temporary mesh'
             raise RuntimeError(message)
 
         uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
