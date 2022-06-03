@@ -587,6 +587,7 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_uv_names)
             message = f'Mesh {mesh_name} has invalid UV map name {uv_layer.name}. Valid names are {valid_attribute_list}.'
+            message += ' Select the mesh and change the UV map name in Object Data Properties > UV Maps.'
             raise RuntimeError(message)
 
         ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
@@ -611,6 +612,7 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_color_names)
             message = f'Mesh {mesh_name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
+            message += ' Select the mesh and change the vertex color name in Object Data Properties > Vertex Colors.'
             raise RuntimeError(message)
 
         ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
