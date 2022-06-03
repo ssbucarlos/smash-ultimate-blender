@@ -118,12 +118,18 @@ class PopulateBoneList(bpy.types.Operator):
         bpy.ops.object.mode_set(mode='OBJECT')
 
         armature_smash = get_smash_armature()
+        armature_other = get_other_armature()
         prefix = bpy.context.scene.armature_prefix
         
         for bone_item in context.scene.bone_list:
-            #Auto populate list if bone's name without the prefix is in the Smash Armature.
-            if bone_item.bone_name_other.replace(prefix,'',1) in armature_smash.data.bones and not bone_item.bone_name_smash:
-                bone_item.bone_name_smash=bone_item.bone_name_other.replace(prefix,'',1)
+            # Auto populate list if bone's name without the prefix is in the Smash Armature. If value is already assigned, skip.
+            if bone_item.bone_name_other.startswith(prefix):
+                # Only replace the prefix once.
+                bone_noprefix = bone_item.bone_name_other.replace(prefix, '', 1)
+                if bone_noprefix in armature_smash.data.bones and not bone_item.bone_name_smash:
+                    if bone_item.bone_name_other in armature_other.data.bones and not armature_smash.data.bones[bone_noprefix].parent:
+                        print(f"{bone_noprefix} has no parent, skipping assignment.")
+                    else: bone_item.bone_name_smash=bone_noprefix
         
         bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
