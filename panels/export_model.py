@@ -595,7 +595,8 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
         uv_layer.data.foreach_get("uv", loop_uvs)
 
         if has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
-            message = f'Failed to split the edges at UV seems for UV map {uv_layer.name} for temporary mesh'
+            message = f'UV map {uv_layer.name} for mesh {mesh_name} has more than one UV coord per vertex. Splitting UVs for temporary mesh failed.'
+            message += ' Split the edges at UV seams to ensure a one-to-one mapping between vertices and UV coords.'
             raise RuntimeError(message)
 
         uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
