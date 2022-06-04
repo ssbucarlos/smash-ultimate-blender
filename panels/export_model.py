@@ -478,12 +478,14 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
                 loop_uvs = np.zeros(len(mesh_object_copy.data.loops) * 2, dtype=np.float32)
                 uv_layer.data.foreach_get("uv", loop_uvs)
 
-                if has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
+                # TODO: Combine this check with the actual splitting below?
+                if has_duplicate_uvs(mesh, uv_layer.name):
+                    # TODO: This is no longer acting on seams?
                     message = f'UV map {uv_layer.name} for mesh {mesh.name} has more than one UV coord per vertex.'
                     message += ' Splitting the edges at UV seams on temporary mesh for export'
                     operator.report({'WARNING'}, message)
                     
-                    split_at_seams(mesh_object_copy)
+                    split_at_seams(mesh_object_copy, uv_layer.name)
 
             try:
                 # Use the original mesh name since the copy will have strings like ".001" appended.
@@ -496,24 +498,29 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
     return ssbh_mesh_data
 
 
-def split_at_seams(mesh):
+def split_at_seams(mesh, uv_layer_name):
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.mode_set(mode = 'EDIT')
 
     me = mesh.data
     bm = bmesh.from_edit_mesh(me)
-    
-    # Clear current seams
-    for edge in bm.edges:
-        edge.seam = False
 
-    # Create seams from UV islands
-    bpy.ops.uv.select_all(action='SELECT')
-    bpy.ops.uv.seams_from_islands()
+
+    uv_layer = bm.loops.layers.uv.get(uv_layer_name)
+    edges_to_split = get_duplicate_uv_edges(bm, uv_layer)
+
+    # # Clear current seams
+    # for edge in bm.edges:
+    #     edge.seam = False
+
+    # # Create seams from UV islands
+    # bpy.ops.uv.select_all(action='SELECT')
+    # bpy.ops.uv.seams_from_islands()
     
-    seams = [e for e in bm.edges if e.seam]
-    # split on seams
-    bmesh.ops.split_edges(bm, edges=seams)
+    # seams = [e for e in bm.edges if e.seam]
+    # # split on seams
+    # bmesh.ops.split_edges(bm, edges=seams)
+    bmesh.ops.split_edges(bm, edges=edges_to_split)
 
     bmesh.update_edit_mesh(me)
     bm.free()
@@ -594,7 +601,8 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
         loop_uvs = np.zeros(len(mesh.data.loops) * 2, dtype=np.float32)
         uv_layer.data.foreach_get("uv", loop_uvs)
 
-        if has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
+        if has_duplicate_uvs(mesh, uv_layer.name):
+            # TODO: Is this check necessary?
             message = f'UV map {uv_layer.name} for mesh {mesh_name} has more than one UV coord per vertex. Splitting UVs for temporary mesh failed.'
             message += ' Split the edges at UV seams to ensure a one-to-one mapping between vertices and UV coords.'
             raise RuntimeError(message)
@@ -643,19 +651,39 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
     return ssbh_mesh_object
 
 
-def has_duplicate_uvs(mesh, vertex_indices, loop_uvs):
+def has_duplicate_uvs(mesh, uv_layer_name):
     # TODO: Can this be done faster using numpy?
-    index_to_uv = {}
-    for i in range(len(mesh.data.loops)):
-        vertex_index = vertex_indices[i]
-        uv = (loop_uvs[i*2], loop_uvs[i*2+1])
-        if vertex_index not in index_to_uv:
-            index_to_uv[vertex_index] = uv
-        else:
-            if uv != index_to_uv[vertex_index]:
-                return True
+    bm = bmesh.new()
+    bm.from_mesh(mesh.data)
 
-    return False
+    edges_to_split = []
+
+    uv_layer = bm.loops.layers.uv.get(uv_layer_name)
+    edges_to_split = get_duplicate_uv_edges(bm, uv_layer)
+
+    bm.free()
+    return edges_to_split
+
+
+def get_duplicate_uv_edges(bm, uv_layer):
+    edges_to_split = []
+
+    # Find vertices with more than one uv coord.
+    index_to_uv = {}
+    for face in bm.faces:
+        for loop in face.loops:
+            vertex_index = loop.vert.index
+            uv = loop[uv_layer].uv
+            if vertex_index not in index_to_uv:
+                index_to_uv[vertex_index] = uv
+            elif uv != index_to_uv[vertex_index]:
+                # Split any edges containing this vertex.
+                edges_to_split.extend(loop.vert.link_edges)
+
+    # TODO: Do duplicates matter?
+    edges_to_split = list(set(edges_to_split))
+    print('edges:', len(edges_to_split))
+    return edges_to_split
 
 
 def make_modl_data(operator, context, export_mesh_groups):
