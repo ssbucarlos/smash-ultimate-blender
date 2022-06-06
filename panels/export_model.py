@@ -523,6 +523,7 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
+            # TODO: These sometimes have invalid layers/layer names?
             for uv_layer in mesh_object_copy.data.uv_layers:
                 if split_duplicate_uvs(mesh_object_copy, uv_layer.name):
                     message = f'UV map {uv_layer.name} for mesh {mesh.name} has more than one UV coord per vertex.'
@@ -685,8 +686,12 @@ def split_duplicate_uvs(mesh, uv_layer_name):
     me = mesh.data
     bm = bmesh.from_edit_mesh(me)
 
+    # TODO: Investigate why this is sometimes None.
     uv_layer = bm.loops.layers.uv.get(uv_layer_name)
-    edges_to_split = get_duplicate_uv_edges(bm, uv_layer)
+    if uv_layer is None:
+        edges_to_split = []
+    else:
+        edges_to_split = get_duplicate_uv_edges(bm, uv_layer)
 
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
