@@ -221,16 +221,25 @@ def create_and_save_meshex(folder, ssbh_mesh_data):
     meshex.save(str(folder.joinpath('model.numshexb')))
 
 
-def create_and_save_matl(operator, folder, export_meshes):
+def get_mesh_materials(export_meshes):
     #  Gather Material Info
     # TODO: Report a warning if there are multiple materials per mesh?
+    materials = set()
+    for mesh in export_meshes:
+        if len(mesh.data.materials) > 0:
+            if mesh.data.materials[0] is not None:
+                materials.add(mesh.data.materials[0])
+            else:
+                message = f'The mesh {mesh.name} has no material created for the first material slot. Cannot create model.numatb. Create a material or disable .NUMATB export.'
+                raise RuntimeError(message)
 
-    # TODO: This create materials more than once.
-    # TODO: Move the error check here instead.
-    # message = f'The mesh {mesh_name} has no material created for the first material slot. Cannot create model.numatb. Create a material or disable .NUMATB export.'
-    # raise RuntimeError(message)
-    materials = {(mesh.name, mesh.data.materials[0]) for mesh in export_meshes if len(mesh.data.materials) > 0}
+    return materials
+
+
+def create_and_save_matl(operator, folder, export_meshes):
+
     try:
+        materials = get_mesh_materials(export_meshes)
         ssbh_matl = make_matl(operator, materials)
         ssbh_matl.save(str(folder.joinpath('model.numatb')))
     except RuntimeError as e:
@@ -343,20 +352,16 @@ def default_texture(param_name):
 def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
-    for mesh_name, material in materials:
-        if material is not None:
-            node = material.node_tree.nodes.get('smash_ultimate_shader', None)
-            if node is not None:
-                entry = create_material_entry_from_node_group(operator, node)
-            else:
-                # Materials are often edited in external applications.
-                # Use a default for missing node groups to allow exporting to proceed.
-                entry = default_ssbh_material(material.name)
-                operator.report({'WARNING'}, f'Missing Smash Ultimate node group for {material.name}. Creating default material.')
+    for material in materials:
+        node = material.node_tree.nodes.get('smash_ultimate_shader', None)
+        if node is not None:
+            entry = create_material_entry_from_node_group(operator, node)
         else:
-            message = f'The mesh {mesh_name} has no material created for the first material slot. Cannot create model.numatb. Create a material or disable .NUMATB export.'
-            raise RuntimeError(message)
-    
+            # Materials are often edited in external applications.
+            # Use a default for missing node groups to allow exporting to proceed.
+            entry = default_ssbh_material(material.name)
+            operator.report({'WARNING'}, f'Missing Smash Ultimate node group for {material.name}. Creating default material.')
+
         matl.entries.append(entry)
 
     return matl
@@ -518,13 +523,7 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
-            vertex_indices = np.zeros(len(mesh_object_copy.data.loops), dtype=np.uint32)
-            mesh_object_copy.data.loops.foreach_get("vertex_index", vertex_indices)
-
             for uv_layer in mesh_object_copy.data.uv_layers:
-                loop_uvs = np.zeros(len(mesh_object_copy.data.loops) * 2, dtype=np.float32)
-                uv_layer.data.foreach_get("uv", loop_uvs)
-
                 if split_duplicate_uvs(mesh_object_copy, uv_layer.name):
                     message = f'UV map {uv_layer.name} for mesh {mesh.name} has more than one UV coord per vertex.'
                     message += ' Splitting duplicate UV edges on temporary mesh for export.'
