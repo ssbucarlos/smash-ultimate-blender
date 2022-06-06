@@ -224,6 +224,11 @@ def create_and_save_meshex(folder, ssbh_mesh_data):
 def create_and_save_matl(operator, folder, export_meshes):
     #  Gather Material Info
     # TODO: Report a warning if there are multiple materials per mesh?
+
+    # TODO: This create materials more than once.
+    # TODO: Move the error check here instead.
+    # message = f'The mesh {mesh_name} has no material created for the first material slot. Cannot create model.numatb. Create a material or disable .NUMATB export.'
+    # raise RuntimeError(message)
     materials = {(mesh.name, mesh.data.materials[0]) for mesh in export_meshes if len(mesh.data.materials) > 0}
     try:
         ssbh_matl = make_matl(operator, materials)
@@ -303,6 +308,38 @@ def default_ssbh_material(material_label):
     return entry
 
 
+def default_texture(param_name):
+    # Select defaults that have as close to no effect as possible.
+    # This is white (1,1,1) for multiplication and black (0,0,0) for addition.
+    defaults = {
+        'Texture0': '/common/shader/sfxpbs/default_white',
+        'Texture1': '/common/shader/sfxpbs/default_white',
+        'Texture2': '#replace_cubemap',
+        'Texture3': '/common/shader/sfxpbs/default_white',
+        'Texture4': '/common/shader/sfxpbs/fighter/default_normal',
+        'Texture5': '/common/shader/sfxpbs/default_black',
+        'Texture6': '/common/shader/sfxpbs/fighter/default_params',
+        'Texture7': '#replace_cubemap',
+        'Texture8': '#replace_cubemap',
+        'Texture9': '/common/shader/sfxpbs/default_black',
+        'Texture10': '/common/shader/sfxpbs/default_white',
+        'Texture11': '/common/shader/sfxpbs/default_white',
+        'Texture12': '/common/shader/sfxpbs/default_white',
+        'Texture13': '/common/shader/sfxpbs/default_white',
+        'Texture14': '/common/shader/sfxpbs/default_black',
+        'Texture15': '/common/shader/sfxpbs/default_white',
+        'Texture16': '/common/shader/sfxpbs/default_white',
+        'Texture17': '/common/shader/sfxpbs/default_white',
+        'Texture18': '/common/shader/sfxpbs/default_white',
+        'Texture19': '/common/shader/sfxpbs/default_white',
+    }
+
+    if param_name in defaults:
+        return defaults[param_name]
+    else:
+        return '/common/shader/sfxpbs/default_white'
+
+
 def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
@@ -310,7 +347,7 @@ def make_matl(operator, materials):
         if material is not None:
             node = material.node_tree.nodes.get('smash_ultimate_shader', None)
             if node is not None:
-                entry = create_material_entry_from_node_group(node)
+                entry = create_material_entry_from_node_group(operator, node)
             else:
                 # Materials are often edited in external applications.
                 # Use a default for missing node groups to allow exporting to proceed.
@@ -325,14 +362,15 @@ def make_matl(operator, materials):
     return matl
 
 
-def create_material_entry_from_node_group(node):
-    entry = ssbh_data_py.matl_data.MatlEntryData(node.inputs['Material Name'].default_value, node.inputs['Shader Label'].default_value)
+def create_material_entry_from_node_group(operator, node):
+    material_label = node.inputs['Material Name'].default_value
+    entry = ssbh_data_py.matl_data.MatlEntryData(material_label, node.inputs['Shader Label'].default_value)
 
     inputs = [input for input in node.inputs if input.hide == False]
     skip = ['Material Name', 'Shader Label']
 
-        # Multiple inputs may correspond to a single parameter.
-        # Avoid exporting the same parameter more than once.
+    # Multiple inputs may correspond to a single parameter.
+    # Avoid exporting the same parameter more than once.
     exported_params = set()
     for input in inputs:
         name = input.name
@@ -358,33 +396,42 @@ def create_material_entry_from_node_group(node):
             attribute = ssbh_data_py.matl_data.RasterizerStateParam(ssbh_data_py.matl_data.ParamId.RasterizerState0, data)
             entry.rasterizer_states.append(attribute)
         elif 'Texture' in param_name and 'RGB' in name.split(' ')[1]:
-            texture_node = input.links[0].from_node
+            # Texture Data
+            try:
+                texture_node = input.links[0].from_node
+                texture_name = texture_node.label
+            except:
+                operator.report({'WARNING'}, f'Missing texture {param_name} for material {material_label}. Applying defaults.')
+                texture_name = default_texture(param_name)
 
-            texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), texture_node.label)
+            texture_attribute = ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), texture_name)
             entry.textures.append(texture_attribute)
 
+            # Sampler Data
             sampler_number = param_name.split('Texture')[1]
             sampler_param_id_text = f'Sampler{sampler_number}'
 
-                # Sampler Data
-                # TODO: Use the default if the sampler is missing.
             sampler_data = ssbh_data_py.matl_data.SamplerData()
 
-            sampler_node = texture_node.inputs[0].links[0].from_node
+            try:
+                sampler_node = texture_node.inputs[0].links[0].from_node
                 # TODO: These conversions may return None on error.
-            sampler_data.wraps = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_s)
-            sampler_data.wrapt = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_t)
-            sampler_data.wrapr = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_r)
-            sampler_data.min_filter = ssbh_data_py.matl_data.MinFilter.from_str(sampler_node.min_filter)
-            sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
-            sampler_data.border_color = sampler_node.border_color
-            sampler_data.lod_bias = sampler_node.lod_bias
-            sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
-         
+                sampler_data.wraps = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_s)
+                sampler_data.wrapt = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_t)
+                sampler_data.wrapr = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_r)
+                sampler_data.min_filter = ssbh_data_py.matl_data.MinFilter.from_str(sampler_node.min_filter)
+                sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
+                sampler_data.border_color = sampler_node.border_color
+                sampler_data.lod_bias = sampler_node.lod_bias
+                sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
+            except:
+                operator.report({'WARNING'}, f'Missing sampler {sampler_param_id_text} for material {material_label}. Applying defaults.')
+                sampler_data = ssbh_data_py.matl_data.SamplerData()
+
             sampler_attribute = ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.from_str(sampler_param_id_text), sampler_data)
             entry.samplers.append(sampler_attribute)
         elif 'Sampler' in param_name:
-                # Samplers are not their own input in the master node, rather they are a seperate node entirely
+            # Samplers are not their own input in the master node, rather they are a seperate node entirely
             pass
         elif 'Boolean' in param_name:
             attribute = ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.from_str(param_name), input.default_value)
@@ -398,11 +445,11 @@ def create_material_entry_from_node_group(node):
 
                 inputs = [node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
                     
-                    # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
+                # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
                 if len(inputs) == 1:
                     attribute.data = inputs[0].default_value
                 elif len(inputs) == 2:
-                        # Discard the 4th RGB component and use the explicit alpha instead.
+                    # Discard the 4th RGB component and use the explicit alpha instead.
                     attribute.data[:3] = list(inputs[0].default_value)[:3]
                     attribute.data[3] = inputs[1].default_value
                 elif len(inputs) == 4:
