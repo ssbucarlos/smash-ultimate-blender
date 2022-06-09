@@ -1,3 +1,4 @@
+from ast import operator
 import os
 import time
 from .import_model import get_ssbh_lib_json_exe_path
@@ -532,7 +533,7 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
 
             try:
                 # Use the original mesh name since the copy will have strings like ".001" appended.
-                ssbh_mesh_object = make_mesh_object(context, mesh_object_copy, ssbh_skel_data, group_name, i, mesh.name)
+                ssbh_mesh_object = make_mesh_object(operator, context, mesh_object_copy, ssbh_skel_data, group_name, i, mesh.name)
             finally:
                 bpy.data.meshes.remove(mesh_object_copy.data)
 
@@ -541,7 +542,7 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
     return ssbh_mesh_data
 
 
-def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
+def make_mesh_object(operator, context, mesh, ssbh_skel_data, group_name, i, mesh_name):
     # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
     # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
@@ -577,15 +578,32 @@ def make_mesh_object(context, mesh, ssbh_skel_data, group_name, i, mesh_name):
     ssbh_mesh_object.normals = [normal0]
 
     # Export Weights
-    # TODO: Research weight layers       
-    # Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
+    # TODO: Reversing a vertex -> group lookup to a group -> vertex lookup is expensive.
     # TODO: Does Blender not expose this directly?
     group_to_weights = { vg.index : (vg.name, []) for vg in mesh.vertex_groups }
+    has_unweighted_vertices = False
     for vertex in mesh.data.vertices:
+        if len(vertex.groups) > 4:
+            # We won't fix this automatically since removing influences may break animations.
+            message = f'Vertex with more than 4 weights detected for mesh {mesh_name}.'
+            message += ' Select all in Edit Mode and click Mesh > Weights > Limit Total with the limit set to 4.'
+            message += ' Weights may need to be reassigned after limiting totals.'
+            raise RuntimeError(message)
+
+        # Only report this warning once.
+        if len(vertex.groups) == 0 or all([g.weight == 0.0 for g in vertex.groups]):
+            has_unweighted_vertices = True
+
         for group in vertex.groups:
-            ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
-            group_to_weights[group.group][1].append(ssbh_vertex_weight)
-            
+            # Remove unused weights on export.
+            if group.weight > 0.0:
+                ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
+                group_to_weights[group.group][1].append(ssbh_vertex_weight)
+
+    if has_unweighted_vertices:
+        message = f'Mesh {mesh_name} has unweighted vertices or vertices with only 0.0 weights.'
+        operator.report({'WARNING'}, message)
+
     # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
     # Avoid adding unused influences if there are no weights.
     # Some meshes are parented to a bone instead of using vertex skinning.
