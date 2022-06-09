@@ -468,7 +468,7 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
         parent_bone = find_bone(skel, ssbh_mesh_object.parent_bone_name)
         if parent_bone is not None:
             world_transform = skel.calculate_world_transform(parent_bone)
-            mesh_obj.matrix_world = get_matrix4x4_blender(world_transform)
+            mesh_obj.data.transform(get_matrix4x4_blender(world_transform))
 
             # Use regular skin weights for mesh objects parented to a bone.
             # TODO: Should this only apply if there are no influences?
