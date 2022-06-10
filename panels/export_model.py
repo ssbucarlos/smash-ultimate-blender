@@ -170,7 +170,7 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
     # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
-    export_mesh_groups = [(k, list(g)) for k,g in groupby(export_meshes, lambda x: re.split(r'.\d\d\d', x.name)[0])]
+    export_mesh_groups = [(k, list(g)) for k,g in groupby(export_meshes, lambda x: re.split(r'\.\d\d\d', x.name)[0])]
 
     '''
     TODO: Investigate why export fails if meshes are selected before hitting export.
@@ -580,6 +580,7 @@ def make_mesh_object(operator, context, mesh, ssbh_skel_data, group_name, i, mes
     # TODO: Does Blender not expose this directly?
     group_to_weights = { vg.index : (vg.name, []) for vg in mesh.vertex_groups }
     has_unweighted_vertices = False
+    # TODO: Skip this for performance reasons if there are no vertex groups?
     for vertex in mesh.data.vertices:
         if len(vertex.groups) > 4:
             # We won't fix this automatically since removing influences may break animations.
@@ -612,9 +613,6 @@ def make_mesh_object(operator, context, mesh, ssbh_skel_data, group_name, i, mes
         # TODO: Some objects have influences not in the bone (fighter/miifighter/model/b_deacon_m).
         if name in skel_bone_names and len(weights) > 0:
             ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
-
-    if len(ssbh_mesh_object.bone_influences) == 0:
-        print(f'Mesh {mesh_name} has no bone influences')
 
     smash_uv_names = ['map1', 'bake1', 'uvSet', 'uvSet1', 'uvSet2']
     for uv_layer in mesh.data.uv_layers:
