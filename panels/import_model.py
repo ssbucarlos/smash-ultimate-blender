@@ -340,7 +340,8 @@ def create_armature(ssbh_skel, context):
         for child in bone.children:
             heirarchy_order(child, reordered)
     reordered = []
-    heirarchy_order(edit_bones[0], reordered)
+    if len(edit_bones) > 0:
+        heirarchy_order(edit_bones[0], reordered)
 
     # Transform bones    
     for blender_bone in reordered:
