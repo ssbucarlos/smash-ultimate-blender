@@ -524,12 +524,10 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
-            # TODO: These sometimes have invalid layers/layer names?
-            for uv_layer in mesh_object_copy.data.uv_layers:
-                if split_duplicate_uvs(mesh_object_copy, uv_layer.name):
-                    message = f'UV map {uv_layer.name} for mesh {mesh.name} has more than one UV coord per vertex.'
-                    message += ' Splitting duplicate UV edges on temporary mesh for export.'
-                    operator.report({'WARNING'}, message)
+            if split_duplicate_uvs(mesh_object_copy):
+                message = f'Mesh {mesh.name} has more than one UV coord per vertex.'
+                message += ' Splitting duplicate UV edges on temporary mesh for export.'
+                operator.report({'WARNING'}, message)
 
             try:
                 # Use the original mesh name since the copy will have strings like ".001" appended.
@@ -697,19 +695,18 @@ def get_duplicate_uv_edges(bm, uv_layer):
     return edges_to_split
 
 
-def split_duplicate_uvs(mesh, uv_layer_name):
+def split_duplicate_uvs(mesh):
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.mode_set(mode = 'EDIT')
 
     me = mesh.data
     bm = bmesh.from_edit_mesh(me)
 
-    # TODO: Investigate why this is sometimes None.
-    uv_layer = bm.loops.layers.uv.get(uv_layer_name)
-    if uv_layer is None:
-        edges_to_split = []
-    else:
-        edges_to_split = get_duplicate_uv_edges(bm, uv_layer)
+    edges_to_split = []
+
+    for layer_name in bm.loops.layers.uv.keys():
+        uv_layer = bm.loops.layers.uv.get(layer_name)
+        edges_to_split.extend(get_duplicate_uv_edges(bm, uv_layer))
 
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
