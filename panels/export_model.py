@@ -222,25 +222,28 @@ def create_and_save_meshex(folder, ssbh_mesh_data):
     meshex.save(str(folder.joinpath('model.numshexb')))
 
 
-def get_mesh_materials(export_meshes):
+def get_mesh_materials(operator, export_meshes):
     #  Gather Material Info
-    # TODO: Report a warning if there are multiple materials per mesh?
     materials = set()
     for mesh in export_meshes:
         if len(mesh.data.materials) > 0:
             if mesh.data.materials[0] is not None:
+                if len(mesh.data.materials) > 1:
+                    message = f'The mesh {mesh.name} has more than one material slot. Only the first material will be exported.'
+                    operator.report({'WARNING'}, message)
+
                 materials.add(mesh.data.materials[0])
             else:
-                message = f'The mesh {mesh.name} has no material created for the first material slot. Cannot create model.numatb. Create a material or disable .NUMATB export.'
+                message = f'The mesh {mesh.name} has no material created for the first material slot.' 
+                message += ' Cannot create model.numatb. Create a material or disable .NUMATB export.'
                 raise RuntimeError(message)
 
     return materials
 
 
 def create_and_save_matl(operator, folder, export_meshes):
-
     try:
-        materials = get_mesh_materials(export_meshes)
+        materials = get_mesh_materials(operator, export_meshes)
         ssbh_matl = make_matl(operator, materials)
         ssbh_matl.save(str(folder.joinpath('model.numatb')))
     except RuntimeError as e:
@@ -252,22 +255,28 @@ def get_material_label_from_mesh(operator, mesh):
         message = f'No material assigned for {mesh.name}. Cannot create model.numdlb. Assign a material or disable .NUMDLB export.'
         raise RuntimeError(message)
 
-    mat_label = None
     material = mesh.material_slots[0].material
+
+    if material is None:
+        message = f'The mesh {mesh.name} has no material created for the first material slot.' 
+        message += ' Cannot create model.numdlb. Create a material or disable .NUMDLB export.'
+        raise RuntimeError(message)
+
+    mat_label = None
     try:
         nodes = material.node_tree.nodes
+        # TODO: Find the node by type?
         node_group_node = nodes['smash_ultimate_shader']
         mat_label = node_group_node.inputs['Material Name'].default_value
     except:
-        if not material:
-            message = f'The mesh {mesh.name} has no material created for the first material slot. Cannot create model.numdlb. Create a material or disable .NUMDLB export.'
-            raise RuntimeError(message)
 
         # Use the Blender material name as a fallback.
         mat_label = material.name
-        operator.report({'WARNING'}, f'Missing Smash Ultimate node group for the mesh {mesh.name}. Assigning {mat_label} by material name.')
+        message = f'Missing Smash Ultimate node group for the mesh {mesh.name}. Assigning {mat_label} by material name.'
+        operator.report({'WARNING'}, message)
 
     return mat_label
+
 
 def find_bone_index(skel, name):
     for i, bone in enumerate(skel.bones):
@@ -354,6 +363,7 @@ def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
     for material in materials:
+        # TODO: The node won't always have this name.
         node = material.node_tree.nodes.get('smash_ultimate_shader', None)
         if node is not None:
             entry = create_material_entry_from_node_group(operator, node)
