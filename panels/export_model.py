@@ -147,20 +147,6 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     if folder.is_file():
         folder = folder.parent
 
-    # TODO: This only needs to be made for include_numshb or include_nusktb or include_numshexb.
-    # The skel needs to be made first to determine the mesh's bone influences.
-    ssbh_skel_data = None
-    if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
-        ssbh_skel_data = make_skel_no_link(context)
-    else:
-        ssbh_skel_data = make_skel(context, linked_nusktb_settings)
-
-    # The uniform buffer for bone transformations in the skinning shader has a fixed size.
-    # Limit exports to 511 bones to prevent rendering issues and crashes in game.
-    if len(ssbh_skel_data.bones) >= 512:
-        operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
-        return
-
     # Prepare the scene for export and find the meshes to export.
     arma = context.scene.sub_model_export_armature
     export_meshes = [child for child in arma.children if child.type == 'MESH']
@@ -183,8 +169,7 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     try:
         # TODO: The mesh is only needed for include_numshb or include_numshexb.
-        # TODO: We wouldn't need the skel here if we don't validate influence names for skinning.
-        ssbh_mesh_data = make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data)
+        ssbh_mesh_data = make_mesh_data(operator, context, export_mesh_groups)
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
         return
@@ -202,6 +187,19 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
         ssbh_mesh_data.save(str(folder.joinpath('model.numshb')))
 
     if include_nusktb:
+        # The skel needs to be made first to determine the mesh's bone influences.
+        ssbh_skel_data = None
+        if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
+            ssbh_skel_data = make_skel_no_link(context)
+        else:
+            ssbh_skel_data = make_skel(context, linked_nusktb_settings)
+
+        # The uniform buffer for bone transformations in the skinning shader has a fixed size.
+        # Limit exports to 511 bones to prevent rendering issues and crashes in game.
+        if len(ssbh_skel_data.bones) >= 512:
+            operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
+            return
+
         ssbh_skel_data.save(str(folder.joinpath('model.nusktb')))
 
     if include_numatb:
@@ -501,7 +499,7 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     return per_vertex
 
 
-def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
+def make_mesh_data(operator, context, export_mesh_groups):
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
     for group_name, meshes in export_mesh_groups:
@@ -541,7 +539,7 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
 
             try:
                 # Use the original mesh name since the copy will have strings like ".001" appended.
-                ssbh_mesh_object = make_mesh_object(operator, context, mesh_object_copy, ssbh_skel_data, group_name, i, mesh.name)
+                ssbh_mesh_object = make_mesh_object(operator, context, mesh_object_copy, group_name, i, mesh.name)
             finally:
                 bpy.data.meshes.remove(mesh_object_copy.data)
 
@@ -550,7 +548,7 @@ def make_mesh_data(operator, context, export_mesh_groups, ssbh_skel_data):
     return ssbh_mesh_data
 
 
-def make_mesh_object(operator, context, mesh, ssbh_skel_data, group_name, i, mesh_name):
+def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
     # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
     # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
@@ -613,15 +611,14 @@ def make_mesh_object(operator, context, mesh, ssbh_skel_data, group_name, i, mes
         message = f'Mesh {mesh_name} has unweighted vertices or vertices with only 0.0 weights.'
         operator.report({'WARNING'}, message)
 
-    # Keep track of the skel's bone names to avoid adding influences for nonexistant bones.
     # Avoid adding unused influences if there are no weights.
     # Some meshes are parented to a bone instead of using vertex skinning.
     # This requires the influence list to be empty to save properly.
-    skel_bone_names = {bone.name for bone in ssbh_skel_data.bones}
     ssbh_mesh_object.bone_influences = []
     for name, weights in group_to_weights.values():
-        # TODO: Some objects have influences not in the bone (fighter/miifighter/model/b_deacon_m).
-        if name in skel_bone_names and len(weights) > 0:
+        # Assume all influence names are valid since some in game models have influences not in the skel.
+        # For example, fighter/miifighter/model/b_deacon_m weights vertices to effect bones.
+        if len(weights) > 0:
             ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
 
     smash_uv_names = ['map1', 'bake1', 'uvSet', 'uvSet1', 'uvSet2']
