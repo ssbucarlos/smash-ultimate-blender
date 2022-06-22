@@ -1,4 +1,5 @@
 from ast import operator
+from lib2to3.pytree import Node
 import os
 import time
 from .import_model import get_ssbh_lib_json_exe_path
@@ -262,12 +263,9 @@ def get_material_label_from_mesh(operator, mesh):
 
     mat_label = None
     try:
-        nodes = material.node_tree.nodes
-        # TODO: Find the node by type?
-        node_group_node = nodes['smash_ultimate_shader']
-        mat_label = node_group_node.inputs['Material Name'].default_value
+        ultimate_node = find_ultimate_node(material)
+        mat_label = ultimate_node.inputs['Material Name'].default_value
     except:
-
         # Use the Blender material name as a fallback.
         mat_label = material.name
         message = f'Missing Smash Ultimate node group for the mesh {mesh.name}. Assigning {mat_label} by material name.'
@@ -357,14 +355,36 @@ def default_texture(param_name):
         return '/common/shader/sfxpbs/default_white'
 
 
+def find_output_node(material):
+    for node in material.node_tree.nodes:
+        if node.bl_idname == 'ShaderNodeOutputMaterial':
+            return node
+
+    return None
+
+
+def find_ultimate_node(material):
+    output_node = find_output_node(material)
+    if output_node is None:
+        return None
+
+    # We can't differentiate the ultimate node group from other node groups.
+    # Just assume all node groups are correct and handle errors on export.
+    node = output_node.inputs['Surface'].links[0].from_node
+    if node is not None and node.bl_idname == 'ShaderNodeGroup':
+        return node
+    else:
+        return None
+
+
 def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
     for material in materials:
-        # TODO: The node won't always have this name.
-        node = material.node_tree.nodes.get('smash_ultimate_shader', None)
-        if node is not None:
-            entry = create_material_entry_from_node_group(operator, node)
+        ultimate_node = find_ultimate_node(material)
+    
+        if ultimate_node is not None:
+            entry = create_material_entry_from_node_group(operator, ultimate_node)
         else:
             # Materials are often edited in external applications.
             # Use a default for missing node groups to allow exporting to proceed.
