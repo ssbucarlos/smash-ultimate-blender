@@ -34,6 +34,7 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 2. Swing bone visualization
 
 ## Useful Tools
+* SSBH Editor (view models and animations and edit materials) https://github.com/ScanMountGoat/ssbh_editor
 * Switch Toolbox (to convert .NUTEXBS to .PNGS) https://github.com/KillzXGaming/Switch-Toolbox
 
 ## Special Thanks
