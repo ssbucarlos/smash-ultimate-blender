@@ -155,6 +155,10 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     # TODO: Is it possible to keep the correct order for non imported meshes?
     export_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
 
+    if len(export_meshes) == 0:
+        message = f'No meshes are parented to the armature {arma.name}. Exported .NUMDLB, .NUMSHB, .NUMATB, and .NUMSHEXB files will have no entries.'
+        operator.report({'WARNING'}, message)
+
     # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
     # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
     export_mesh_groups = [(k, list(g)) for k,g in groupby(export_meshes, lambda x: re.split(r'\.\d\d\d', x.name)[0])]
