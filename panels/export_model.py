@@ -582,6 +582,11 @@ def make_mesh_data(operator, context, export_mesh_groups):
             mesh_object_copy = mesh.copy()
             mesh_object_copy.data = mesh.data.copy()
 
+            # Apply any transforms before exporting to preserve vertex positions.
+            # Assume the meshes have no children that would inherit their transforms.
+            mesh_object_copy.data.transform(mesh_object_copy.matrix_basis)
+            mesh_object_copy.matrix_basis.identity()
+
             # Check if any of the faces are not tris, and converts them into tris
             if any(len(f.vertices) != 3 for f in mesh_object_copy.data.polygons):
                 operator.report({'WARNING'}, f'Mesh {mesh.name} has non triangular faces. Triangulating a temporary mesh for export.')
@@ -624,11 +629,14 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
     ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(group_name, i)
     position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
 
+    # TODO: Is there a better way to account for the change of coordinates?
+    axis_correction = np.array(Matrix.Rotation(math.radians(90), 3, 'X'))
+
     # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
     positions = np.zeros(len(mesh.data.vertices) * 3, dtype=np.float32)
     mesh.data.vertices.foreach_get("co", positions)
     # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
-    position0.data = positions.reshape((-1, 3))
+    position0.data = positions.reshape((-1, 3)) @ axis_correction
     ssbh_mesh_object.positions = [position0]
 
     # Store vertex indices as a numpy array for faster indexing later.
@@ -644,6 +652,7 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
     loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
     mesh.data.loops.foreach_get("normal", loop_normals)
     normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
+    normals = normals @ axis_correction
 
     # Pad normals to 4 components instead of 3 components.
     # This actually results in smaller file sizes since HalFloat4 is smaller than Float3.
@@ -732,6 +741,7 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
     # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
     tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
     try:
+        # No axis correction is needed here since we're using the transformed positions and normals.
         tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
                     ssbh_mesh_object.normals[0].data, 
                     ssbh_mesh_object.texture_coordinates[0].data,
