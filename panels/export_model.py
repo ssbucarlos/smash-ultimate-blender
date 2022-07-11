@@ -210,7 +210,9 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
     # The skel needs to be made first to determine the mesh's bone influences.
     try:
-        if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
+        if '' == context.scene.sub_vanilla_nusktb or linked_nusktb_settings == 'NO_LINK':
+            message = 'Creating .NUSKTB without a vanilla .NUSKTB file. Bone order will not be preserved and may cause animation issues in game.'
+            operator.report({'WARNING'}, message)
             ssbh_skel_data = make_skel_no_link(context)
         else:
             ssbh_skel_data = make_skel(context, linked_nusktb_settings)
@@ -944,7 +946,7 @@ def make_skel(context, linked_nusktb_settings):
         try:
             vanilla_ssbh_skel = ssbh_data_py.skel_data.read_skel(context.scene.sub_vanilla_nusktb)
         except Exception as e:
-            message = 'Failed to read vanilla skel. Ensure the file exists and is a valid .NUSKTB file.'
+            message = 'Failed to read vanilla .NUSKTB. Ensure the file exists and is a valid .NUSKTB file.'
             message += f' Error reading {context.scene.sub_vanilla_nusktb}: {e}'
             raise RuntimeError(message)
 
