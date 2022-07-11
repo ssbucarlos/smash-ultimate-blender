@@ -619,7 +619,7 @@ def make_mesh_data(operator, context, export_mesh_groups):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
-            if split_duplicate_uvs(mesh_object_copy):
+            if split_duplicate_uvs(mesh_object_copy, mesh):
                 message = f'Mesh {mesh.name} has more than one UV coord per vertex.'
                 message += ' Splitting duplicate UV edges on temporary mesh for export.'
                 operator.report({'WARNING'}, message)
@@ -792,7 +792,7 @@ def get_duplicate_uv_edges(bm, uv_layer):
     return edges_to_split
 
 
-def split_duplicate_uvs(mesh):
+def split_duplicate_uvs(mesh, original_mesh):
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.mode_set(mode = 'EDIT')
 
@@ -814,6 +814,16 @@ def split_duplicate_uvs(mesh):
     bm.free()
 
     bpy.ops.object.mode_set(mode='OBJECT')
+
+    if len(edges_to_split) > 0:
+        # Copy the original normals to preserve smooth shading.
+        # TODO: Investigate preserving smooth tangents as well.
+        bpy.context.view_layer.objects.active = mesh
+        modifier = mesh.modifiers.new(name='Transfer Normals', type='DATA_TRANSFER')
+        modifier.object = original_mesh
+        modifier.data_types_loops = {'CUSTOM_NORMAL'}
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+
     bpy.context.view_layer.objects.active = None
 
     # Check if any edges were split.
