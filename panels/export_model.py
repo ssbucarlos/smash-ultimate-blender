@@ -192,20 +192,7 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
         ssbh_mesh_data.save(str(folder.joinpath('model.numshb')))
 
     if include_nusktb:
-        # The skel needs to be made first to determine the mesh's bone influences.
-        ssbh_skel_data = None
-        if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
-            ssbh_skel_data = make_skel_no_link(context)
-        else:
-            ssbh_skel_data = make_skel(context, linked_nusktb_settings)
-
-        # The uniform buffer for bone transformations in the skinning shader has a fixed size.
-        # Limit exports to 511 bones to prevent rendering issues and crashes in game.
-        if len(ssbh_skel_data.bones) >= 512:
-            operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
-            return
-
-        ssbh_skel_data.save(str(folder.joinpath('model.nusktb')))
+        create_and_save_skel(operator, context, linked_nusktb_settings, folder)
 
     if include_numatb:
         create_and_save_matl(operator, folder, export_meshes)
@@ -218,6 +205,26 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     end = time.time()
     print(f'Create and save export files in {end - start} seconds')
+
+
+def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
+    # The skel needs to be made first to determine the mesh's bone influences.
+    try:
+        if '' == context.scene.sub_vanilla_nusktb or 'NO_LINK' == linked_nusktb_settings:
+            ssbh_skel_data = make_skel_no_link(context)
+        else:
+            ssbh_skel_data = make_skel(context, linked_nusktb_settings)
+    except RuntimeError as e:
+        operator.report({'ERROR'}, str(e))
+        return
+
+        # The uniform buffer for bone transformations in the skinning shader has a fixed size.
+        # Limit exports to 511 bones to prevent rendering issues and crashes in game.
+    if len(ssbh_skel_data.bones) >= 512:
+        operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
+        return
+
+    ssbh_skel_data.save(str(folder.joinpath('model.nusktb')))
 
 
 def create_and_save_meshex(folder, ssbh_mesh_data):
@@ -934,7 +941,13 @@ def make_skel(context, linked_nusktb_settings):
  
     if '' != context.scene.sub_vanilla_nusktb:
         reordered_bones = []
-        vanilla_ssbh_skel = ssbh_data_py.skel_data.read_skel(context.scene.sub_vanilla_nusktb)
+        try:
+            vanilla_ssbh_skel = ssbh_data_py.skel_data.read_skel(context.scene.sub_vanilla_nusktb)
+        except Exception as e:
+            message = 'Failed to read vanilla skel. Ensure the file exists and is a valid .NUSKTB file.'
+            message += f' Error reading {context.scene.sub_vanilla_nusktb}: {e}'
+            raise RuntimeError(message)
+
         for vanilla_ssbh_bone in vanilla_ssbh_skel.bones:
             linked_bone = output_bones.get(vanilla_ssbh_bone.name)
             if linked_bone is None:
