@@ -751,18 +751,23 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
         ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
     # Calculate tangents now that the necessary attributes are initialized.
-    # TODO: It's possible to generate tangents for other UV maps by passing in the appropriate UV data.
     tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
+
+    # Assume tangents always use the first UV map since normal maps always use map1 in game.
+    if len(ssbh_mesh_object.texture_coordinates) == 0:
+        message = f'Mesh {mesh_name} has no UV maps. Cannot calculate tangents.'
+        message += ' Add a UV map named "map1" in Object Data Properties > UV Maps.'
+        raise RuntimeError(message)
+
     try:
         # No axis correction is needed here since we're using the transformed positions and normals.
         tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
                     ssbh_mesh_object.normals[0].data, 
                     ssbh_mesh_object.texture_coordinates[0].data,
                     ssbh_mesh_object.vertex_indices)
-    except:
+    except Exception as e:
         # TODO (SMG): Only catch ssbh_data_py.MeshDataError once ssbh_data_py is updated.
-        message = f'Failed to calculate tangents for mesh {mesh_name}.'
-        message += ' Ensure the mesh is triangulated by selecting all in Edit Mode and clicking Face > Triangulate Faces.'
+        message = f'Failed to calculate tangents for mesh {mesh_name}: {e}.'
         raise RuntimeError(message)
     
     ssbh_mesh_object.tangents = [tangent0]
