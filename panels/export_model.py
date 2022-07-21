@@ -161,7 +161,16 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
     # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
-    export_mesh_groups = [(k, list(g)) for k,g in groupby(export_meshes, lambda x: re.split(r'\.\d\d\d', x.name)[0])]
+    # Use a dictionary since we can't assume meshes with the same name are contiguous.
+    export_mesh_groups = {}
+    for mesh in export_meshes:
+        name = re.split(r'\.\d\d\d', mesh.name)[0]
+        if name in export_mesh_groups:
+            export_mesh_groups[name].append(mesh)
+        else:
+            export_mesh_groups[name] = [mesh]
+
+    export_mesh_groups = export_mesh_groups.items()
 
     '''
     TODO: Investigate why export fails if meshes are selected before hitting export.
