@@ -496,14 +496,8 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
                 for w in influence.vertex_weights:
                     vertex_group.add([w.vertex_index], w.vertex_weight, 'REPLACE')
 
-        # Fix the rotation of the mesh objects. 
-        # TODO: Figure out how to apply all transforms.
-        trans_vec, rot_vec, scale_vec = mesh_obj.matrix_world.decompose()
-        trans_mat = Matrix.Translation(trans_vec)
-        rot_mat = rot_vec.to_matrix().to_4x4()
-        scale_mat = Matrix.Diagonal((scale_vec[0], scale_vec[1], scale_vec[2], 1.0))
-        axis_correction = Matrix.Rotation(radians(90), 4, 'X')  
-        mesh_obj.matrix_world = axis_correction @ trans_mat @ rot_mat @ scale_mat
+        # Convert from Y up to Z up.
+        mesh_obj.data.transform(Matrix.Rotation(radians(90), 4, 'X') )
 
     # Attach the mesh object to the armature object.
     if armature is not None:
