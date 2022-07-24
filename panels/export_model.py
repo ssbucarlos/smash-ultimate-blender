@@ -194,11 +194,18 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
         # TODO: Do we want to use exceptions instead of None for stopping export early?
         ssbh_modl_data = make_modl_data(operator, context, export_mesh_groups)
         if ssbh_modl_data is not None:
-            print(str(folder.joinpath('model.numdlb')))
-            ssbh_modl_data.save(str(folder.joinpath('model.numdlb')))
+            path = str(folder.joinpath('model.numdlb'))
+            try:
+                ssbh_modl_data.save(path)
+            except Exception as e:
+                operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
     if include_numshb:
-        ssbh_mesh_data.save(str(folder.joinpath('model.numshb')))
+        path = str(folder.joinpath('model.numshb'))
+        try:
+            ssbh_mesh_data.save(path)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
     if include_nusktb:
         create_and_save_skel(operator, context, linked_nusktb_settings, folder)
@@ -207,7 +214,7 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
         create_and_save_matl(operator, folder, export_meshes)
 
     if include_numshexb:
-        create_and_save_meshex(folder, ssbh_mesh_data)
+        create_and_save_meshex(operator, folder, ssbh_mesh_data)
 
     if include_nuhlpb:
         create_and_save_nuhlpb(folder, arma)
@@ -235,12 +242,21 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
         operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
         return
 
-    ssbh_skel_data.save(str(folder.joinpath('model.nusktb')))
+    path = str(folder.joinpath('model.nusktb'))
+    try:
+        ssbh_skel_data.save(path)
+    except Exception as e:
+        operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
 
-def create_and_save_meshex(folder, ssbh_mesh_data):
+def create_and_save_meshex(operator, folder, ssbh_mesh_data):
     meshex = ssbh_data_py.meshex_data.MeshExData.from_mesh_objects(ssbh_mesh_data.objects)
-    meshex.save(str(folder.joinpath('model.numshexb')))
+
+    path = str(folder.joinpath('model.numshexb'))
+    try:
+        meshex.save(path)
+    except Exception as e:
+        operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
 
 def get_mesh_materials(operator, export_meshes):
@@ -266,11 +282,17 @@ def create_and_save_matl(operator, folder, export_meshes):
     try:
         materials = get_mesh_materials(operator, export_meshes)
         ssbh_matl = make_matl(operator, materials)
-        ssbh_matl.save(str(folder.joinpath('model.numatb')))
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
-        
+        return
 
+    path = str(folder.joinpath('model.numatb'))
+    try:
+        ssbh_matl.save(path)
+    except Exception as e:
+        operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+
+        
 def get_material_label_from_mesh(operator, mesh):
     if len(mesh.material_slots) == 0:
         message = f'No material assigned for {mesh.name}. Cannot create model.numdlb. Assign a material or disable .NUMDLB export.'
