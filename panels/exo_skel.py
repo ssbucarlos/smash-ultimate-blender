@@ -81,9 +81,6 @@ class BuildBoneList(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
     
     def execute(self, context):
-        current_mode = context.object.mode
-        bpy.ops.object.mode_set(mode='OBJECT')
-
         armature_smash = get_smash_armature()
         armature_other = get_other_armature()
         
@@ -104,7 +101,6 @@ class BuildBoneList(bpy.types.Operator):
                 bone_item = context.scene.pairable_bone_list.add()
                 bone_item.name = bone.name
         
-        bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
 
 class PopulateBoneList(bpy.types.Operator):
@@ -114,9 +110,6 @@ class PopulateBoneList(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
     
     def execute(self, context):
-        current_mode = context.object.mode
-        bpy.ops.object.mode_set(mode='OBJECT')
-
         armature_smash = get_smash_armature()
         armature_other = get_other_armature()
         prefix = bpy.context.scene.armature_prefix
@@ -131,7 +124,6 @@ class PopulateBoneList(bpy.types.Operator):
                         print(f"{bone_noprefix} has no parent, skipping assignment.")
                     else: bone_item.bone_name_smash=bone_noprefix
         
-        bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
 
 class UpdateBoneList(bpy.types.Operator):
