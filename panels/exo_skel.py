@@ -273,7 +273,14 @@ class MakeCombinedSkeleton(bpy.types.Operator):
         smash_bones = smash_arma.pose.bones
         from .import_model import create_new_empty, get_from_mesh_list_with_pruned_name, copy_empty
         old_nuhlpb_root_empty = get_from_mesh_list_with_pruned_name(smash_arma.children, '_NUHLPB', None)
-        new_nuhlpb_root_empty, new_aim_entries_empty, new_interpolation_entries_empty = None, None, None
+        old_interpolation_entries_empty = None
+        old_aim_entries_empty = None
+
+        new_nuhlpb_root_empty = None
+        new_nuhlpb_root_empty = None
+        new_interpolation_entries_empty = None
+        new_aim_entries_empty = None
+
         if old_nuhlpb_root_empty:
             new_nuhlpb_root_empty = copy_empty(old_nuhlpb_root_empty, output_collection)
             new_nuhlpb_root_empty.parent = new_arma
@@ -285,12 +292,17 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             new_interpolation_entries_empty = copy_empty(old_interpolation_entries_empty, output_collection)
             new_interpolation_entries_empty.parent = new_nuhlpb_root_empty
         else:
+            # This case usually means the user didn't import the smash armature using a more recent version.
+            # TODO: Infer the helper bones from constraints and only use custom properties for additional fields?
+            message = 'No _NUHLPB empty detected for the Smash Armature. Original helper bones may be lost on export.'
+            message += ' Reimport the Smash Armature to include bones and helper bones.'
+            self.report({'WARNING'}, message)
+
             new_nuhlpb_root_empty = create_new_empty('_NUHLPB', new_arma, output_collection)
-            new_nuhlpb_root_empty['major_version'] = old_nuhlpb_root_empty['major_version']
-            new_nuhlpb_root_empty['minor_version'] = old_nuhlpb_root_empty['minor_version']
+            new_nuhlpb_root_empty['major_version'] = 1
+            new_nuhlpb_root_empty['minor_version'] = 1
             new_aim_entries_empty = create_new_empty('aim_entries', new_nuhlpb_root_empty, output_collection)
             new_interpolation_entries_empty = create_new_empty('interpolation_entries', new_nuhlpb_root_empty, output_collection)
-
 
         if old_aim_entries_empty:
             for entry in old_aim_entries_empty.children:
