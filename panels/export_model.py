@@ -117,9 +117,9 @@ class ModelExporterOperator(Operator, ImportHelper):
         name="Bone Linkage",
         description="Pick 'Order & Values' unless you intentionally edited the vanilla bones.",
         items=(
-            ('ORDER_AND_VALUES', "Order & Values", "Pick this one unless u know not too"),
-            ('ORDER_ONLY', "Order Only", "Pick this if you edited the vanilla bones"),
-            ('NO_LINK', "No Link", "Pick this if you really know what ur doing"),
+            ('ORDER_AND_VALUES', "Order & Values", "Preserve the order and transforms of vanilla bones (recommended)"),
+            ('ORDER_ONLY', "Order Only", "Preserve the order of vanilla bones but use bone transforms from Blender."),
+            ('NO_LINK', "No Link", "Recreate the bone order and transforms from Blender (not recommended)."),
         ),
         default='ORDER_AND_VALUES',
     )
@@ -224,21 +224,15 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
 
 def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
-    # The skel needs to be made first to determine the mesh's bone influences.
     try:
-        if '' == context.scene.sub_vanilla_nusktb or linked_nusktb_settings == 'NO_LINK':
-            message = 'Creating .NUSKTB without a vanilla .NUSKTB file. Bone order will not be preserved and may cause animation issues in game.'
-            operator.report({'WARNING'}, message)
-            ssbh_skel_data = make_skel_no_link(context)
-        else:
-            ssbh_skel_data = make_skel(context, linked_nusktb_settings)
+        ssbh_skel_data = make_skel(operator, context, linked_nusktb_settings)
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
         return
 
-        # The uniform buffer for bone transformations in the skinning shader has a fixed size.
-        # Limit exports to 511 bones to prevent rendering issues and crashes in game.
-    if len(ssbh_skel_data.bones) >= 512:
+    # The uniform buffer for bone transformations in the skinning shader has a fixed size.
+    # Limit exports to 511 bones to prevent rendering issues and crashes in game.
+    if len(ssbh_skel_data.bones) > 511:
         operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
         return
 
@@ -318,8 +312,8 @@ def get_material_label_from_mesh(operator, mesh):
     return mat_label
 
 
-def find_bone_index(skel, name):
-    for i, bone in enumerate(skel.bones):
+def find_bone_index(bones, name):
+    for i, bone in enumerate(bones):
         if bone.name == name:
             return i
 
@@ -914,39 +908,44 @@ def unreorient_root(reoriented_matrix) -> Matrix:
     return m
 
 
-# TODO: Can these functions share code?
-def make_skel_no_link(context):
-    arma = context.scene.sub_model_export_armature
-    bpy.context.view_layer.objects.active = arma
-    # The object should be selected and visible before entering edit mode.
-    arma.select_set(True)
-    arma.hide_set(False)
-    bpy.ops.object.mode_set(mode='EDIT')
+def read_vanilla_nusktb(path, mode):
+    if not path:
+        raise RuntimeError(f'Link mode {mode} requires a vanilla .NUSKTB file to be selected.')
 
-    ssbh_skel = ssbh_data_py.skel_data.SkelData()
-    edit_bones = arma.data.edit_bones
-    edit_bones_list = list(edit_bones)
-    for edit_bone in edit_bones_list:
-        #if edit_bone.use_deform == False: # Need a way to not export user created control bones
-            #continue
-        ssbh_bone = None
-        if edit_bone.parent is not None:
-            unreoriented_matrix = unreorient_matrix(edit_bone.parent.matrix.inverted() @ edit_bone.matrix)
-            ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, unreoriented_matrix, edit_bones_list.index(edit_bone.parent))
-        else:
-            ssbh_bone = ssbh_data_py.skel_data.BoneData(edit_bone.name, unreorient_root(edit_bone.matrix), None)
-        ssbh_skel.bones.append(ssbh_bone) 
-
-    bpy.ops.object.mode_set(mode='OBJECT')
-    arma.select_set(False)
-    bpy.context.view_layer.objects.active = None
-    return ssbh_skel
+    try:
+        skel = ssbh_data_py.skel_data.read_skel(path)
+        return skel
+    except Exception as e:
+        message = 'Failed to read vanilla .NUSKTB. Ensure the file exists and is a valid .NUSKTB file.'
+        message += f' Error reading {path}: {e}'
+        raise RuntimeError(message)
 
 
-def make_skel(context, linked_nusktb_settings):
-    '''
-    Wow i wrote this terribly lol, #TODO ReWrite this
-    '''
+def get_ssbh_bone(blender_bone, parent_index):
+    if blender_bone.parent:
+        unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
+    else:
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreorient_root(blender_bone.matrix), None)
+
+
+def bone_order(bones, name):
+    # Preserve the existing bone index if possible.
+    # Set the bone index to a large value for added bones.
+    # Sort added bones by the bone group based on prefix.
+    i = find_bone_index(bones, name)
+    group = 0
+    if 'S_' in name:
+        group = 0
+    elif '_eff' in name or '_offset' in name:
+        group = 1
+    elif 'H_' in name:
+        group = 2
+
+    return (10000, group) if i is None else (i, group)
+    
+
+def make_skel(operator, context, mode):
     # TODO: Report error if a valid skel is not selected.
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
@@ -955,102 +954,41 @@ def make_skel(context, linked_nusktb_settings):
     arma.hide_set(False)
     bpy.ops.object.mode_set(mode='EDIT')
 
-    normal_bones = []
-    swing_bones = []
-    misc_bones = []
-    null_bones = []
-    helper_bones = []
+    skel = ssbh_data_py.skel_data.SkelData()
 
-    output_bones = {}
-    eb = arma.data.edit_bones
-    keys = eb.keys()
-    for key in keys:
-        if 'S_' in key:
-            swing_bones.append(eb[key])
-        elif any(ss in key for ss in ['_eff', '_offset'] ):
-            null_bones.append(eb[key])
-        elif 'H_' in key:
-            helper_bones.append(eb[key])
-        elif any(ss in key for ss in ['Mouth', 'Finger', 'Face']) or key == 'Have':
-            misc_bones.append(eb[key])
-            for child in eb[key].children_recursive:
-                if any(ss in child.name for ss in ['_eff', '_offset']):
-                    continue
-                misc_bones.append(child)
-                keys.remove(child.name)
-        else:
-            normal_bones.append(eb[key])
-            
-    for boneList in [normal_bones, swing_bones, misc_bones, null_bones, helper_bones]:
-        for bone in boneList:
-            #if bone.use_deform == False:
-                #continue
-            output_bones[bone.name] = bone
-    
-    ssbh_skel = ssbh_data_py.skel_data.SkelData()
- 
-    if '' != context.scene.sub_vanilla_nusktb:
-        reordered_bones = []
-        try:
-            vanilla_ssbh_skel = ssbh_data_py.skel_data.read_skel(context.scene.sub_vanilla_nusktb)
-        except Exception as e:
-            message = 'Failed to read vanilla .NUSKTB. Ensure the file exists and is a valid .NUSKTB file.'
-            message += f' Error reading {context.scene.sub_vanilla_nusktb}: {e}'
-            raise RuntimeError(message)
+    preserve_values = mode == 'ORDER_AND_VALUES'
+    preserve_order = mode == 'ORDER_AND_VALUES' or mode == 'ORDER_ONLY'
 
-        for vanilla_ssbh_bone in vanilla_ssbh_skel.bones:
-            linked_bone = output_bones.get(vanilla_ssbh_bone.name)
-            if linked_bone is None:
-                continue
-            reordered_bones.append(linked_bone)
-            del output_bones[linked_bone.name]
-        
-        for remaining_bone in output_bones.values():
-            reordered_bones.append(remaining_bone)
-        
-        ssbh_bone_name_to_bone_dict = {}
-        for ssbh_bone in vanilla_ssbh_skel.bones:
-            ssbh_bone_name_to_bone_dict[ssbh_bone.name] = ssbh_bone
-        
-        index = 0 # Debug
-        print(f'Reordered Bones = {reordered_bones} \n')
-        for blender_bone in reordered_bones:
-            ssbh_bone = None
-            if 'ORDER_AND_VALUES' == linked_nusktb_settings:
-                vanilla_ssbh_bone = ssbh_bone_name_to_bone_dict.get(blender_bone.name)
-                if vanilla_ssbh_bone is not None:
-                    #print('O&V Link Found: index %s, transform= %s' % (index, vanilla_ssbh_bone.transform))
-                    index = index + 1
-                    ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, vanilla_ssbh_bone.transform, reordered_bones.index(blender_bone.parent) if blender_bone.parent else None)
-                else:
-                    if blender_bone.parent:
-                        unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
-                        ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, reordered_bones.index(blender_bone.parent))
-                        #print(f'O&V No Link Found: index {index}, name {blender_bone.name}, rel_mat.transposed()= {rel_mat.transposed()}')
-                        index = index + 1
-                    else:
-                        ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreorient_root(blender_bone.matrix), None)
-            else:
-                if blender_bone.parent:
-                    '''
-                    blender_bone_matrix_as_list = [list(row) for row in blender_bone.matrix.transposed()]
-                    blender_bone_parent_matrix_as_list = [list(row) for row in blender_bone.parent.matrix.transposed()]
-                    rel_transform = ssbh_data_py.skel_data.calculate_relative_transform(blender_bone_matrix_as_list, blender_bone_parent_matrix_as_list)
-                    ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, rel_transform, reordered_bones.index(blender_bone.parent))
-                    '''
-                    unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
-                    ssbh_bone = ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, reordered_bones.index(blender_bone.parent))
-                    #print('OO: index %s, name %s, rel_mat.transposed()= %s' % (index, blender_bone.name, rel_mat.transposed()))
-                    index = index + 1
-                else:
-                    ssbh_bone = ssbh_data_py.skel_data.BoneData(blender_bone.name, unreorient_root(blender_bone.matrix), None)
-            ssbh_skel.bones.append(ssbh_bone)    
+    vanilla_skel = read_vanilla_nusktb(context.scene.sub_vanilla_nusktb, mode) if preserve_values or preserve_order else None
 
+    if vanilla_skel is None:
+        message = 'Creating .NUSKTB without a vanilla .NUSKTB file.'
+        message += ' Bone order will not be preserved and may cause animation issues in game.'
+        operator.report({'WARNING'}, message)
+
+    edit_bones = list(arma.data.edit_bones)
+    if vanilla_skel is not None and preserve_order:
+        # Sort based on the original order with added bones at the end.
+        edit_bones = sorted(edit_bones, key = lambda b: bone_order(vanilla_skel.bones, b.name))
+
+    # Flatten Blender's bone heirarchy into a list of bones with parent indices.
+    for blender_bone in edit_bones:
+        # TODO: Handle the case where a vanilla bone was deleted?
+        parent_index = edit_bones.index(blender_bone.parent) if blender_bone.parent else None
+        ssbh_bone = get_ssbh_bone(blender_bone, parent_index)
+
+        if vanilla_skel is not None and preserve_values:
+            # TODO: Will this correctly set the parent index?
+            vanilla_index = find_bone_index(vanilla_skel.bones, blender_bone.name)
+            if vanilla_index is not None:
+                ssbh_bone = vanilla_skel.bones[vanilla_index]
+
+        skel.bones.append(ssbh_bone)
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
     bpy.context.view_layer.objects.active = None
-    return ssbh_skel
+    return skel
 
 
 def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
