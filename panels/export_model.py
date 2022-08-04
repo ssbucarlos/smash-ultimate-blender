@@ -844,6 +844,8 @@ def split_duplicate_uvs(mesh, original_mesh):
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
     if len(edges_to_split) > 0:
+        # Remove duplicates to avoid exceptions when splitting.
+        edges_to_split = list(set(edges_to_split))
         bmesh.ops.split_edges(bm, edges=edges_to_split)
         bmesh.update_edit_mesh(me)
 
