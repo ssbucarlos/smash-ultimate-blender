@@ -1,5 +1,3 @@
-from ast import operator
-from lib2to3.pytree import Node
 import os
 import time
 from .import_model import get_ssbh_lib_json_exe_path
@@ -7,7 +5,6 @@ import bpy
 import os.path
 import numpy as np
 from pathlib import Path
-
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator, Panel
@@ -20,7 +17,6 @@ import subprocess
 from mathutils import Vector, Matrix
 import math
 from ..operators import material_inputs
-from itertools import groupby
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
