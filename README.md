@@ -15,10 +15,10 @@ Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for 
 
 ## System Requirements
 The plugin supports 64-bit versions of Blender 2.93 or 3.0 for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
-If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues). **The exo skel features require a Windows machine**, but it's possible to build [ssbh_lib_json](https://github.com/ultimate-research/ssbh_lib) from source for Linux or MacOS with Rust installed.
+If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues). **The nuhlpb import/export and the exo skel feature require a Windows machine. This will be fixed in a future update.**
 
-## Un-Installation / Updating (Please Read!)
-TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then u can install the newest version.
+## Uninstalling / Updating (Please Read!)
+TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then you can install the newest version.
 
 ## In case of problems?
 1. Export Issues? Please go read the [export issues](https://github.com/ssbucarlos/smash-ultimate-blender/wiki/Read-this-if-you-have-export-issues.-Or-want-to-avoid-Export-Issues) wiki page and see if your issue gets fixed, if not...
