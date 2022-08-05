@@ -162,6 +162,7 @@ class ModelFolderSelector(bpy.types.Operator, ImportHelper):
                 context.scene.sub_model_nuhlpb_file_name = model_file
         return {'FINISHED'}
 
+
 class ModelImporter(bpy.types.Operator):
     bl_idname = 'sub.model_importer'
     bl_label = 'Model Importer'
@@ -175,37 +176,52 @@ class ModelImporter(bpy.types.Operator):
         print(f'Imported model in {end - start} seconds')
         return {'FINISHED'}
 
+
 def import_model(self, context):
-    dir = context.scene.sub_model_folder_path
-    numdlb_name = context.scene.sub_model_numdlb_file_name
-    numshb_name = context.scene.sub_model_numshb_file_name
-    nusktb_name = context.scene.sub_model_nusktb_file_name
-    numatb_name = context.scene.sub_model_numatb_file_name
-    nuhlpb_name = context.scene.sub_model_nuhlpb_file_name
+    dir = Path(context.scene.sub_model_folder_path)
+
+    numdlb_name = dir.joinpath(context.scene.sub_model_numdlb_file_name)
+    numshb_name = dir.joinpath(context.scene.sub_model_numshb_file_name)
+    nusktb_name = dir.joinpath(context.scene.sub_model_nusktb_file_name)
+    numatb_name = dir.joinpath(context.scene.sub_model_numatb_file_name)
+    nuhlpb_name = dir.joinpath(context.scene.sub_model_nuhlpb_file_name)
 
     start = time.time()
-    ssbh_model = ssbh_data_py.modl_data.read_modl(dir + numdlb_name) if numdlb_name != '' else None
+    ssbh_model = ssbh_data_py.modl_data.read_modl(str(numdlb_name)) if numdlb_name != '' else None
 
     # Numpy provides much faster performance than Python lists.
     # TODO(SMG): This API for ssbh_data_py will likely have changes and improvements in the future.
-    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(dir + numshb_name, use_numpy=True) if numshb_name != '' else None
-
-    ssbh_skel = ssbh_data_py.skel_data.read_skel(dir + nusktb_name) if numshb_name != '' else None
-    ssbh_matl = ssbh_data_py.matl_data.read_matl(dir + numatb_name) if numatb_name != '' else None
-    nuhlpb_json = read_nuhlpb_json(dir + nuhlpb_name) if nuhlpb_name != '' else None
+    ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(str(numshb_name), use_numpy=True) if numshb_name != '' else None
+    ssbh_skel = ssbh_data_py.skel_data.read_skel(str(nusktb_name)) if numshb_name != '' else None
+    ssbh_matl = ssbh_data_py.matl_data.read_matl(str(numatb_name)) if numatb_name != '' else None
     end = time.time()
     print(f'Read files in {end - start} seconds')
 
-    armature = create_armature(ssbh_skel, context)
-    created_meshes = create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
-    import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
+    try:
+        armature = create_armature(ssbh_skel, context)
+    except Exception as e:
+        self.report({'ERROR'}, f'Failed to import {nusktb_name}: {e}')
+
+    try:
+        create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
+    except Exception as e:
+        self.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB: {e}')
+
+    try:
+        nuhlpb_json = read_nuhlpb_json(str(nuhlpb_name)) if nuhlpb_name != '' else None
+        import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
+    except Exception as e:
+        self.report({'ERROR'}, f'Failed to import {nuhlpb_name}: {e}')
+
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
+
 
 def get_ssbh_lib_json_exe_path():
     # Use the Path class to handle path differences between Windows, Linux, and MacOS.
     this_file_path = Path(__file__)
     return this_file_path.parent.parent.joinpath('ssbh_lib_json').joinpath('ssbh_lib_json.exe').resolve()
+
 
 def get_shader_db_file_path():
     # This file was generated with duplicates removed to optimize space.
