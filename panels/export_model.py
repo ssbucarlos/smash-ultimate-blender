@@ -137,19 +137,18 @@ class ModelExporterOperator(Operator, ImportHelper):
 
 
 def export_model(operator, context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
-    '''
-    numdlb and numshb are inherently linked, must export both if exporting one
-    if include_numdlb:
-        export_numdlb(context, filepath)
-    '''
-    # Make sure this is a folder instead of a file.
-    # TODO: This doesn't work if the file path isn't actually a file on disk?
-    folder = Path(filepath)
-    if folder.is_file():
-        folder = folder.parent
-
     # Prepare the scene for export and find the meshes to export.
     arma = context.scene.sub_model_export_armature
+    try:
+        context.view_layer.objects.active = arma
+    except:
+        operator.report({'ERROR'}, f'{arma.name} is not a valid armature name. Please select a valid armature.')
+        return
+
+    # TODO: Investigate why export fails if meshes are selected before hitting export.
+    for selected_object in context.selected_objects:
+        selected_object.select_set(False)
+
     export_meshes = [child for child in arma.children if child.type == 'MESH']
     export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
     # TODO: Is it possible to keep the correct order for non imported meshes?
@@ -172,13 +171,6 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     export_mesh_groups = export_mesh_groups.items()
 
-    '''
-    TODO: Investigate why export fails if meshes are selected before hitting export.
-    '''
-    for selected_object in context.selected_objects:
-        selected_object.select_set(False)
-    context.view_layer.objects.active = arma
-
     start = time.time()
 
     try:
@@ -187,6 +179,12 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
         return
+
+    # Make sure this is a folder instead of a file.
+    # TODO: This doesn't work if the file path isn't actually a file on disk?
+    folder = Path(filepath)
+    if folder.is_file():
+        folder = folder.parent
 
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
@@ -946,7 +944,6 @@ def bone_order(bones, name):
     
 
 def make_skel(operator, context, mode):
-    # TODO: Report error if a valid skel is not selected.
     arma = context.scene.sub_model_export_armature
     bpy.context.view_layer.objects.active = arma
     # The object should be selected and visible before entering edit mode.
