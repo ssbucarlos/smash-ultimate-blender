@@ -711,11 +711,14 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
         if len(vertex.groups) == 0 or all([g.weight == 0.0 for g in vertex.groups]):
             has_unweighted_vertices = True
 
+        # Blender doesn't enforce normalization, since it normalizes while animating.
+        # Normalize on export to ensure the weights work correctly in game.
+        weight_sum = sum([g.weight for g in vertex.groups])
         for group in vertex.groups:
             # Remove unused weights on export.
             if group.weight > 0.0:
-                ssbh_vertex_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight)
-                group_to_weights[group.group][1].append(ssbh_vertex_weight)
+                ssbh_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight / weight_sum)
+                group_to_weights[group.group][1].append(ssbh_weight)
 
     if has_unweighted_vertices:
         message = f'Mesh {mesh_name} has unweighted vertices or vertices with only 0.0 weights.'
