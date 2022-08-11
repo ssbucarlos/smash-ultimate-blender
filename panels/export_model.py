@@ -676,15 +676,6 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
     mesh.data.loops.foreach_get("vertex_index", vertex_indices)
     ssbh_mesh_object.vertex_indices = vertex_indices
 
-    # Mesh version 1.10 only has 16-bit unsigned vertex indices for skin weights.
-    # The count is one more than the largest index.
-    vertex_count = vertex_indices.max() + 1
-    if vertex_count > 65535:
-        message = f'Vertex count {vertex_count} exceeds the limit of 65536 for mesh {mesh_name}.'
-        message += ' Reduce the number of vertices or split the mesh into smaller meshes.'
-        message += ' Note that splitting duplicate UVs will increase the vertex count.'
-        raise RuntimeError(message)
-
     # We use the loop normals rather than vertex normals to allow exporting custom normals.
     mesh.data.calc_normals_split()
 
@@ -742,6 +733,15 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
         # For example, fighter/miifighter/model/b_deacon_m weights vertices to effect bones.
         if len(weights) > 0:
             ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
+    
+    # Mesh version 1.10 only has 16-bit unsigned vertex indices for skin weights.
+    # Meshes without vertex skinning can use the full range of 32-bit unsigned vertex indices.
+    vertex_index = vertex_indices.max()
+    if len(ssbh_mesh_object.bone_influences) > 0 and vertex_index > 65535:
+        message = f'Vertex index {vertex_index} exceeds the limit of 65535 for mesh {mesh_name}.'
+        message += ' Reduce the number of vertices or split the mesh into smaller meshes.'
+        message += ' Note that splitting duplicate UVs will increase the vertex count.'
+        raise RuntimeError(message)
 
     smash_uv_names = ['map1', 'bake1', 'uvSet', 'uvSet1', 'uvSet2']
     for uv_layer in mesh.data.uv_layers:
