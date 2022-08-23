@@ -242,8 +242,14 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                         # This matches the convention used for Smash Ultimate.
                         pass
         else:
-            fixed_matrix = reorient_root(raw_matrix, transpose=False)
-            bone.matrix = fixed_matrix
+            from bpy_extras.io_utils import axis_conversion
+            converter_matrix = axis_conversion(
+                from_forward='Z', 
+                from_up='-X',
+                to_forward='-Y',
+                to_up='Z').to_4x4()
+            bone.matrix = converter_matrix @ raw_matrix
+
 
         keyframe_insert_bone_locrotscale(context.scene.sub_anim_armature, bone.name, frame, 'Transform')
 
