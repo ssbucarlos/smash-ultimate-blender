@@ -5,3 +5,4 @@ from . import io_matl
 from . import import_model
 from . import export_model
 from . import import_anim
+from . import export_anim
