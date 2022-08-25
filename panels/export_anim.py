@@ -120,20 +120,27 @@ def export_model_anim(context, filepath,
             if bone.parent:
                 m = bone.parent.matrix.inverted() @ bone.matrix
                 m = unreorient_matrix(m).transposed()
-                ms = m.to_scale()
-                mq = m.to_quaternion()
-                mt = m.to_translation()
-                node = name_to_node[bone.name]
-                track = node.tracks[0]
-                new_ssbh_transform = ssbh_data_py.anim_data.Transform(
-                    [ms[0], ms[1], ms[2]], 
-                    [mq[1], mq[2], mq[3], mq[0]],
-                    [mt[0], mt[1], mt[2]]
-                )
-                track.values.append(new_ssbh_transform)
             else:
-                pass
+                from bpy_extras.io_utils import axis_conversion
+                converter_matrix = axis_conversion(
+                    from_forward='Z', 
+                    from_up='-X',
+                    to_forward='-Y',
+                    to_up='Z').to_4x4()
+                m = converter_matrix.inverted() @ bone.matrix
             
+            ms = m.to_scale()
+            mq = m.to_quaternion()
+            mt = m.to_translation()
+            node = name_to_node[bone.name]
+            track = node.tracks[0]
+            new_ssbh_transform = ssbh_data_py.anim_data.Transform(
+                [ms[0], ms[1], ms[2]], 
+                [mq[1], mq[2], mq[3], mq[0]],
+                [mt[0], mt[1], mt[2]]
+            )
+            track.values.append(new_ssbh_transform)
+
     print(ssbh_anim_data.groups)
 
     ssbh_anim_data.save(filepath)
