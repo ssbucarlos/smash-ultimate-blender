@@ -17,7 +17,7 @@ class ExportAnimPanel(bpy.types.Panel):
         layout.use_property_split = False
 
         row = layout.row(align=True)
-        row.label(text="Select an Armature or Camera. It's current animation will be exported.")
+        row.label(text="Select an Armature or Camera.")
 
         if context.scene.sub_anim_armature is None and context.scene.sub_anim_camera is None:
             row = layout.row(align=True)
@@ -27,16 +27,17 @@ class ExportAnimPanel(bpy.types.Panel):
             return
         elif context.scene.sub_anim_armature is not None:
             row = layout.row(align=True)
-            row.label(text=f'Selected armature: {context.scene.sub_anim_armature.name}')
-            row.operator('sub.anim_armature_clear', icon='CANCEL', text='Clear Selected Armature')
-            row = layout.row(align=True)
-            row.operator('sub.anim_model_exporter', icon='FILE', text='Export a Model Animation')
+            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA')
+            if context.scene.sub_anim_armature.animation_data is None:
+                row = layout.row(align=True)
+                row.label(text='The selected armature has no loaded animation!', icon='ERROR')
+            else:
+                row = layout.row(align=True)
+                row.operator('sub.anim_model_exporter', icon='FILE', text='Export a Model Animation')
         elif context.scene.sub_anim_camera is not None:
             row = layout.row(align=True)
-            row.label(text=f'Selected camera: {context.scene.sub_anim_camera.name}')
-            row.operator('sub.anim_camera_clear', icon='CANCEL', text='Clear Selected Camera')
-            row = layout.row(align=True)
-            row.operator('sub.anim_camera_importer', icon='FILE', text='Export a Camera Animation')
+            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA')
+            row.operator('sub.anim_camera_exporter', icon='FILE', text='Export a Camera Animation')
 
 class AnimModelExporterOperator(Operator):
     bl_idname = 'sub.anim_model_exporter'
@@ -94,17 +95,20 @@ def export_model_anim(context, filepath,
 
     ssbh_anim_data = ssbh_data_py.anim_data.AnimData()
     ssbh_anim_data.final_frame_index = last_blender_frame - first_blender_frame
+    if include_transform_track:
+        trans_group = make_transform_group(context, first_blender_frame, last_blender_frame)
+        ssbh_anim_data.groups.append(trans_group)
+    ssbh_anim_data.save(filepath)
+    
+def make_transform_group(context, first_blender_frame, last_blender_frame):
     trans_type = ssbh_data_py.anim_data.GroupType.Transform
-    trans_group = ssbh_data_py.anim_data.GroupData(trans_type)
-    ssbh_anim_data.groups.append(trans_group)
-    # Armature animation data is stored at the 'Object' level, not the 'Data' level.
+    trans_group = ssbh_data_py.anim_data.GroupData(trans_type)   
     arma_obj = context.scene.sub_anim_armature
     all_bone_names = [b.name for b in arma_obj.pose.bones]
     fcurves = arma_obj.animation_data.action.fcurves
     curve_names = {curve.data_path.split('"')[1] for curve in fcurves}
     animated_bone_names = [cn for cn in curve_names if cn in all_bone_names]
     animated_bones = [bone for bone in arma_obj.pose.bones if bone.name in animated_bone_names]
-    bone_to_trans_values = {bone:[] for bone in animated_bones}
     for bone in animated_bones:
         node = ssbh_data_py.anim_data.NodeData(bone.name)
         track = ssbh_data_py.anim_data.TrackData('Transform')
@@ -112,10 +116,10 @@ def export_model_anim(context, filepath,
         trans_group.nodes.append(node)
     name_to_node = {node.name:node for node in trans_group.nodes}
     # changing frames is expensive so need to setup loop to only do once
+    from .export_model import unreorient_matrix
     for frame in range(first_blender_frame, last_blender_frame+1):
         context.scene.frame_set(frame)
         for bone in animated_bones:
-            from .export_model import unreorient_matrix
             m:bpy.types.Matrix = None
             if bone.parent:
                 m = bone.parent.matrix.inverted() @ bone.matrix
@@ -128,7 +132,6 @@ def export_model_anim(context, filepath,
                     to_forward='-Y',
                     to_up='Z').to_4x4()
                 m = converter_matrix.inverted() @ bone.matrix
-            
             ms = m.to_scale()
             mq = m.to_quaternion()
             mt = m.to_translation()
@@ -140,14 +143,7 @@ def export_model_anim(context, filepath,
                 [mt[0], mt[1], mt[2]]
             )
             track.values.append(new_ssbh_transform)
-
-    print(ssbh_anim_data.groups)
-
-    ssbh_anim_data.save(filepath)
-    
-
-
-
+    return trans_group
 
 
 
