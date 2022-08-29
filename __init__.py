@@ -52,6 +52,19 @@ classes = [
     panels.import_anim.AnimCameraImporterOperator,
     panels.export_anim.ExportAnimPanel,
     panels.export_anim.AnimModelExporterOperator,
+    panels.anim_properties.DATA_PT_sub_smush_anim_data_master,
+    panels.anim_properties.DATA_PT_sub_smush_anim_data_vis_tracks,
+    panels.anim_properties.DATA_PT_sub_smush_anim_data_mat_tracks,
+    panels.anim_properties.SUB_UL_vis_track_entries,
+    panels.anim_properties.VisTrackEntry,
+    panels.anim_properties.MatTrackEntry,
+    panels.anim_properties.MatTrack,
+    panels.anim_properties.SubAnimProperties,
+    panels.anim_properties.SUB_OP_vis_entry_add,
+    panels.anim_properties.SUB_OP_vis_entry_remove,
+    panels.anim_properties.SUB_OP_vis_drivers_refresh,
+    panels.anim_properties.SUB_OP_vis_drivers_remove,
+    panels.anim_properties.SUB_MT_vis_entry_context_menu
 ]
 
 def register():
@@ -64,6 +77,7 @@ def register():
 
     properties.register()
     shaders.custom_sampler_node.register()
+    bpy.types.Armature.sub_anim_properties = bpy.props.PointerProperty(type=panels.anim_properties.SubAnimProperties)
     print('Loaded Smash Ultimate Blender Tools!')
 
 def unregister():

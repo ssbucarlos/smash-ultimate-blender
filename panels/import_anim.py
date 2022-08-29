@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import math
 from os import name
 import bpy
@@ -147,9 +148,6 @@ def import_model_anim(context, filepath,
         bones = context.scene.sub_anim_armature.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
         setup_bone_scale_drivers(bone_to_node.keys()) # Only want to setup drivers for the bones that have an entry in the anim
-    
-    if include_visibility_track and visibility_group is not None:
-        setup_visibility_drivers(context, visibility_group)
 
     if include_material_track and material_group is not None:
         setup_material_drivers(context, material_group)
@@ -162,7 +160,10 @@ def import_model_anim(context, filepath,
             do_material_stuff(context, material_group, index, frame)
         if include_visibility_track and visibility_group is not None:
             do_visibility_stuff(context, visibility_group, index, frame)
-    
+
+    if include_visibility_track and visibility_group is not None:
+        setup_visibility_drivers(context)
+
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
 
@@ -366,26 +367,25 @@ def do_material_stuff(context, material_group, index, frame):
             arma.keyframe_insert(data_path=f'["{node.name}:{track.name}"]', frame=frame, group='Material', options={'INSERTKEY_NEEDED'})
 
 
-def setup_visibility_drivers(context, visibility_group):
+def setup_visibility_drivers(context):
+    # Setup Vis Drivers
+    arma = context.scene.sub_anim_armature
+    vis_track_entries = arma.data.sub_anim_properties.vis_track_entries
     mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
-    
-    # Create the custom property on the armature
-    for node in visibility_group.nodes:
-        context.scene.sub_anim_armature[f"{node.name}"] = True
+    for mesh in mesh_children:
+        true_mesh_name = re.split('Shape|_VIS_|_O_', mesh.name)[0]
+        if any(true_mesh_name == key for key in vis_track_entries.keys()):
+            entries_index = vis_track_entries.find(true_mesh_name)
+            for property in ['hide_viewport', 'hide_render']:
+                driver_handle = mesh.driver_add(property)
+                var = driver_handle.driver.variables.new()
+                var.name = "var"
+                target = var.targets[0]
+                target.id_type = 'ARMATURE'
+                target.id = context.scene.sub_anim_armature.data
+                target.data_path = f'sub_anim_properties.vis_track_entries[{entries_index}].value'
+                driver_handle.driver.expression = f'1 - {var.name}'
 
-    # Setup the mesh drivers
-    for node in visibility_group.nodes:
-        for mesh in mesh_children:
-            true_mesh_name = re.split('Shape|_VIS_|_O_', mesh.name)[0]
-            if true_mesh_name == node.name:
-                for property in ['hide_viewport', 'hide_render']:
-                    driver_handle = mesh.driver_add(property)
-                    var = driver_handle.driver.variables.new()
-                    var.name = "var"
-                    target = var.targets[0]
-                    target.id = context.scene.sub_anim_armature
-                    target.data_path = f'["{true_mesh_name}"]'
-                    driver_handle.driver.expression = f'1 - {var.name}'
 
 def do_visibility_stuff(context, visibility_group, index, frame):
     for node in visibility_group.nodes:
@@ -396,8 +396,17 @@ def do_visibility_stuff(context, visibility_group, index, frame):
         value = node.tracks[0].values[index]
 
         arma = context.scene.sub_anim_armature
-        arma[f'{node.name}'] = value
-        arma.keyframe_insert(data_path=f'["{node.name}"]', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
+        #arma[f'{node.name}'] = value
+        #arma.keyframe_insert(data_path=f'["{node.name}"]', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
+        entries = arma.data.sub_anim_properties.vis_track_entries
+        sub_vis_track_entry = entries.get(node.name, None)
+        if sub_vis_track_entry is None:
+            sub_vis_track_entry = entries.add()
+            sub_vis_track_entry.name = node.name
+        sub_vis_track_entry.value = value
+        entry_index = entries.find(sub_vis_track_entry.name)
+        arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{entry_index}].value', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
+
 
 def import_camera_anim(context, filepath, first_blender_frame):
     camera = context.scene.sub_anim_camera

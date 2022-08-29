@@ -6,3 +6,4 @@ from . import import_model
 from . import export_model
 from . import import_anim
 from . import export_anim
+from . import anim_properties
