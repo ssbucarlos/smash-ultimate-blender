@@ -70,6 +70,10 @@ class SUB_OP_vis_entry_add(bpy.types.Operator):
     bl_label = 'Add Vis Track Entry'
 
     def execute(self, context):
+        entries = context.object.data.sub_anim_properties.vis_track_entries
+        entry = entries.add()
+        entry.name = 'New Vis Track Entry'
+        entry.value = True
         return {'FINISHED'} 
 
 class SUB_OP_vis_entry_remove(bpy.types.Operator):
@@ -77,7 +81,22 @@ class SUB_OP_vis_entry_remove(bpy.types.Operator):
     bl_label = 'Remove Vis Track Entry'
 
     def execute(self, context):
-        
+        '''
+        Dont actually remove from list cuz fcurves and drivers will be messed up
+            since they rely on the index of the entry.
+        Current workaround, mark the entry as 'deleted' and remove fcurve.
+        Make sure UI and exporter dont show/export a 'deleted' entry.
+        '''
+        # Mark as Deleted
+        sap = context.object.data.sub_anim_properties
+        active_entry = sap.vis_track_entries[sap.active_vis_track_index]
+        active_entry.deleted = True
+        # Find matching Fcurve and Remove
+        fcurves = context.object.data.animation_data.action.fcurves
+        for fc in fcurves:
+            ai = sap.active_vis_track_index
+            if fc.data_path == f'sub_anim_properties.vis_track_entries[{ai}].value':
+                fcurves.remove(fc)
         return {'FINISHED'} 
 
 
@@ -87,7 +106,7 @@ class SUB_OP_vis_drivers_refresh(bpy.types.Operator):
 
     def execute(self, context):
         from .import_anim import setup_visibility_drivers
-        setup_visibility_drivers(context)
+        setup_visibility_drivers(context.object)
         return {'FINISHED'} 
 
 class SUB_OP_vis_drivers_remove(bpy.types.Operator):
@@ -134,6 +153,45 @@ class SUB_UL_vis_track_entries(bpy.types.UIList):
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
+    def draw_filter(self, context, layout):
+        # Nothing much to say here, it's usual UI code...
+        split = layout.split(factor=0.66, align=False)
+        split.prop(self, "filter_name", text="")
+        row = split.row(align=True)
+        row.prop(self, "use_filter_sort_alpha", icon='SORTALPHA', toggle=True)
+        icon = 'SORT_DESC' if self.use_filter_sort_reverse else 'SORT_ASC'
+        row.prop(self, "use_filter_sort_reverse", text="", icon=icon)
+
+    def filter_items(self, context, data, propname):
+        '''
+        Pretty much default UI code except for not displaying the "deleted" entries
+        '''
+        entries = getattr(data, propname)
+        helper_funcs = bpy.types.UI_UL_list
+
+        # Default return values.
+        flt_flags = []
+        flt_neworder = []
+
+        # Filtering by name
+        if self.filter_name:
+            flt_flags = helper_funcs.filter_items_by_name(self.filter_name,
+                                        self.bitflag_filter_item, entries, "name",
+                                        reverse=self.use_filter_invert)
+        if not flt_flags:
+            flt_flags = [self.bitflag_filter_item] * len(entries)
+
+        # Filter by deletion.
+        for index, entry in enumerate(entries):
+            if entry.deleted == True:
+                flt_flags[index] &= ~self.bitflag_filter_item
+
+
+        # Reorder by name
+        if self.use_filter_sort_alpha:
+            flt_neworder = helper_funcs.sort_items_by_name(entries, "name")
+        
+        return flt_flags, flt_neworder
 
 class DATA_PT_sub_smush_anim_data_mat_track_entry(bpy.types.Panel):
     bl_label = "Ultimate Material Track Entry"
@@ -180,6 +238,7 @@ class DATA_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
 class VisTrackEntry(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Vis Name", default="Unknown")
     value: bpy.props.BoolProperty(name="Visible", default=False)
+    deleted: bpy.props.BoolProperty(name="Deleted", default=False)
 
 mat_sub_types = (
     ('VECTOR', 'Vector', 'Custom Vector'),

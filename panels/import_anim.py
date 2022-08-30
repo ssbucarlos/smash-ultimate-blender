@@ -162,7 +162,7 @@ def import_model_anim(context, filepath,
             do_visibility_stuff(context, visibility_group, index, frame)
 
     if include_visibility_track and visibility_group is not None:
-        setup_visibility_drivers(context)
+        setup_visibility_drivers(context.scene.sub_anim_armature)
 
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
@@ -367,22 +367,25 @@ def do_material_stuff(context, material_group, index, frame):
             arma.keyframe_insert(data_path=f'["{node.name}:{track.name}"]', frame=frame, group='Material', options={'INSERTKEY_NEEDED'})
 
 
-def setup_visibility_drivers(context):
+def setup_visibility_drivers(armature_object:bpy.types.Object):
     # Setup Vis Drivers
-    arma = context.scene.sub_anim_armature
+    #arma = context.scene.sub_anim_armature
+    arma = armature_object
     vis_track_entries = arma.data.sub_anim_properties.vis_track_entries
-    mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
+    mesh_children = [child for child in arma.children if child.type == 'MESH']
     for mesh in mesh_children:
         true_mesh_name = re.split('Shape|_VIS_|_O_', mesh.name)[0]
         if any(true_mesh_name == key for key in vis_track_entries.keys()):
             entries_index = vis_track_entries.find(true_mesh_name)
+            if vis_track_entries[entries_index].deleted == True:
+                continue
             for property in ['hide_viewport', 'hide_render']:
                 driver_handle = mesh.driver_add(property)
                 var = driver_handle.driver.variables.new()
                 var.name = "var"
                 target = var.targets[0]
                 target.id_type = 'ARMATURE'
-                target.id = context.scene.sub_anim_armature.data
+                target.id = arma.data
                 target.data_path = f'sub_anim_properties.vis_track_entries[{entries_index}].value'
                 driver_handle.driver.expression = f'1 - {var.name}'
 
