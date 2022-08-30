@@ -102,8 +102,9 @@ def export_model_anim(context, filepath,
         vis_group = make_visibility_group(context, first_blender_frame, last_blender_frame)
         ssbh_anim_data.groups.append(vis_group)
     if include_material_track:
-        mat_group = make_material_group(context, first_blender_frame, last_blender_frame)
-        ssbh_anim_data.groups.append(vis_group)
+        pass
+        #mat_group = make_material_group(context, first_blender_frame, last_blender_frame)
+        #ssbh_anim_data.groups.append(mat_group)
     ssbh_anim_data.save(filepath)
     
 def make_transform_group(context, first_blender_frame, last_blender_frame):
@@ -152,26 +153,29 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
     return trans_group
 
 def make_visibility_group(context, first_blender_frame, last_blender_frame):
+    # Setup SSBH group
     vis_type = ssbh_data_py.anim_data.GroupType.Visibility
     vis_group = ssbh_data_py.anim_data.GroupData(vis_type)
-    arma_obj = context.scene.sub_anim_armature
-    mesh_children = [child for child in arma_obj.children if child.type == 'MESH']
-    animated_mesh_children = [mesh for mesh in mesh_children if mesh.animation_data]
-    # 2 methods a mesh can be hidden, currently only support the smush_blender method of drivers.
-    driver_meshes = [amc for amc in animated_mesh_children if len(amc.animation_data.drivers)>0]
-    keyframed_meshes = [amc for amc in animated_mesh_children if amc.animation_data.action]
-    smush_driver_meshes = []
-    mesh_to_driver = {}
-    vis_track_names = []
-    for mesh in driver_meshes:
-        for driver in mesh.animation_data.drivers:
-            if driver.data_path == 'hide_viewport':
-                smush_driver_meshes.append(mesh)
-                mesh_to_driver[mesh] = driver
-    for mesh, driver in mesh_to_driver.items():
-        vis_track_names.append(driver.driver.variables[0].targets[0].data_path)
-    vis_track_names = list(set(vis_track_names))
-    vis_track_names = [s[2:-2] for s in vis_track_names] # Prune "" and []
+    # Setup SSBH Node
+    entries = context.scene.sub_anim_armature.data.sub_anim_properties.vis_track_entries
+    for entry in entries:
+        if entry.deleted == True:
+            pass
+        node = ssbh_data_py.anim_data.NodeData(entry.name)
+        track = ssbh_data_py.anim_data.TrackData('Visibility')
+        node.tracks.append(track)
+        vis_group.nodes.append(node)
+    name_to_node = {node.name:node for node in vis_group.nodes}
+    # Set Node Values
+    for frame in range(first_blender_frame, last_blender_frame + 1):
+        context.scene.frame_set(frame)
+        for entry in entries:
+            if entry.deleted == True:
+                pass
+            node = name_to_node[entry.name]
+            track = node.tracks[0]
+            track.values.append(entry.value)
+    return vis_group
     
 def make_material_group():
     pass
