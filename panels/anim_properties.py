@@ -1,6 +1,12 @@
 import bpy
-from bpy.types import Panel
-from rna_prop_ui import PropertyPanel
+
+mat_sub_types = (
+    ('VECTOR', 'Custom Vector', 'Custom Vector'),
+    ('FLOAT', 'Custom Float', 'Custom Float'),
+    ('BOOL', 'Custom Bool', 'Custom Bool'),
+    ('PATTERN', 'Pattern Index', 'Pattern Index'),
+    ('TEXTURE', 'Texture Transform', 'Texture Transform')
+)
 
 class DATA_PT_sub_smush_anim_data_master(bpy.types.Panel):
     bl_label = "Ultimate Animation Data"
@@ -54,16 +60,160 @@ class DATA_PT_sub_smush_anim_data_vis_tracks(bpy.types.Panel):
         col.operator('sub.vis_entry_remove', icon='REMOVE', text="")
         col.separator()
         col.menu("SUB_MT_vis_entry_context_menu", icon='DOWNARROW_HLT', text="")
-        '''
-        for vis_track in arma.sub_anim_properties.vis_track_entries:
-            split = layout.split(factor=0.4, align=True)
-            label_row = split.row()
-            label_row.alignment = 'RIGHT'
-            label_row.label(text=vis_track.name, translate=False)
-            value_row = split.row(align=True)
-            value_column = value_row.column(align=True)
-            value_column.prop(vis_track, 'value', text="")
-        '''
+
+class DATA_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
+    bl_label = "Ultimate Material Tracks"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "data"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "DATA_PT_sub_smush_anim_data_master"
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+        arma = obj.data
+        col = layout.column()
+        row = col.row()
+        split = row.split(factor=.4)
+        c = split.column()
+        c.label(text='Material Names')
+        c.template_list(
+            "SUB_UL_mat_tracks",
+            "",
+            arma.sub_anim_properties,
+            "mat_tracks",
+            arma.sub_anim_properties,
+            "active_mat_track_index",
+            rows=5,
+            maxrows=5,
+            )
+        split = split.split(factor=.66)
+        c = split.column()
+        c.label(text='Property Names')
+        amti = arma.sub_anim_properties.active_mat_track_index
+        if len(arma.sub_anim_properties.mat_tracks) > 0:
+            c.template_list(
+                "SUB_UL_mat_properties",
+                "",
+                arma.sub_anim_properties.mat_tracks[amti],
+                "properties",
+                arma.sub_anim_properties.mat_tracks[amti],
+                "active_property_index",
+                rows=5,
+                maxrows=5,
+            )
+        else:
+            c.enabled = False
+        split = split.split()
+        c = split.column()
+        c.label(text='Property Values')
+        if len(arma.sub_anim_properties.mat_tracks) > 0:
+            if len(arma.sub_anim_properties.mat_tracks[amti].properties) > 0:
+                amtpi = arma.sub_anim_properties.mat_tracks[amti].active_property_index
+                ap = arma.sub_anim_properties.mat_tracks[amti].properties[amtpi]
+                if ap.sub_type == 'VECTOR':
+                    c.prop(ap, "custom_vector", text="", emboss=False)
+                elif ap.sub_type == 'FLOAT':
+                    c.prop(ap, "custom_float", text="", emboss=False)
+                elif ap.sub_type == 'BOOL':
+                    icon = 'CHECKBOX_HLT' if ap.custom_bool == True else 'CHECKBOX_DEHLT'
+                    c.prop(ap, "custom_bool", text="", icon=icon, emboss=False)
+                elif ap.sub_type == 'PATTERN':
+                    c.prop(ap, "pattern_index", text="", emboss=False)
+                elif ap.sub_type == 'TEXTURE':
+                    c.prop(ap, "texture_transform", text="", emboss=False)
+            else:
+                c.enabled = False
+        else:
+            c.enabled = False
+        # Bottom Row, composed of 3 Sub Rows algined with the above columns
+        row = layout.row()
+        # Sub Row 1
+        split = row.split(factor=.4)
+        sr = split.row(align=True)
+        sr.operator(SUB_OP_mat_track_add.bl_idname, text='+')
+        sr.operator(SUB_OP_mat_track_remove.bl_idname, text='-')
+        # Sub Row 2
+        split = split.split(factor=.66)
+        sr = split.row(align=True)
+        sr.operator(SUB_OP_mat_property_add.bl_idname, text='+')
+        sr.operator(SUB_OP_mat_property_remove.bl_idname, text='-')
+        # Sub 3
+        split = split.split()
+        sr = split.row(align=True)
+        sr.menu(SUB_MT_mat_entry_context_menu.bl_idname, text='Drivers...')
+
+class SUB_OP_mat_track_add(bpy.types.Operator):
+    bl_idname = 'sub.mat_track_add'
+    bl_label  = 'Add Mat Track'
+
+    def execute(self, context):
+        mat_tracks = context.object.data.sub_anim_properties.mat_tracks
+        mat_track = mat_tracks.add()
+        mat_track.name = 'New Mat Track'
+        return {'FINISHED'}
+
+class SUB_OP_mat_track_remove(bpy.types.Operator):
+    bl_idname = 'sub.mat_track_remove'
+    bl_label = 'Remove Mat Track'
+
+    @classmethod
+    def poll(cls, context):
+        sap = context.object.data.sub_anim_properties
+        return len(sap.mat_tracks) > 0
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_OP_mat_property_add(bpy.types.Operator):
+    bl_idname = 'sub.mat_prop_add'
+    bl_label = 'Add Material Property'
+    bl_property = "sub_type"
+
+    sub_type: bpy.props.EnumProperty(
+        name='Mat Track Entry Subtype',
+        description='',
+        items=mat_sub_types, 
+        default='VECTOR',)
+
+    @classmethod
+    def poll(cls, context):
+        sap = context.object.data.sub_anim_properties
+        return len(sap.mat_tracks) > 0
+
+    def execute(self, context):
+        sap = context.object.data.sub_anim_properties
+        props = sap.mat_tracks[sap.active_mat_track_index].properties
+        prop = props.add()
+        prop.sub_type = self.sub_type
+        prop.name = f'New {self.sub_type} Property'
+        return {'FINISHED'}
+    def invoke(self, context, event):
+        context.window_manager.invoke_search_popup(self)
+        return {'RUNNING_MODAL'}
+
+class SUB_OP_mat_property_remove(bpy.types.Operator):
+    bl_idname = 'sub.mat_prop_remove'
+    bl_label = 'Remove Material Property'
+
+    @classmethod
+    def poll(cls, context):
+        sap = context.object.data.sub_anim_properties
+        if len(sap.mat_tracks) > 0:
+            active_track = sap.mat_tracks[sap.active_mat_track_index]
+            if len(active_track.properties) > 0:
+                return True
+        return False
+
+    def execute(self, context):
+        return {'FINISHED'}
 
 class SUB_OP_vis_entry_add(bpy.types.Operator):
     bl_idname = 'sub.vis_entry_add'
@@ -92,13 +242,15 @@ class SUB_OP_vis_entry_remove(bpy.types.Operator):
         active_entry = sap.vis_track_entries[sap.active_vis_track_index]
         active_entry.deleted = True
         # Find matching Fcurve and Remove
-        fcurves = context.object.data.animation_data.action.fcurves
+        try:
+            fcurves = context.object.data.animation_data.action.fcurves
+        except AttributeError:
+            return {'FINISHED'} 
         for fc in fcurves:
             ai = sap.active_vis_track_index
             if fc.data_path == f'sub_anim_properties.vis_track_entries[{ai}].value':
                 fcurves.remove(fc)
         return {'FINISHED'} 
-
 
 class SUB_OP_vis_drivers_refresh(bpy.types.Operator):
     bl_idname = 'sub.vis_drivers_refresh'
@@ -135,6 +287,13 @@ class SUB_MT_vis_entry_context_menu(bpy.types.Menu):
         layout = self.layout
         layout.operator('sub.vis_drivers_refresh', icon='FILE_REFRESH', text='Refresh Visibility Drivers')
         layout.operator('sub.vis_drivers_remove', icon='X', text='Remove Visibility Drivers')
+
+class SUB_MT_mat_entry_context_menu(bpy.types.Menu):
+    bl_idname = 'sub.mat_entry_context_menu'
+    bl_label = "Mat Entry Specials"
+
+    def draw(self, context):
+        pass
 
 class SUB_UL_vis_track_entries(bpy.types.UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
@@ -193,75 +352,79 @@ class SUB_UL_vis_track_entries(bpy.types.UIList):
         
         return flt_flags, flt_neworder
 
-class DATA_PT_sub_smush_anim_data_mat_track_entry(bpy.types.Panel):
-    bl_label = "Ultimate Material Track Entry"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
-    bl_parent_id = "DATA_PT_sub_smush_anim_data_mat_tracks"
+class SUB_UL_mat_tracks(bpy.types.UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False, icon='MATERIAL')
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
 
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
+class SUB_UL_mat_properties(bpy.types.UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
 
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-        arma = obj.data
-        for mat_track in arma.sub_anim_properties.mat_tracks:
-            pass
-
-class DATA_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
-    bl_label = "Ultimate Material Tracks"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
-    bl_parent_id = "DATA_PT_sub_smush_anim_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
-
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-        arma = obj.data
-        for mat_track in arma.sub_anim_properties.mat_tracks:
-            pass
+class SUB_UL_mat_property_values(bpy.types.UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            if entry.sub_type == 'VECTOR':
+                row.prop(entry, "custom_vector", text="", emboss=False)
+            elif entry.sub_type == 'FLOAT':
+                row.prop(entry, "custom_float", text="", emboss=False)
+            elif entry.sub_type == 'BOOL':
+                row.prop(entry, "custom_bool", text="", emboss=False)
+            elif entry.sub_type == 'PATTERN':
+                row.prop(entry, "pattern_index", text="", emboss=False)
+            elif entry.sub_type == 'TEXTURE':
+                row.prop(entry, "texture_transform", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)        
 
 class VisTrackEntry(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Vis Name", default="Unknown")
     value: bpy.props.BoolProperty(name="Visible", default=False)
     deleted: bpy.props.BoolProperty(name="Deleted", default=False)
 
-mat_sub_types = (
-    ('VECTOR', 'Vector', 'Custom Vector'),
-    ('FLOAT', 'Float', 'Custom Float'),
-    ('BOOL', 'Bool', 'Custom Bool'),
-)
-class MatTrackEntry(bpy.types.PropertyGroup):
+
+class MatTrackProperty(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Property Name", default="Unknown")
     sub_type: bpy.props.EnumProperty(
         name='Mat Track Entry Subtype',
         description='CustomVector or CustomFloat or CustomBool',
         items=mat_sub_types, 
         default='VECTOR',)
+    deleted: bpy.props.BoolProperty(name="Deleted", default=False)
+    custom_vector: bpy.props.FloatVectorProperty(name='Custom Vector', size=4)
+    custom_bool: bpy.props.BoolProperty(name='Custom Bool')
+    custom_float: bpy.props.FloatProperty(name='Custom Float')
+    pattern_index: bpy.props.IntProperty(name='Pattern Index', subtype='UNSIGNED')
+    texture_transform: bpy.props.FloatVectorProperty(name='Texture Transform', size=5)
 
 class MatTrack(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Material Name", default="Unknown")
-    entries: bpy.props.CollectionProperty(type=MatTrackEntry)
-    
+    properties: bpy.props.CollectionProperty(type=MatTrackProperty)
+    deleted: bpy.props.BoolProperty(name="Deleted", default=False)
+    active_property_index: bpy.props.IntProperty(name='Active Mat Property Index', default=0)
+
 class SubAnimProperties(bpy.types.PropertyGroup):
     vis_track_entries: bpy.props.CollectionProperty(type=VisTrackEntry)
     active_vis_track_index: bpy.props.IntProperty(name='Active Vis Track Index', default=0)
     mat_tracks: bpy.props.CollectionProperty(type=MatTrack)
-
+    active_mat_track_index: bpy.props.IntProperty(name='Active Mat Track Index', default=0)
 #bpy.types.Armature.sub_anim_properties = bpy.props.PointerProperty(type=SubAnimProperties)
 
 

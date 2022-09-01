@@ -102,9 +102,8 @@ def export_model_anim(context, filepath,
         vis_group = make_visibility_group(context, first_blender_frame, last_blender_frame)
         ssbh_anim_data.groups.append(vis_group)
     if include_material_track:
-        pass
-        #mat_group = make_material_group(context, first_blender_frame, last_blender_frame)
-        #ssbh_anim_data.groups.append(mat_group)
+        mat_group = make_material_group(context, first_blender_frame, last_blender_frame)
+        ssbh_anim_data.groups.append(mat_group)
     ssbh_anim_data.save(filepath)
     
 def make_transform_group(context, first_blender_frame, last_blender_frame):
@@ -177,8 +176,45 @@ def make_visibility_group(context, first_blender_frame, last_blender_frame):
             track.values.append(entry.value)
     return vis_group
     
-def make_material_group():
-    pass
-
-
+def make_material_group(context, first_blender_frame, last_blender_frame):
+    # Setup SSBH group
+    mat_type = ssbh_data_py.anim_data.GroupType.Material
+    mat_group = ssbh_data_py.anim_data.GroupData(mat_type)
+    # Setup SSBH Node
+    sap = context.scene.sub_anim_armature.data.sub_anim_properties
+    for mat_track in sap.mat_tracks:
+        node = ssbh_data_py.anim_data.NodeData(mat_track.name)
+        for property in mat_track.properties:
+            track = ssbh_data_py.anim_data.TrackData(property.name)
+            node.tracks.append(track)
+        mat_group.nodes.append(node)
+    # Setup convenience dict
+    node_name_track_name_to_track = {} # node_name_track_name_to_track['EyeL']['CustomVector6'] -> nodes['EyeL'].tracks['CustomVector6']
+    for node in mat_group.nodes:
+        node_name_track_name_to_track[node.name] = {}
+        for track in node.tracks:
+            node_name_track_name_to_track[node.name][track.name] = track
+    # Set Node Values
+    for frame in range(first_blender_frame, last_blender_frame + 1):
+        context.scene.frame_set(frame)
+        for mat_track in sap.mat_tracks:
+            for prop in mat_track.properties:
+                if prop.sub_type == 'VECTOR':
+                    track = node_name_track_name_to_track[mat_track.name][prop.name]
+                    track.values.append([prop.custom_vector[0], prop.custom_vector[1], prop.custom_vector[2], prop.custom_vector[3]])
+                elif prop.sub_type == 'FLOAT':
+                    track = node_name_track_name_to_track[mat_track.name][prop.name]
+                    track.values.append(prop.custom_float)
+                elif prop.sub_type == 'BOOL':
+                    track = node_name_track_name_to_track[mat_track.name][prop.name]
+                    track.values.append(prop.custom_bool)
+                elif prop.sub_type == 'PATTERN':
+                    track = node_name_track_name_to_track[mat_track.name][prop.name]
+                    track.values.append(prop.pattern_index)
+                elif prop.sub_type == 'TEXTURE':
+                    track = node_name_track_name_to_track[mat_track.name][prop.name]
+                    tt = prop.texture_transform
+                    uvt = ssbh_data_py.anim_data.UvTransform(tt[0], tt[1], tt[2], tt[3], tt[4])
+                    track.values.append(uvt)
+    return mat_group
 

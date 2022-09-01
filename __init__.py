@@ -56,15 +56,22 @@ classes = [
     panels.anim_properties.DATA_PT_sub_smush_anim_data_vis_tracks,
     panels.anim_properties.DATA_PT_sub_smush_anim_data_mat_tracks,
     panels.anim_properties.SUB_UL_vis_track_entries,
+    panels.anim_properties.SUB_UL_mat_tracks,
+    panels.anim_properties.SUB_UL_mat_properties,
     panels.anim_properties.VisTrackEntry,
-    panels.anim_properties.MatTrackEntry,
+    panels.anim_properties.MatTrackProperty,
     panels.anim_properties.MatTrack,
     panels.anim_properties.SubAnimProperties,
+    panels.anim_properties.SUB_OP_mat_track_add,
+    panels.anim_properties.SUB_OP_mat_track_remove,
+    panels.anim_properties.SUB_OP_mat_property_add,
+    panels.anim_properties.SUB_OP_mat_property_remove,
     panels.anim_properties.SUB_OP_vis_entry_add,
     panels.anim_properties.SUB_OP_vis_entry_remove,
     panels.anim_properties.SUB_OP_vis_drivers_refresh,
     panels.anim_properties.SUB_OP_vis_drivers_remove,
-    panels.anim_properties.SUB_MT_vis_entry_context_menu
+    panels.anim_properties.SUB_MT_vis_entry_context_menu,
+    panels.anim_properties.SUB_MT_mat_entry_context_menu,
 ]
 
 def register():

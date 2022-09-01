@@ -150,7 +150,7 @@ def import_model_anim(context, filepath,
         setup_bone_scale_drivers(bone_to_node.keys()) # Only want to setup drivers for the bones that have an entry in the anim
 
     if include_material_track and material_group is not None:
-        setup_material_drivers(context, material_group)
+        setup_sap_material_properties(context, material_group)
 
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
         scene.frame_set(frame)
@@ -163,6 +163,8 @@ def import_model_anim(context, filepath,
 
     if include_visibility_track and visibility_group is not None:
         setup_visibility_drivers(context.scene.sub_anim_armature)
+    if include_material_track and material_group is not None:
+        setup_material_drivers(context.scene.sub_anim_armature)
 
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
@@ -288,26 +290,6 @@ def keyframe_insert_camera_locrotscale(camera, frame):
             options={'INSERTKEY_NEEDED'},
         ) 
 
-def node_input_driver_add(input, data_path):
-    driver_handle = input.driver_add('default_value')
-    var = driver_handle.driver.variables.new()
-    var.name = "var"
-    target = var.targets[0]
-    target.id = bpy.context.scene.sub_anim_armature
-    target.data_path = f'{data_path}'
-    driver_handle.driver.expression = f'{var.name}'
-
-def sampler_uv_transform_driver_add(sampler_node, row, var_name, material, target, target_data_path, expression):
-    input = sampler_node.inputs.get('UV Transform')
-    driver_handle = input.driver_add('default_value', row)
-    var = driver_handle.driver.variables.new()
-    var.name = var_name
-    driver_target = var.targets[0]
-    driver_target.id_type = 'MATERIAL'
-    driver_target.id = material
-    driver_target.data_path = "node_tree." + target.path_from_id(target_data_path)
-    driver_handle.driver.expression = expression
-
 def uvtransform_to_list(uvtransform) -> list[float]:
     scale_u = uvtransform.scale_u
     scale_v = uvtransform.scale_v
@@ -316,60 +298,99 @@ def uvtransform_to_list(uvtransform) -> list[float]:
     translate_v = uvtransform.translate_v
     return [scale_u, scale_v, rotation, translate_u, translate_v]
 
-def setup_material_drivers(context, material_group):
-    mesh_children = [child for child in context.scene.sub_anim_armature.children if child.type == 'MESH']
-    materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots }
-    name_node_dict = {node.name : node for node in material_group.nodes}
-
-    for node in material_group.nodes:
-        for track in node.tracks:
-            value = track.values[0]
-            if isinstance(value, ssbh_data_py.anim_data.UvTransform):
-                context.scene.sub_anim_armature[f'{node.name}:{track.name}'] = uvtransform_to_list(value)
-            else:
-                context.scene.sub_anim_armature[f"{node.name}:{track.name}"] = value
-
-
+def setup_material_drivers(arma: bpy.types.Object):
+    sap = arma.data.sub_anim_properties
+    mesh_children = [child for child in arma.children if child.type == 'MESH']
+    materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots}
     for material in materials:
         bsn = blender_shader_node = material.node_tree.nodes.get('smash_ultimate_shader', None)
         if bsn is None:
             #logging.info(f'Material {material.name} did not have the smash_ultimate_shader node, will not have material animations')
             continue
         mat_name_input = bsn.inputs.get('Material Name')
-        anim_node = name_node_dict.get(mat_name_input.default_value, None)
-        if anim_node is None:
+        sap_mat_track = sap.mat_tracks.get(mat_name_input.default_value, None)
+        if sap_mat_track is None:
             continue # This is very common, most fighter anims only contain material info for the eye materials for instance
-        for track in anim_node.tracks:
-            if track.name == 'CustomVector31':
-                x,y,z,w = [i for i in bsn.inputs if 'CustomVector31' in i.name]
-                for index, var in enumerate([x,y,z,w]):
-                    node_input_driver_add(var, f'["{anim_node.name}:{track.name}"][{index}]')
-                labels_nodes_dict = {node.label:node for node in material.node_tree.nodes}
-                sampler_1_node = labels_nodes_dict.get('Sampler1', None)
-                if sampler_1_node is not None:
-                    sampler_uv_transform_driver_add(sampler_1_node, 0, "var", material, z, 'default_value', "0 - var")
-                    sampler_uv_transform_driver_add(sampler_1_node, 1, "var", material, w, 'default_value', "0 - var")
+        # Set up Custom Vector 31
+        cv31 = sap_mat_track.properties.get('CustomVector31', None)
+        if cv31:
+            labels_nodes_dict = {node.label:node for node in material.node_tree.nodes}
+            sampler_1_node = labels_nodes_dict.get('Sampler1', None)
+            if sampler_1_node is not None:
+                input = sampler_1_node.inputs.get('UV Transform')
+                for row in [0,1]:
+                    driver_handle = input.driver_add('default_value', row)
+                    var = driver_handle.driver.variables.new()
+                    var.name = "var"
+                    target = var.targets[0]
+                    target.id_type = 'ARMATURE'
+                    target.id = arma.data
+                    mti = sap.mat_tracks.find(sap_mat_track.name)
+                    pi = sap_mat_track.properties.find(cv31.name)
+                    cvi = 2 if row is 0 else 3 # CustomVector31.Z and .W control translation
+                    target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
+                    driver_handle.driver.expression = f'0 - {var.name}'
 
 
 def do_material_stuff(context, material_group, index, frame):
+    arma = context.scene.sub_anim_armature
+    sap = arma.data.sub_anim_properties
     for node in material_group.nodes:
+        mat_track = sap.mat_tracks.get(node.name)
+        mat_track_index = sap.mat_tracks.find(mat_track.name)
         for track in node.tracks:
             try:
                 track.values[index]
             except IndexError:
                 continue
             value = track.values[index]
-            arma = context.scene.sub_anim_armature
-            if isinstance(value, ssbh_data_py.anim_data.UvTransform):
-                arma[f'{node.name}:{track.name}'] = uvtransform_to_list(value)
-            else:
-                arma[f'{node.name}:{track.name}'] = value
-            arma.keyframe_insert(data_path=f'["{node.name}:{track.name}"]', frame=frame, group='Material', options={'INSERTKEY_NEEDED'})
+            prop = mat_track.properties.get(track.name)
+            prop_index = mat_track.properties.find(prop.name)
+            if prop.sub_type == 'VECTOR':
+                prop.custom_vector = value
+                arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', frame=frame, group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
+            elif prop.sub_type == 'FLOAT':
+                prop.custom_float = value
+                arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_float', frame=frame,  group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
+            elif prop.sub_type == 'BOOL':
+                prop.custom_bool = value
+                arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_bool', frame=frame,  group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
+            elif prop.sub_type == 'PATTERN':
+                prop.pattern_index = value
+                arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].pattern_index', frame=frame,  group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
+            elif prop.sub_type == 'TEXTURE':
+                prop.texture_transform = [value.scale_u, value.scale_v, value.rotation, value.translate_u, value.translate_v]
+                arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].texture_transform', frame=frame,  group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
 
+def setup_sap_material_properties(context, material_group):
+    sap = context.scene.sub_anim_armature.data.sub_anim_properties
+    # Setup
+    for node in material_group.nodes:
+        mat_track = sap.mat_tracks.get(node.name, None)
+        if mat_track is None:
+            mat_track = sap.mat_tracks.add()
+            mat_track.name = node.name
+        for track in node.tracks:
+            prop = mat_track.properties.get(track.name, None)
+            if prop is None:
+                prop = mat_track.properties.add()
+                prop.name = track.name
+                if 'CustomBoolean' in track.name:
+                    prop.sub_type = 'BOOL'
+                elif 'CustomFloat' in track.name:
+                    prop.sub_type = 'FLOAT'
+                elif 'CustomVector' in track.name:
+                    prop.sub_type = 'VECTOR'
+                elif 'PatternIndex' in track.name:
+                    prop.sub_type = 'PATTERN'
+                elif 'Texture' in track.name:
+                    prop.sub_type = 'TEXTURE'
+                else:
+                    raise TypeError(f'Unsupported track name {track.name}')         
+            
 
 def setup_visibility_drivers(armature_object:bpy.types.Object):
     # Setup Vis Drivers
-    #arma = context.scene.sub_anim_armature
     arma = armature_object
     vis_track_entries = arma.data.sub_anim_properties.vis_track_entries
     mesh_children = [child for child in arma.children if child.type == 'MESH']
@@ -389,7 +410,6 @@ def setup_visibility_drivers(armature_object:bpy.types.Object):
                 target.data_path = f'sub_anim_properties.vis_track_entries[{entries_index}].value'
                 driver_handle.driver.expression = f'1 - {var.name}'
 
-
 def do_visibility_stuff(context, visibility_group, index, frame):
     for node in visibility_group.nodes:
         try:
@@ -399,8 +419,6 @@ def do_visibility_stuff(context, visibility_group, index, frame):
         value = node.tracks[0].values[index]
 
         arma = context.scene.sub_anim_armature
-        #arma[f'{node.name}'] = value
-        #arma.keyframe_insert(data_path=f'["{node.name}"]', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
         entries = arma.data.sub_anim_properties.vis_track_entries
         sub_vis_track_entry = entries.get(node.name, None)
         if sub_vis_track_entry is None:
