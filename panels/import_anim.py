@@ -327,7 +327,7 @@ def setup_material_drivers(arma: bpy.types.Object):
                     target.id = arma.data
                     mti = sap.mat_tracks.find(sap_mat_track.name)
                     pi = sap_mat_track.properties.find(cv31.name)
-                    cvi = 2 if row is 0 else 3 # CustomVector31.Z and .W control translation
+                    cvi = 2 if row == 0 else 3 # CustomVector31.Z and .W control translation
                     target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
                     driver_handle.driver.expression = f'0 - {var.name}'
 

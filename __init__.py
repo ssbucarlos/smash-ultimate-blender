@@ -18,6 +18,7 @@ from . import panels
 from . import operators
 from . import properties
 from . import shaders
+from . import properties
 
 def check_unsupported_blender_versions():
     if bpy.app.version < (2, 93):
@@ -58,20 +59,23 @@ classes = [
     panels.anim_properties.SUB_UL_vis_track_entries,
     panels.anim_properties.SUB_UL_mat_tracks,
     panels.anim_properties.SUB_UL_mat_properties,
-    panels.anim_properties.VisTrackEntry,
-    panels.anim_properties.MatTrackProperty,
-    panels.anim_properties.MatTrack,
-    panels.anim_properties.SubAnimProperties,
     panels.anim_properties.SUB_OP_mat_track_add,
     panels.anim_properties.SUB_OP_mat_track_remove,
     panels.anim_properties.SUB_OP_mat_property_add,
     panels.anim_properties.SUB_OP_mat_property_remove,
+    panels.anim_properties.SUB_OP_mat_drivers_refresh,
+    panels.anim_properties.SUB_OP_mat_drivers_remove,
     panels.anim_properties.SUB_OP_vis_entry_add,
     panels.anim_properties.SUB_OP_vis_entry_remove,
     panels.anim_properties.SUB_OP_vis_drivers_refresh,
     panels.anim_properties.SUB_OP_vis_drivers_remove,
     panels.anim_properties.SUB_MT_vis_entry_context_menu,
     panels.anim_properties.SUB_MT_mat_entry_context_menu,
+    properties.SubSceneProperties,
+    properties.VisTrackEntry,
+    properties.MatTrackProperty,
+    properties.MatTrack,
+    properties.SubAnimProperties,
 ]
 
 def register():
@@ -84,7 +88,7 @@ def register():
 
     properties.register()
     shaders.custom_sampler_node.register()
-    bpy.types.Armature.sub_anim_properties = bpy.props.PointerProperty(type=panels.anim_properties.SubAnimProperties)
+    #bpy.types.Armature.sub_anim_properties = bpy.props.PointerProperty(type=panels.anim_properties.SubAnimProperties)
     print('Loaded Smash Ultimate Blender Tools!')
 
 def unregister():

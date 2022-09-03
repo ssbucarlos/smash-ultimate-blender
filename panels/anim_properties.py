@@ -1,4 +1,5 @@
 import bpy
+import re
 
 mat_sub_types = (
     ('VECTOR', 'Custom Vector', 'Custom Vector'),
@@ -113,26 +114,29 @@ class DATA_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
             c.enabled = False
         split = split.split()
         c = split.column()
+        c.enabled = False
         c.label(text='Property Values')
         if len(arma.sub_anim_properties.mat_tracks) > 0:
             if len(arma.sub_anim_properties.mat_tracks[amti].properties) > 0:
+                '''
+                After removing the last entry from the list, the 'active' index can remain its previous value
+                which is now out of bounds
+                '''
                 amtpi = arma.sub_anim_properties.mat_tracks[amti].active_property_index
-                ap = arma.sub_anim_properties.mat_tracks[amti].properties[amtpi]
-                if ap.sub_type == 'VECTOR':
-                    c.prop(ap, "custom_vector", text="", emboss=False)
-                elif ap.sub_type == 'FLOAT':
-                    c.prop(ap, "custom_float", text="", emboss=False)
-                elif ap.sub_type == 'BOOL':
-                    icon = 'CHECKBOX_HLT' if ap.custom_bool == True else 'CHECKBOX_DEHLT'
-                    c.prop(ap, "custom_bool", text="", icon=icon, emboss=False)
-                elif ap.sub_type == 'PATTERN':
-                    c.prop(ap, "pattern_index", text="", emboss=False)
-                elif ap.sub_type == 'TEXTURE':
-                    c.prop(ap, "texture_transform", text="", emboss=False)
-            else:
-                c.enabled = False
-        else:
-            c.enabled = False
+                if amtpi < len(arma.sub_anim_properties.mat_tracks[amti].properties):
+                    ap = arma.sub_anim_properties.mat_tracks[amti].properties[amtpi]
+                    if ap.sub_type == 'VECTOR':
+                        c.prop(ap, "custom_vector", text="", emboss=False)
+                    elif ap.sub_type == 'FLOAT':
+                        c.prop(ap, "custom_float", text="", emboss=False)
+                    elif ap.sub_type == 'BOOL':
+                        icon = 'CHECKBOX_HLT' if ap.custom_bool == True else 'CHECKBOX_DEHLT'
+                        c.prop(ap, "custom_bool", text="", icon=icon, emboss=False)
+                    elif ap.sub_type == 'PATTERN':
+                        c.prop(ap, "pattern_index", text="", emboss=False)
+                    elif ap.sub_type == 'TEXTURE':
+                        c.prop(ap, "texture_transform", text="", emboss=False)
+                    c.enabled = True
         # Bottom Row, composed of 3 Sub Rows algined with the above columns
         row = layout.row()
         # Sub Row 1
@@ -170,6 +174,8 @@ class SUB_OP_mat_track_remove(bpy.types.Operator):
         return len(sap.mat_tracks) > 0
 
     def execute(self, context):
+        # Mark as Deleted
+        # Find matching Fcurve and Remove
         return {'FINISHED'}
 
 class SUB_OP_mat_property_add(bpy.types.Operator):
@@ -213,6 +219,45 @@ class SUB_OP_mat_property_remove(bpy.types.Operator):
         return False
 
     def execute(self, context):
+        sap = context.object.data.sub_anim_properties
+        amt = sap.mat_tracks[sap.active_mat_track_index]  
+        try:
+            fcurves = context.object.data.animation_data.action.fcurves
+        except AttributeError:
+            amt.properties.remove(amt.active_property_index)
+            return {'FINISHED'}
+        # Remove matching fcurve
+        for fc in fcurves:
+            amti = sap.active_mat_track_index
+            api = sap.mat_tracks[amti].active_property_index
+            if fc.data_path.startswith(f"sub_anim_properties.mat_tracks[{amti}].properties[{api}]"):
+                fcurves.remove(fc)
+        # The material's remaining properties' fcurves with indexes greater to this one must be decremented
+        fcurves = context.object.data.animation_data.action.fcurves
+
+        for fc in fcurves:    
+            regex = r"sub_anim_properties\.mat_tracks\[(\d+)\]\.properties\[(\d+)\](\.\w+)"
+            matches = re.match(regex, fc.data_path)
+            if matches is None:
+                continue
+            print(f'data_path = {fc.data_path}, match={matches}')
+            if len(matches.groups()) < 3:
+                continue
+            cmti = int(matches.groups()[0])
+            cpi = int(matches.groups()[1])
+            suffix = matches.groups()[2]
+            amti = sap.active_mat_track_index
+            api = sap.mat_tracks[amti].active_property_index
+            if cmti != amti or cpi <= api:
+                continue
+            new_data_path = f"sub_anim_properties.mat_tracks[{cmti}].properties[{cpi-1}]{suffix}"
+            fc.data_path = new_data_path 
+        # Now actually remove the property
+        amt.properties.remove(amt.active_property_index)
+        # Refresh Material Drivers
+        remove_material_drivers(context.object)
+        from .import_anim import setup_material_drivers
+        setup_material_drivers(context.object)
         return {'FINISHED'}
 
 class SUB_OP_vis_entry_add(bpy.types.Operator):
@@ -229,6 +274,12 @@ class SUB_OP_vis_entry_add(bpy.types.Operator):
 class SUB_OP_vis_entry_remove(bpy.types.Operator):
     bl_idname = 'sub.vis_entry_remove'
     bl_label = 'Remove Vis Track Entry'
+
+    @classmethod
+    def poll(cls, context):
+        sap = context.object.data.sub_anim_properties
+        vtes = [vte for vte in sap.vis_track_entries if vte.deleted == False]
+        return len(vtes) > 0
 
     def execute(self, context):
         '''
@@ -250,6 +301,7 @@ class SUB_OP_vis_entry_remove(bpy.types.Operator):
             ai = sap.active_vis_track_index
             if fc.data_path == f'sub_anim_properties.vis_track_entries[{ai}].value':
                 fcurves.remove(fc)
+
         return {'FINISHED'} 
 
 class SUB_OP_vis_drivers_refresh(bpy.types.Operator):
@@ -280,6 +332,33 @@ def remove_visibility_drivers(context):
             if any(d.data_path == s for s in ['hide_viewport', 'hide_render']):
                 drivers.remove(d)
 
+def remove_material_drivers(arma:bpy.types.Object):
+    mesh_children = [child for child in arma.children if child.type == 'MESH']
+    materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots}
+    for material in materials:
+        for node in material.node_tree.nodes:
+            for input in node.inputs:
+                if hasattr(input, 'default_value'):
+                    input.driver_remove('default_value')
+
+class SUB_OP_mat_drivers_refresh(bpy.types.Operator):
+    bl_idname = 'sub.mat_drivers_refresh'
+    bl_label = 'Refresh Material Drivers'   
+
+    def execute(self, context):
+        remove_material_drivers(context.object)
+        from .import_anim import setup_material_drivers
+        setup_material_drivers(context.object)
+        return {'FINISHED'}  
+
+class SUB_OP_mat_drivers_remove(bpy.types.Operator):
+    bl_idname = 'sub.mat_drivers_remove'
+    bl_label = 'Remove Material Drivers'
+
+    def execute(self, context):
+        remove_material_drivers(context.object)
+        return {'FINISHED'}  
+
 class SUB_MT_vis_entry_context_menu(bpy.types.Menu):
     bl_label = "Vis Entry Specials"
 
@@ -293,7 +372,9 @@ class SUB_MT_mat_entry_context_menu(bpy.types.Menu):
     bl_label = "Mat Entry Specials"
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        layout.operator(SUB_OP_mat_drivers_refresh.bl_idname, icon='FILE_REFRESH', text='Refresh Material Drivers')
+        layout.operator(SUB_OP_mat_drivers_remove.bl_idname, icon='X', text='Remove Material Drivers')
 
 class SUB_UL_vis_track_entries(bpy.types.UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
@@ -394,11 +475,11 @@ class SUB_UL_mat_property_values(bpy.types.UIList):
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)        
 
+'''
 class VisTrackEntry(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Vis Name", default="Unknown")
     value: bpy.props.BoolProperty(name="Visible", default=False)
     deleted: bpy.props.BoolProperty(name="Deleted", default=False)
-
 
 class MatTrackProperty(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Property Name", default="Unknown")
@@ -427,4 +508,4 @@ class SubAnimProperties(bpy.types.PropertyGroup):
     active_mat_track_index: bpy.props.IntProperty(name='Active Mat Track Index', default=0)
 #bpy.types.Armature.sub_anim_properties = bpy.props.PointerProperty(type=SubAnimProperties)
 
-
+'''
