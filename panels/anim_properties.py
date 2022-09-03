@@ -174,8 +174,45 @@ class SUB_OP_mat_track_remove(bpy.types.Operator):
         return len(sap.mat_tracks) > 0
 
     def execute(self, context):
-        # Mark as Deleted
+        sap = context.object.data.sub_anim_properties
+        amt = sap.mat_tracks[sap.active_mat_track_index]
         # Find matching Fcurve and Remove
+        try:
+            fcurves = context.object.data.animation_data.action.fcurves
+        except AttributeError:
+            sap.mat_tracks.remove(sap.active_mat_track_index)
+            i = sap.active_mat_track_index
+            sap.active_mat_track_index = min(max(0,i-1),len(sap.mat_tracks))
+            return {'FINISHED'}
+        # Remove fcurves of all properties of this material track
+        for fc in fcurves:
+            amti = sap.active_mat_track_index
+            if fc.data_path.startswith(f"sub_anim_properties.mat_tracks[{amti}]"):
+                fcurves.remove(fc)
+        # The remaining materials with an index greater than this one must have all thier fcurves adjusted
+        fcurves = context.object.data.animation_data.action.fcurves
+        for fc in fcurves:
+            regex = r"sub_anim_properties\.mat_tracks\[(\d+)\](\.properties\[\d+\]\.\w+)"
+            matches = re.match(regex, fc.data_path)
+            if matches is None:
+                continue
+            if len(matches.groups()) < 2:
+                continue
+            cmti = int(matches.groups()[0])
+            suffix = matches.groups()[1]
+            amti = sap.active_mat_track_index
+            if cmti < amti:
+                continue
+            new_data_path = f"sub_anim_properties.mat_tracks[{cmti-1}]{suffix}"
+            fc.data_path = new_data_path
+        # Now actually remove the material track
+        sap.mat_tracks.remove(sap.active_mat_track_index)
+        i = sap.active_mat_track_index
+        sap.active_mat_track_index = min(max(0,i-1),len(sap.mat_tracks))
+        # Refresh Material Drivers
+        remove_material_drivers(context.object)
+        from .import_anim import setup_material_drivers
+        setup_material_drivers(context.object)
         return {'FINISHED'}
 
 class SUB_OP_mat_property_add(bpy.types.Operator):
@@ -225,6 +262,8 @@ class SUB_OP_mat_property_remove(bpy.types.Operator):
             fcurves = context.object.data.animation_data.action.fcurves
         except AttributeError:
             amt.properties.remove(amt.active_property_index)
+            i = amt.active_property_index
+            amt.active_property_index = min(max(0,i-1), len(amt.properties)-1)
             return {'FINISHED'}
         # Remove matching fcurve
         for fc in fcurves:
@@ -240,7 +279,6 @@ class SUB_OP_mat_property_remove(bpy.types.Operator):
             matches = re.match(regex, fc.data_path)
             if matches is None:
                 continue
-            print(f'data_path = {fc.data_path}, match={matches}')
             if len(matches.groups()) < 3:
                 continue
             cmti = int(matches.groups()[0])
@@ -254,6 +292,8 @@ class SUB_OP_mat_property_remove(bpy.types.Operator):
             fc.data_path = new_data_path 
         # Now actually remove the property
         amt.properties.remove(amt.active_property_index)
+        i = amt.active_property_index
+        amt.active_property_index = min(max(0,i-1), len(amt.properties)-1)
         # Refresh Material Drivers
         remove_material_drivers(context.object)
         from .import_anim import setup_material_drivers
