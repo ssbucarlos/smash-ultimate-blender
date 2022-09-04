@@ -1,4 +1,5 @@
 import bpy
+import re
 from bpy.types import Scene, Object, Armature, PropertyGroup
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty
@@ -154,8 +155,48 @@ class VisTrackEntry(PropertyGroup):
     value: BoolProperty(name="Visible", default=False)
     deleted: BoolProperty(name="Deleted", default=False)
 
+def mat_track_prop_name_update(self, context):
+    sap = context.object.data.sub_anim_properties
+    found = False
+    current_mat_track_index = None
+    current_property_index = None
+    for mat_track_index, mat_track in enumerate(sap.mat_tracks):
+        for property_index, property in enumerate(mat_track.properties):
+            if property.as_pointer() == self.as_pointer():
+                current_mat_track_index = mat_track_index
+                current_property_index = property_index
+                found = True
+                break
+        if found:
+            break
+    current_mat_track = sap.mat_tracks[current_mat_track_index]
+    # There should be at most only one duplicate
+    dupe = None
+    for p in current_mat_track.properties:
+        if p.as_pointer() == self.as_pointer():
+            continue
+        if p.name == self.name:
+            dupe = p
+            break
+    # No duplicate found, name can remain as is
+    if dupe is None:
+        return
+    # Regex match the name, see if it already has like '.001'
+    # if it doesnt then add the '.001', otherwise increment the number
+    regex = r"(\w+\.)(\d+)"
+    matches = re.match(regex, self.name)
+    if matches is None:
+        self.name = self.name + '.001'
+    else:
+        base_name = matches.groups()[0]
+        number = int(matches.groups()[1])
+        self.name = f'{base_name}{number+1:003d}'
+
 class MatTrackProperty(PropertyGroup):
-    name: StringProperty(name="Property Name", default="Unknown")
+    name: StringProperty(
+        name="Property Name",
+        default="Unknown",
+        update=mat_track_prop_name_update,)
     sub_type: EnumProperty(
         name='Mat Track Entry Subtype',
         description='CustomVector or CustomFloat or CustomBool',

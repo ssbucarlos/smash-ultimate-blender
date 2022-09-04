@@ -162,6 +162,8 @@ class SUB_OP_mat_track_add(bpy.types.Operator):
         mat_tracks = context.object.data.sub_anim_properties.mat_tracks
         mat_track = mat_tracks.add()
         mat_track.name = 'New Mat Track'
+        sap = context.object.data.sub_anim_properties
+        sap.active_mat_track_index = sap.mat_tracks.find(mat_track.name)
         return {'FINISHED'}
 
 class SUB_OP_mat_track_remove(bpy.types.Operator):
@@ -236,7 +238,15 @@ class SUB_OP_mat_property_add(bpy.types.Operator):
         props = sap.mat_tracks[sap.active_mat_track_index].properties
         prop = props.add()
         prop.sub_type = self.sub_type
-        prop.name = f'New {self.sub_type} Property'
+        if prop.sub_type == 'VECTOR':
+            prop.name = f'CustomVectorX'
+        elif prop.sub_type == 'FLOAT':
+            prop.name = f'CustomFloatX'
+        elif prop.sub_type == 'BOOL':
+            prop.name = f'CustomBooleanX'
+        else:
+            prop.name = f'New{prop.sub_type}Property'
+        sap.mat_tracks[sap.active_mat_track_index].active_property_index = props.find(prop.name)
         return {'FINISHED'}
     def invoke(self, context, event):
         context.window_manager.invoke_search_popup(self)
