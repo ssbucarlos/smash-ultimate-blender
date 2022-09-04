@@ -161,7 +161,7 @@ class SUB_OP_mat_track_add(bpy.types.Operator):
     def execute(self, context):
         mat_tracks = context.object.data.sub_anim_properties.mat_tracks
         mat_track = mat_tracks.add()
-        mat_track.name = 'New Mat Track'
+        mat_track.name = 'NewMaterialTrack'
         sap = context.object.data.sub_anim_properties
         sap.active_mat_track_index = sap.mat_tracks.find(mat_track.name)
         return {'FINISHED'}

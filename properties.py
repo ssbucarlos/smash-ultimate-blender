@@ -192,6 +192,31 @@ def mat_track_prop_name_update(self, context):
         number = int(matches.groups()[1])
         self.name = f'{base_name}{number+1:003d}'
 
+def mat_track_name_update(self, context):
+    sap = context.object.data.sub_anim_properties
+    current_mat_track_index = None
+    for mat_track_index, mat_track in enumerate(sap.mat_tracks):
+        if mat_track.as_pointer() == self.as_pointer():
+            current_mat_track_index = mat_track_index
+            break
+    dupe = None
+    for mt in sap.mat_tracks:
+        if mt.as_pointer() == self.as_pointer():
+            continue
+        if mt.name == self.name:
+            dupe = mt
+            break  
+    if dupe is None:
+        return
+    regex = r"(\w+\.)(\d+)"
+    matches = re.match(regex, self.name)
+    if matches is None:
+        self.name = self.name + '.001'
+    else:
+        base_name = matches.groups()[0]
+        number = int(matches.groups()[1])
+        self.name = f'{base_name}{number+1:003d}' 
+
 class MatTrackProperty(PropertyGroup):
     name: StringProperty(
         name="Property Name",
@@ -202,7 +227,6 @@ class MatTrackProperty(PropertyGroup):
         description='CustomVector or CustomFloat or CustomBool',
         items=panels.anim_properties.mat_sub_types, 
         default='VECTOR',)
-    deleted: BoolProperty(name="Deleted", default=False)
     custom_vector: FloatVectorProperty(name='Custom Vector', size=4)
     custom_bool: BoolProperty(name='Custom Bool')
     custom_float: FloatProperty(name='Custom Float')
@@ -210,9 +234,11 @@ class MatTrackProperty(PropertyGroup):
     texture_transform: FloatVectorProperty(name='Texture Transform', size=5)
 
 class MatTrack(PropertyGroup):
-    name: StringProperty(name="Material Name", default="Unknown")
+    name: StringProperty(
+        name="Material Name",
+        default="Unknown",
+        update=mat_track_name_update,)
     properties: CollectionProperty(type=MatTrackProperty)
-    deleted: BoolProperty(name="Deleted", default=False)
     active_property_index: IntProperty(name='Active Mat Property Index', default=0)
 
 class SubAnimProperties(PropertyGroup):
