@@ -19,24 +19,25 @@ class ExportAnimPanel(bpy.types.Panel):
         row = layout.row(align=True)
         row.label(text="Select an Armature or Camera.")
 
-        if context.scene.sub_anim_armature is None and context.scene.sub_anim_camera is None:
+        ssp = context.scene.sub_scene_properties
+        if ssp.anim_export_arma is None and ssp.anim_export_camera is None:
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA')
+            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA')
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA')
+            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA')
             return
-        elif context.scene.sub_anim_armature is not None:
+        elif ssp.anim_export_arma is not None:
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA')
-            if context.scene.sub_anim_armature.animation_data is None:
+            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA')
+            if ssp.anim_export_arma.animation_data is None:
                 row = layout.row(align=True)
                 row.label(text='The selected armature has no loaded animation!', icon='ERROR')
             else:
                 row = layout.row(align=True)
                 row.operator('sub.anim_model_exporter', icon='FILE', text='Export a Model Animation')
-        elif context.scene.sub_anim_camera is not None:
+        elif ssp.anim_export_camera is not None:
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA')
+            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA')
             row.operator('sub.anim_camera_exporter', icon='FILE', text='Export a Camera Animation')
 
 class AnimModelExporterOperator(Operator):
@@ -108,8 +109,9 @@ def export_model_anim(context, filepath,
     
 def make_transform_group(context, first_blender_frame, last_blender_frame):
     trans_type = ssbh_data_py.anim_data.GroupType.Transform
-    trans_group = ssbh_data_py.anim_data.GroupData(trans_type)   
-    arma_obj = context.scene.sub_anim_armature
+    trans_group = ssbh_data_py.anim_data.GroupData(trans_type)
+    ssp = context.scene.sub_scene_properties   
+    arma_obj = ssp.anim_export_arma
     all_bone_names = [b.name for b in arma_obj.pose.bones]
     fcurves = arma_obj.animation_data.action.fcurves
     curve_names = {curve.data_path.split('"')[1] for curve in fcurves}
@@ -156,10 +158,9 @@ def make_visibility_group(context, first_blender_frame, last_blender_frame):
     vis_type = ssbh_data_py.anim_data.GroupType.Visibility
     vis_group = ssbh_data_py.anim_data.GroupData(vis_type)
     # Setup SSBH Node
-    entries = context.scene.sub_anim_armature.data.sub_anim_properties.vis_track_entries
+    ssp = context.scene.sub_scene_properties
+    entries = ssp.anim_export_arma.data.sub_anim_properties.vis_track_entries
     for entry in entries:
-        if entry.deleted == True:
-            pass
         node = ssbh_data_py.anim_data.NodeData(entry.name)
         track = ssbh_data_py.anim_data.TrackData('Visibility')
         node.tracks.append(track)
@@ -169,8 +170,6 @@ def make_visibility_group(context, first_blender_frame, last_blender_frame):
     for frame in range(first_blender_frame, last_blender_frame + 1):
         context.scene.frame_set(frame)
         for entry in entries:
-            if entry.deleted == True:
-                pass
             node = name_to_node[entry.name]
             track = node.tracks[0]
             track.values.append(entry.value)
@@ -181,7 +180,8 @@ def make_material_group(context, first_blender_frame, last_blender_frame):
     mat_type = ssbh_data_py.anim_data.GroupType.Material
     mat_group = ssbh_data_py.anim_data.GroupData(mat_type)
     # Setup SSBH Node
-    sap = context.scene.sub_anim_armature.data.sub_anim_properties
+    ssp = context.scene.sub_scene_properties
+    sap = ssp.anim_export_arma.data.sub_anim_properties
     for mat_track in sap.mat_tracks:
         node = ssbh_data_py.anim_data.NodeData(mat_track.name)
         for property in mat_track.properties:

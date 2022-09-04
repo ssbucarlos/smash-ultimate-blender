@@ -150,21 +150,50 @@ class SubSceneProperties(PropertyGroup):
         poll=exo_skel.poll_armatures,
     )
 
-class VisTrackEntry(PropertyGroup):
-    name: StringProperty(name="Vis Name", default="Unknown")
-    value: BoolProperty(name="Visible", default=False)
-    deleted: BoolProperty(name="Deleted", default=False)
+    anim_export_arma: PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,   
+    )
+
+    anim_export_camera: PointerProperty(
+        name='Camera',
+        description='Select the Camera',
+        type=Object,
+        poll=import_anim.poll_cameras,
+    )
+
+def vis_track_name_update(self, context):
+    sap = context.object.data.sub_anim_properties
+    dupe = None
+    for vt in sap.vis_track_entries:
+        if vt.as_pointer() == self.as_pointer():
+            continue
+        if vt.name == self.name:
+            dupe = vt
+            break  
+    if dupe is None:
+        return
+    regex = r"(\w+\.)(\d+)"
+    matches = re.match(regex, self.name)
+    if matches is None:
+        self.name = self.name + '.001'
+    else:
+        base_name = matches.groups()[0]
+        number = int(matches.groups()[1])
+        self.name = f'{base_name}{number+1:003d}' 
+
+
 
 def mat_track_prop_name_update(self, context):
     sap = context.object.data.sub_anim_properties
     found = False
     current_mat_track_index = None
-    current_property_index = None
     for mat_track_index, mat_track in enumerate(sap.mat_tracks):
-        for property_index, property in enumerate(mat_track.properties):
+        for property in mat_track.properties:
             if property.as_pointer() == self.as_pointer():
                 current_mat_track_index = mat_track_index
-                current_property_index = property_index
                 found = True
                 break
         if found:
@@ -194,11 +223,6 @@ def mat_track_prop_name_update(self, context):
 
 def mat_track_name_update(self, context):
     sap = context.object.data.sub_anim_properties
-    current_mat_track_index = None
-    for mat_track_index, mat_track in enumerate(sap.mat_tracks):
-        if mat_track.as_pointer() == self.as_pointer():
-            current_mat_track_index = mat_track_index
-            break
     dupe = None
     for mt in sap.mat_tracks:
         if mt.as_pointer() == self.as_pointer():
@@ -216,6 +240,13 @@ def mat_track_name_update(self, context):
         base_name = matches.groups()[0]
         number = int(matches.groups()[1])
         self.name = f'{base_name}{number+1:003d}' 
+
+class VisTrackEntry(PropertyGroup):
+    name: StringProperty(
+        name="Vis Name",
+        default="Unknown",
+        update=vis_track_name_update,)
+    value: BoolProperty(name="Visible", default=False)
 
 class MatTrackProperty(PropertyGroup):
     name: StringProperty(

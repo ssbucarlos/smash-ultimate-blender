@@ -398,8 +398,6 @@ def setup_visibility_drivers(armature_object:bpy.types.Object):
         true_mesh_name = re.split('Shape|_VIS_|_O_', mesh.name)[0]
         if any(true_mesh_name == key for key in vis_track_entries.keys()):
             entries_index = vis_track_entries.find(true_mesh_name)
-            if vis_track_entries[entries_index].deleted == True:
-                continue
             for property in ['hide_viewport', 'hide_render']:
                 driver_handle = mesh.driver_add(property)
                 var = driver_handle.driver.variables.new()

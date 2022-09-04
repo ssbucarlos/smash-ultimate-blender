@@ -317,8 +317,10 @@ class SUB_OP_vis_entry_add(bpy.types.Operator):
     def execute(self, context):
         entries = context.object.data.sub_anim_properties.vis_track_entries
         entry = entries.add()
-        entry.name = 'New Vis Track Entry'
+        entry.name = 'NewVisTrackEntry'
         entry.value = True
+        sap = context.object.data.sub_anim_properties
+        sap.active_vis_track_index = entries.find(entry.name)
         return {'FINISHED'} 
 
 class SUB_OP_vis_entry_remove(bpy.types.Operator):
@@ -328,30 +330,41 @@ class SUB_OP_vis_entry_remove(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         sap = context.object.data.sub_anim_properties
-        vtes = [vte for vte in sap.vis_track_entries if vte.deleted == False]
-        return len(vtes) > 0
+        return len(sap.vis_track_entries) > 0
 
     def execute(self, context):
-        '''
-        Dont actually remove from list cuz fcurves and drivers will be messed up
-            since they rely on the index of the entry.
-        Current workaround, mark the entry as 'deleted' and remove fcurve.
-        Make sure UI and exporter dont show/export a 'deleted' entry.
-        '''
-        # Mark as Deleted
         sap = context.object.data.sub_anim_properties
-        active_entry = sap.vis_track_entries[sap.active_vis_track_index]
-        active_entry.deleted = True
-        # Find matching Fcurve and Remove
+                # Find matching Fcurve and Remove
         try:
             fcurves = context.object.data.animation_data.action.fcurves
         except AttributeError:
-            return {'FINISHED'} 
+            sap.vis_track_entries.remove(sap.active_vis_track_index)
+            i = sap.active_vis_track_index
+            sap.active_vis_track_index = min(max(0,i-1),len(sap.vis_track_entries))
+            return {'FINISHED'}
         for fc in fcurves:
-            ai = sap.active_vis_track_index
-            if fc.data_path == f'sub_anim_properties.vis_track_entries[{ai}].value':
+            avti = sap.active_vis_track_index
+            if fc.data_path.startswith(f"sub_anim_properties.vis_track_entries[{avti}]"):
                 fcurves.remove(fc)
+        fcurves = context.object.data.animation_data.action.fcurves
+        for fc in fcurves:
+            regex = r"sub_anim_properties\.vis_track_entries\[(\d+)\]\.value"
+            matches = re.match(regex, fc.data_path)
+            if matches is None:
+                continue
+            cvtei = int(matches.groups()[0])
+            avtei = sap.active_vis_track_index
+            if cvtei < avtei:
+                continue
+            new_data_path = f'sub_anim_properties.vis_track_entries[{cvtei-1}].value'
+            fc.data_path = new_data_path
+        sap.vis_track_entries.remove(sap.active_vis_track_index)
+        i = sap.active_vis_track_index
+        sap.active_vis_track_index = min(max(0, i-1), len(sap.vis_track_entries))
 
+        remove_visibility_drivers(context)
+        from .import_anim import setup_visibility_drivers
+        setup_visibility_drivers(context.object)        
         return {'FINISHED'} 
 
 class SUB_OP_vis_drivers_refresh(bpy.types.Operator):
@@ -443,45 +456,6 @@ class SUB_UL_vis_track_entries(bpy.types.UIList):
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
-    def draw_filter(self, context, layout):
-        # Nothing much to say here, it's usual UI code...
-        split = layout.split(factor=0.66, align=False)
-        split.prop(self, "filter_name", text="")
-        row = split.row(align=True)
-        row.prop(self, "use_filter_sort_alpha", icon='SORTALPHA', toggle=True)
-        icon = 'SORT_DESC' if self.use_filter_sort_reverse else 'SORT_ASC'
-        row.prop(self, "use_filter_sort_reverse", text="", icon=icon)
-
-    def filter_items(self, context, data, propname):
-        '''
-        Pretty much default UI code except for not displaying the "deleted" entries
-        '''
-        entries = getattr(data, propname)
-        helper_funcs = bpy.types.UI_UL_list
-
-        # Default return values.
-        flt_flags = []
-        flt_neworder = []
-
-        # Filtering by name
-        if self.filter_name:
-            flt_flags = helper_funcs.filter_items_by_name(self.filter_name,
-                                        self.bitflag_filter_item, entries, "name",
-                                        reverse=self.use_filter_invert)
-        if not flt_flags:
-            flt_flags = [self.bitflag_filter_item] * len(entries)
-
-        # Filter by deletion.
-        for index, entry in enumerate(entries):
-            if entry.deleted == True:
-                flt_flags[index] &= ~self.bitflag_filter_item
-
-
-        # Reorder by name
-        if self.use_filter_sort_alpha:
-            flt_neworder = helper_funcs.sort_items_by_name(entries, "name")
-        
-        return flt_flags, flt_neworder
 
 class SUB_UL_mat_tracks(bpy.types.UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
@@ -525,37 +499,3 @@ class SUB_UL_mat_property_values(bpy.types.UIList):
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)        
 
-'''
-class VisTrackEntry(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(name="Vis Name", default="Unknown")
-    value: bpy.props.BoolProperty(name="Visible", default=False)
-    deleted: bpy.props.BoolProperty(name="Deleted", default=False)
-
-class MatTrackProperty(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(name="Property Name", default="Unknown")
-    sub_type: bpy.props.EnumProperty(
-        name='Mat Track Entry Subtype',
-        description='CustomVector or CustomFloat or CustomBool',
-        items=mat_sub_types, 
-        default='VECTOR',)
-    deleted: bpy.props.BoolProperty(name="Deleted", default=False)
-    custom_vector: bpy.props.FloatVectorProperty(name='Custom Vector', size=4)
-    custom_bool: bpy.props.BoolProperty(name='Custom Bool')
-    custom_float: bpy.props.FloatProperty(name='Custom Float')
-    pattern_index: bpy.props.IntProperty(name='Pattern Index', subtype='UNSIGNED')
-    texture_transform: bpy.props.FloatVectorProperty(name='Texture Transform', size=5)
-
-class MatTrack(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(name="Material Name", default="Unknown")
-    properties: bpy.props.CollectionProperty(type=MatTrackProperty)
-    deleted: bpy.props.BoolProperty(name="Deleted", default=False)
-    active_property_index: bpy.props.IntProperty(name='Active Mat Property Index', default=0)
-
-class SubAnimProperties(bpy.types.PropertyGroup):
-    vis_track_entries: bpy.props.CollectionProperty(type=VisTrackEntry)
-    active_vis_track_index: bpy.props.IntProperty(name='Active Vis Track Index', default=0)
-    mat_tracks: bpy.props.CollectionProperty(type=MatTrack)
-    active_mat_track_index: bpy.props.IntProperty(name='Active Mat Track Index', default=0)
-#bpy.types.Armature.sub_anim_properties = bpy.props.PointerProperty(type=SubAnimProperties)
-
-'''
