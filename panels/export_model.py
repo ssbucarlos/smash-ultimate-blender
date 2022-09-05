@@ -140,6 +140,12 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     except:
         operator.report({'ERROR'}, f'{arma.name} is not a valid armature name. Please select a valid armature.')
         return
+    # Temporarily remove mesh vis drivers and un-hide them for export
+    if arma.animation_data is not None:
+        bpy.ops.sub.vis_drivers_remove()
+    for child in arma.children:
+        child.hide_viewport = False
+        child.hide_render = False
 
     # TODO: Investigate why export fails if meshes are selected before hitting export.
     for selected_object in context.selected_objects:
@@ -216,6 +222,9 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
     end = time.time()
     print(f'Create and save export files in {end - start} seconds')
 
+    if arma.animation_data is not None:
+        from .import_anim import setup_visibility_drivers
+        setup_visibility_drivers(arma)
 
 def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
     try:
