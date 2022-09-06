@@ -1,4 +1,5 @@
 import bpy
+import mathutils
 from bpy.types import Operator
 from bpy.props import IntProperty, StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
@@ -128,11 +129,12 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
     for frame in range(first_blender_frame, last_blender_frame+1):
         context.scene.frame_set(frame)
         for bone in animated_bones:
-            m:bpy.types.Matrix = None
+            m:mathutils.Matrix = None
             if bone.parent:
                 m = bone.parent.matrix.inverted() @ bone.matrix
                 m = unreorient_matrix(m).transposed()
             else:
+                '''
                 from bpy_extras.io_utils import axis_conversion
                 converter_matrix = axis_conversion(
                     from_forward='Z', 
@@ -140,6 +142,9 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
                     to_forward='-Y',
                     to_up='Z').to_4x4()
                 m = converter_matrix.inverted() @ bone.matrix
+                '''
+                t = bone.matrix.translation
+                m = mathutils.Matrix.Translation([t[0], t[2], -t[1]])
             ms = m.to_scale()
             mq = m.to_quaternion()
             mt = m.to_translation()

@@ -14,6 +14,7 @@ from pathlib import Path
 from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
 from bpy_extras import image_utils
+import bpy_extras
 
 from ..operators import master_shader, material_inputs
 
@@ -364,8 +365,20 @@ def create_armature(ssbh_skel, context):
         ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
         if blender_bone.parent is None:
             blender_bone.matrix = reorient_root(ssbh_bone.transform)
-            continue
-        blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
+            '''
+            The following did not work as expected, while the root bone did point straight up as expected,
+            the overall skel appears rotated 90 degrees.
+            '''
+            '''
+            converter_matrix = bpy_extras.io_utils.axis_conversion(
+                from_forward='Z', 
+                from_up='Y',
+                to_forward='-Y',
+                to_up='Z').to_4x4()
+            blender_bone.matrix = converter_matrix @ mathutils.Matrix(ssbh_bone.transform)
+            '''
+        else:
+            blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
     
 
     # fix bone lengths

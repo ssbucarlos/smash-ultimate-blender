@@ -245,14 +245,34 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                         # This matches the convention used for Smash Ultimate.
                         pass
         else:
+            # TODO: Investigate root bones in more detail
+            # Converter matrix doesnt work, and using converter matrix on the root bone
+            # in import_model doesnt work as expected.
+            '''
             from bpy_extras.io_utils import axis_conversion
             converter_matrix = axis_conversion(
                 from_forward='Z', 
-                from_up='-X',
+                from_up='Y',
                 to_forward='-Y',
                 to_up='Z').to_4x4()
-            bone.matrix = converter_matrix @ raw_matrix
-
+            bone.matrix = raw_matrix @ converter_matrix
+            '''
+            # copied from .import_model
+            m = Matrix([
+                    [0.0, 1.0, 0.0, 0.0],
+                    [ 0.0, 0.0, -1.0, 0.0],
+                    [ -1.0, 0.0, 0.0, 0.0],
+                    [ 0.0, 0.0, 0.0, 1.0]
+                ])
+            # Hacky converter just for the root bone
+            from bpy_extras.io_utils import axis_conversion
+            converter_matrix = axis_conversion(
+                from_forward='Z', 
+                from_up='Y',
+                to_forward='Z',
+                to_up='-X').to_4x4()
+            # I just wanna move on with my life
+            bone.matrix = m @ Matrix.Translation((converter_matrix @ raw_matrix).translation)
 
         keyframe_insert_bone_locrotscale(context.scene.sub_anim_armature, bone.name, frame, 'Transform')
 
