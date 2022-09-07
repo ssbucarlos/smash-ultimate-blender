@@ -6,7 +6,7 @@ from bpy_extras.io_utils import ImportHelper
 from .. import ssbh_data_py
 from .import_anim import AnimArmatureClearOperator, AnimCameraClearOperator
 
-class ExportAnimPanel(bpy.types.Panel):
+class SUB_PT_ExportAnimPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Ultimate'
@@ -23,25 +23,25 @@ class ExportAnimPanel(bpy.types.Panel):
         ssp = context.scene.sub_scene_properties
         if ssp.anim_export_arma is None and ssp.anim_export_camera is None:
             row = layout.row(align=True)
-            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA')
+            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA', text='')
             row = layout.row(align=True)
-            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA')
+            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA', text='')
             return
         elif ssp.anim_export_arma is not None:
             row = layout.row(align=True)
-            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA')
+            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA', text='')
             if ssp.anim_export_arma.animation_data is None:
                 row = layout.row(align=True)
                 row.label(text='The selected armature has no loaded animation!', icon='ERROR')
             else:
                 row = layout.row(align=True)
-                row.operator('sub.anim_model_exporter', icon='FILE', text='Export a Model Animation')
+                row.operator('sub.anim_model_exporter', icon='EXPORT', text='Export a Model Animation')
         elif ssp.anim_export_camera is not None:
             row = layout.row(align=True)
-            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA')
-            row.operator('sub.anim_camera_exporter', icon='FILE', text='Export a Camera Animation')
+            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA', text='')
+            row.operator('sub.anim_camera_exporter', icon='EXPORT', text='Export a Camera Animation')
 
-class AnimModelExporterOperator(Operator):
+class SUB_OP_AnimModelExporterOperator(Operator):
     bl_idname = 'sub.anim_model_exporter'
     bl_label = 'Export Anim'   
 

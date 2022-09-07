@@ -22,24 +22,22 @@ class ImportAnimPanel(bpy.types.Panel):
         layout.use_property_split = False
 
         row = layout.row(align=True)
-        row.label(text='Select an armature or camera to import an animation over')
+        row.label(text="Select an Armature or Camera.")
 
         if context.scene.sub_anim_armature is None and context.scene.sub_anim_camera is None:
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA')
+            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA', text='')
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA')
+            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA', text='')
             return
         elif context.scene.sub_anim_armature is not None:
             row = layout.row(align=True)
-            row.label(text=f'Selected armature: {context.scene.sub_anim_armature.name}')
-            row.operator('sub.anim_armature_clear', icon='CANCEL', text='Clear Selected Armature')
+            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA', text='')
             row = layout.row(align=True)
-            row.operator('sub.anim_model_importer', icon='FILE', text='Import a Model Animation')
+            row.operator('sub.anim_model_importer', icon='IMPORT', text='Import a Model Animation')
         elif context.scene.sub_anim_camera is not None:
             row = layout.row(align=True)
-            row.label(text=f'Selected camera: {context.scene.sub_anim_camera.name}')
-            row.operator('sub.anim_camera_clear', icon='CANCEL', text='Clear Selected Camera')
+            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA', text='')
             row = layout.row(align=True)
             row.operator('sub.anim_camera_importer', icon='FILE', text='Import a Camera Animation')
 
