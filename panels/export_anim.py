@@ -126,7 +126,7 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
     name_to_node = {node.name:node for node in trans_group.nodes}
     # changing frames is expensive so need to setup loop to only do once
     from .export_model import unreorient_matrix
-    for frame in range(first_blender_frame, last_blender_frame+1):
+    for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
         context.scene.frame_set(frame)
         for bone in animated_bones:
             m:mathutils.Matrix = None
@@ -147,6 +147,17 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
                 m = mathutils.Matrix.Translation([t[0], t[2], -t[1]])
             ms = m.to_scale()
             mq = m.to_quaternion()
+            '''
+            Checking here and fixing the quaternion before using ssbh_data_py seems to not work.
+            Luckily ssbh_data_py allows manual editing of the rotation values so can just fix after creation of the
+            transform.
+            # Check for quaternion interpolation issues
+            if frame != first_blender_frame:
+                pq = mathutils.Quaternion(track.values[index-1].rotation)
+                if pq.dot(mq) < 0:
+                    #print(f'{node.name}, frame={frame}, mq={mq}, pq={pq}')
+                    mq.negate()
+            '''
             mt = m.to_translation()
             node = name_to_node[bone.name]
             track = node.tracks[0]
@@ -156,6 +167,13 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
                 [mt[0], mt[1], mt[2]]
             )
             track.values.append(new_ssbh_transform)
+            # Check for quaternion interpolation issues
+            if index > 0:
+                pq = mathutils.Quaternion(track.values[index-1].rotation)
+                cq = mathutils.Quaternion(track.values[index].rotation)
+                if pq.dot(cq) < 0:
+                    print(f'! {node.name}, frame={frame}, mq={mq}, pq={pq}')
+                    track.values[index].rotation = [-c for c in track.values[index].rotation]
     return trans_group
 
 def make_visibility_group(context, first_blender_frame, last_blender_frame):
