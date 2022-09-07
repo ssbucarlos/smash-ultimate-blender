@@ -80,10 +80,13 @@ class AnimModelExporterOperator(Operator):
     def invoke(self, context, event):
         self.first_blender_frame = context.scene.frame_start
         self.last_blender_frame = context.scene.frame_end
+        self.filepath = ""
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
+        if not self.filepath.endswith('.nuanmb'):
+            self.filepath += '.nuanmb'
         export_model_anim(context, self.filepath,
                         self.include_transform_track, self.include_material_track,
                         self.include_visibility_track, self.first_blender_frame,
