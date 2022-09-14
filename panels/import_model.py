@@ -2,6 +2,7 @@ import json
 import os
 import os.path
 from tokenize import String
+from traceback import format_exc
 import bpy
 import mathutils
 import time
@@ -198,10 +199,11 @@ def import_model(self, context):
     end = time.time()
     print(f'Read files in {end - start} seconds')
 
+    from traceback import format_exc
     try:
         armature = create_armature(ssbh_skel, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import {nusktb_name}: {e}')
+        self.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{format_exc()}')
 
     try:
         create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
@@ -296,15 +298,25 @@ def reorient_root(m, transpose=True):
     c10,c11,c12,c13 = m[1]
     c20,c21,c22,c23 = m[2]
     c30,c31,c32,c33 = m[3]
-    
+    '''
+   
+    m = Matrix([
+        [],
+        [],
+        [],
+        []
+    ])
+    '''
     # TODO: Find out if the following does not work for certain skels
+    # This does not work for some articles since thier root bones contain non-identity matrices
+    '''
     m = Matrix([
         [0.0, 1.0, 0.0, 0.0],
         [ 0.0, 0.0, -1.0, 0.0],
         [ -1.0, 0.0, 0.0, 0.0],
         [ 0.0, 0.0, 0.0, 1.0]
     ])
-    
+    '''
     return m
 
 
@@ -364,7 +376,17 @@ def create_armature(ssbh_skel, context):
     for blender_bone in reordered:
         ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
         if blender_bone.parent is None:
-            blender_bone.matrix = reorient_root(ssbh_bone.transform)
+            from mathutils import Matrix
+            #blender_bone.matrix = Matrix(ssbh_bone.transform).transposed()
+            #blender_bone.matrix = Matrix.Rotation(math.radians(-90), 4, 'Z') @ Matrix.Rotation(math.radians(90), 4, 'Y') @ Matrix(ssbh_bone.transform).transposed()
+            '''
+            blender_bone.matrix = blender_bone.matrix @ Matrix.Rotation(math.radians(-90), 4, 'Z')
+            blender_bone.matrix = blender_bone.matrix @ Matrix.Rotation(math.radians(90), 4, 'Y')
+            '''
+            #blender_bone.matrix = reorient_root(ssbh_bone.transform)
+            blender_bone.matrix = reorient(ssbh_bone.transform)
+            blender_bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
+            blender_bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
             '''
             The following did not work as expected, while the root bone did point straight up as expected,
             the overall skel appears rotated 90 degrees.
@@ -478,8 +500,13 @@ def create_armature(ssbh_skel, context):
                 bone.bone.use_deform = False
 
 
-    
+    #context.view_layer.objects.active = armature
+    #armature.select_set(True)
     bpy.ops.object.mode_set(mode='OBJECT')
+    #armature.matrix_local = Matrix.Rotation(math.radians(-90), 4, 'Z')
+    #bpy.ops.object.transform_apply(rotation=True)
+    #armature.matrix_local= Matrix.Rotation(math.radians(90), 4, 'X') 
+    #bpy.ops.object.transform_apply(rotation=True)
     end = time.time()
     print(f'Created armature in {end - start} seconds')
 

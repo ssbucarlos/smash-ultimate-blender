@@ -1,6 +1,6 @@
 import bpy
 import re
-from bpy.types import Scene, Object, Armature, PropertyGroup
+from bpy.types import Scene, Object, Armature, PropertyGroup, Camera
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty
 from .panels import exo_skel, io_matl, import_anim
@@ -101,25 +101,27 @@ def register():
         poll=exo_skel.poll_armatures,
     )
 
+    '''
     Scene.sub_model_export_armature = PointerProperty(
         name='Armature',
         description='Select the Armature',
         type=Object,
         poll=exo_skel.poll_armatures,
     )
-
+    '''
+    '''
     Scene.sub_vanilla_nusktb = StringProperty(
         name='Vanilla .NUSKTB file path',
         description='The path to the vanilla nusktb file',
         default='',
     )
-
+    '''
     Scene.sub_merge_same_name_meshes = BoolProperty(
         name='merge_same_name_meshes',
         description='Wether to merge same name meshes',
         default=True,
     )
-
+    '''
     Scene.sub_anim_armature = PointerProperty(
         name='Armature',
         description='Select the Armature',
@@ -133,14 +135,18 @@ def register():
         type=Object,
         poll=import_anim.poll_cameras,
     )
-
+    '''
     Armature.sub_anim_properties = PointerProperty(
         type=SubAnimProperties
     )
-    
     Scene.sub_scene_properties = PointerProperty(
         type=SubSceneProperties
     )
+    '''
+    Camera.sub_camera_properties = PointerProperty(
+        type=SubCameraProperties
+    )
+    '''
 
 class SubSceneProperties(PropertyGroup):
     mat_reimport_arma: PointerProperty(
@@ -149,19 +155,40 @@ class SubSceneProperties(PropertyGroup):
         type=Object,
         poll=exo_skel.poll_armatures,
     )
-
+    anim_import_arma: PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,   
+    )
     anim_export_arma: PointerProperty(
         name='Armature',
         description='Select the Armature',
         type=Object,
         poll=exo_skel.poll_armatures,   
     )
-
+    anim_import_camera: PointerProperty(
+        name='Camera',
+        description='Select the Camera',
+        type=Object,
+        poll=import_anim.poll_cameras,
+    )
     anim_export_camera: PointerProperty(
         name='Camera',
         description='Select the Camera',
         type=Object,
         poll=import_anim.poll_cameras,
+    )
+    model_export_arma: PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,
+    )
+    vanilla_nusktb: StringProperty(
+        name='Vanilla .NUSKTB file path',
+        description='The path to the vanilla nusktb file',
+        default='',
     )
 
 def vis_track_name_update(self, context):
@@ -278,3 +305,23 @@ class SubAnimProperties(PropertyGroup):
     mat_tracks: CollectionProperty(type=MatTrack)
     active_mat_track_index: IntProperty(name='Active Mat Track Index', default=0)
 
+'''
+Typical SSBH Camera Layout.
+Group: 'Camera'
+    Node: 'gya_cameraShape'
+        Track: 'FieldOfView'
+        Track: 'FarClip'
+        Track: 'NearClip'
+Group: 'Transform'
+    Node: 'gya_camera'
+        Track: 'Transform'
+'''
+'''
+class SubCameraProperties(PropertyGroup):
+    name: StringProperty(
+        name="SSBH Camera Node Name",
+        default="gya_cameraShape",)
+    field_of_view: FloatProperty(name='Field Of View', default=0.5)
+    near_clip: FloatProperty(name='Near Clip', default=1.0)
+    far_clip: FloatProperty(name='Far Clip', default=100000.0)
+'''

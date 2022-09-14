@@ -5,12 +5,12 @@ import bpy
 from .. import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import IntProperty, StringProperty, BoolProperty
-from bpy.types import Operator
+from bpy.types import Operator, Panel
 import mathutils
 from .import_model import reorient, reorient_root
 import re
 
-class ImportAnimPanel(bpy.types.Panel):
+class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Ultimate'
@@ -18,30 +18,31 @@ class ImportAnimPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
+        ssp = context.scene.sub_scene_properties
+        camera = ssp.anim_import_camera
+        arma = ssp.anim_import_arma
         layout = self.layout
         layout.use_property_split = False
-
         row = layout.row(align=True)
         row.label(text="Select an Armature or Camera.")
-
-        if context.scene.sub_anim_armature is None and context.scene.sub_anim_camera is None:
+        if arma is None and camera is None:
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA', text='')
+            row.prop(ssp, 'anim_import_arma', icon='ARMATURE_DATA', text='')
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA', text='')
+            row.prop(ssp, 'anim_import_camera', icon='VIEW_CAMERA', text='')
             return
-        elif context.scene.sub_anim_armature is not None:
+        elif arma is not None:
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_armature', icon='ARMATURE_DATA', text='')
+            row.prop(ssp, 'anim_import_arma', icon='ARMATURE_DATA', text='')
             row = layout.row(align=True)
             row.operator('sub.anim_model_importer', icon='IMPORT', text='Import a Model Animation')
-        elif context.scene.sub_anim_camera is not None:
+        elif camera is not None:
             row = layout.row(align=True)
-            row.prop(context.scene, 'sub_anim_camera', icon='VIEW_CAMERA', text='')
+            row.prop(ssp, 'anim_import_camera', icon='VIEW_CAMERA', text='')
             row = layout.row(align=True)
-            row.operator('sub.anim_camera_importer', icon='FILE', text='Import a Camera Animation')
-
-class AnimArmatureClearOperator(Operator):
+            row.operator('sub.anim_camera_importer', icon='IMPORT', text='Import a Camera Animation')
+'''
+class SUB_OP_anim_armature_clear_operator(Operator):
     bl_idname = 'sub.anim_armature_clear'
     bl_label = 'Anim Armature Clear Operator'
 
@@ -56,8 +57,9 @@ class AnimCameraClearOperator(Operator):
     def execute(self, context):
         context.scene.sub_anim_camera = None
         return {'FINISHED'}
+'''
 
-class AnimModelImporterOperator(Operator, ImportHelper):
+class SUB_OP_import_model_anim(Operator, ImportHelper):
     bl_idname = 'sub.anim_model_importer'
     bl_label = 'Import Anim'
 
@@ -91,7 +93,7 @@ class AnimModelImporterOperator(Operator, ImportHelper):
                         self.include_visibility_track, self.first_blender_frame)
         return {'FINISHED'}
 
-class AnimCameraImporterOperator(Operator, ImportHelper):
+class SUB_OP_import_camera_anim(Operator, ImportHelper):
     bl_idname = 'sub.anim_camera_importer'
     bl_label = 'Import Camera Anim'
 
@@ -106,7 +108,7 @@ class AnimCameraImporterOperator(Operator, ImportHelper):
         default=1,
     )
     def execute(self, context):
-        import_camera_anim(context, self.filepath, self.first_blender_frame)
+        import_camera_anim(self, context, self.filepath, self.first_blender_frame)
         return {'FINISHED'}
     
 def poll_cameras(self, obj):
@@ -125,25 +127,25 @@ def import_model_anim(context, filepath,
     frame_count = ssbh_anim_data.final_frame_index + 1
 
     scene = context.scene
+    arma = scene.sub_scene_properties.anim_import_arma
     scene.frame_start = first_blender_frame
     scene.frame_end = scene.frame_start + frame_count - 1
     scene.frame_set(scene.frame_start)
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
-    context.view_layer.objects.active = context.scene.sub_anim_armature
+    context.view_layer.objects.active = arma
     bpy.ops.object.mode_set(mode='EDIT', toggle=False) 
-    bone_name_to_edit_bone_matrix = {bone.name:bone.matrix.copy() for bone in context.scene.sub_anim_armature.data.edit_bones}
-    #print(bone_name_to_edit_bone_matrix) # DEBUG, remove for release
+    bone_name_to_edit_bone_matrix = {bone.name:bone.matrix.copy() for bone in arma.data.edit_bones}
     bpy.ops.object.mode_set(mode='POSE', toggle=False) # put our armature in pose mode
     
     from pathlib import Path
-    action_name = context.scene.sub_anim_armature.name + ' ' + Path(filepath).name
-    if context.scene.sub_anim_armature.animation_data is None:
-        context.scene.sub_anim_armature.animation_data_create()
+    action_name = arma.name + ' ' + Path(filepath).name
+    if arma.animation_data is None:
+        arma.animation_data_create()
     action = bpy.data.actions.new(action_name)
-    context.scene.sub_anim_armature.animation_data.action = action
+    arma.animation_data.action = action
 
     if include_transform_track and transform_group is not None:
-        bones = context.scene.sub_anim_armature.pose.bones
+        bones = arma.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
         setup_bone_scale_drivers(bone_to_node.keys()) # Only want to setup drivers for the bones that have an entry in the anim
 
@@ -160,9 +162,9 @@ def import_model_anim(context, filepath,
             do_visibility_stuff(context, visibility_group, index, frame)
 
     if include_visibility_track and visibility_group is not None:
-        setup_visibility_drivers(context.scene.sub_anim_armature)
+        setup_visibility_drivers(arma)
     if include_material_track and material_group is not None:
-        setup_material_drivers(context.scene.sub_anim_armature)
+        setup_material_drivers(arma)
 
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
@@ -180,14 +182,15 @@ def setup_bone_scale_drivers(pose_bones):
         inheritscale_var.name = "inherit_scale"
         isv = inheritscale_var # shorthand for this var
         target = inheritscale_var.targets[0]
-        target.id = bpy.context.scene.sub_anim_armature
+        target.id = bpy.context.scene.sub_scene_properties.anim_import_arma
         target.data_path = f'pose.bones["{pose_bone.name}"]["inherit_scale"]'
         # TODO: Figure out how to incorporate compensate scale
         driver_handle.driver.expression = f'0 if {isv.name} == 1 else 3' # 0 is 'FULL' and 3 is 'NONE'
 
 
 def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node, bone_name_to_edit_bone_matrix):
-    bones = context.scene.sub_anim_armature.pose.bones
+    arma = context.scene.sub_scene_properties.anim_import_arma
+    bones = arma.pose.bones
     # Get a list of bones in 'heirarchal' order
     # TODO: make own function
     def heirarchy_order(bone, reordered):
@@ -256,6 +259,7 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
             bone.matrix = raw_matrix @ converter_matrix
             '''
             # copied from .import_model
+            '''
             m = Matrix([
                     [0.0, 1.0, 0.0, 0.0],
                     [ 0.0, 0.0, -1.0, 0.0],
@@ -271,8 +275,13 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                 to_up='-X').to_4x4()
             # I just wanna move on with my life
             bone.matrix = m @ Matrix.Translation((converter_matrix @ raw_matrix).translation)
-
-        keyframe_insert_bone_locrotscale(context.scene.sub_anim_armature, bone.name, frame, 'Transform')
+            '''
+            # TODO: Investigate how to do this without bpy.ops
+            bone.matrix = reorient(raw_matrix, transpose=False)
+            arma.data.bones.active = bone.bone
+            bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
+            bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)
+        keyframe_insert_bone_locrotscale(arma, bone.name, frame, 'Transform')
 
         bone['compensate_scale'] = compensate_scale
         bone['inherit_scale'] = inherit_scale
@@ -290,9 +299,9 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         )
 
 
-def keyframe_insert_bone_locrotscale(armature, bone_name, frame, group_name):
+def keyframe_insert_bone_locrotscale(arma: bpy.types.Object, bone_name, frame, group_name):
     for parameter in ['location', 'rotation_quaternion', 'scale']:
-        armature.keyframe_insert(
+        arma.keyframe_insert(
             data_path=f'pose.bones["{bone_name}"].{parameter}',
             frame=frame,
             group=group_name,
@@ -351,7 +360,7 @@ def setup_material_drivers(arma: bpy.types.Object):
 
 
 def do_material_stuff(context, material_group, index, frame):
-    arma = context.scene.sub_anim_armature
+    arma = context.scene.sub_scene_properties.anim_import_arma
     sap = arma.data.sub_anim_properties
     for node in material_group.nodes:
         mat_track = sap.mat_tracks.get(node.name)
@@ -381,7 +390,8 @@ def do_material_stuff(context, material_group, index, frame):
                 arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].texture_transform', frame=frame,  group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
 
 def setup_sap_material_properties(context, material_group):
-    sap = context.scene.sub_anim_armature.data.sub_anim_properties
+    arma = context.scene.sub_scene_properties.anim_import_arma
+    sap = arma.data.sub_anim_properties
     # Setup
     for node in material_group.nodes:
         mat_track = sap.mat_tracks.get(node.name, None)
@@ -407,9 +417,8 @@ def setup_sap_material_properties(context, material_group):
                     raise TypeError(f'Unsupported track name {track.name}')         
             
 
-def setup_visibility_drivers(armature_object:bpy.types.Object):
+def setup_visibility_drivers(arma:bpy.types.Object):
     # Setup Vis Drivers
-    arma = armature_object
     vis_track_entries = arma.data.sub_anim_properties.vis_track_entries
     mesh_children = [child for child in arma.children if child.type == 'MESH']
     for mesh in mesh_children:
@@ -434,7 +443,7 @@ def do_visibility_stuff(context, visibility_group, index, frame):
             continue
         value = node.tracks[0].values[index]
 
-        arma = context.scene.sub_anim_armature
+        arma = context.scene.sub_scene_properties.anim_import_arma
         entries = arma.data.sub_anim_properties.vis_track_entries
         sub_vis_track_entry = entries.get(node.name, None)
         if sub_vis_track_entry is None:
@@ -445,8 +454,8 @@ def do_visibility_stuff(context, visibility_group, index, frame):
         arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{entry_index}].value', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
 
 
-def import_camera_anim(context, filepath, first_blender_frame):
-    camera = context.scene.sub_anim_camera
+def import_camera_anim(operator, context, filepath, first_blender_frame):
+    camera = context.scene.sub_scene_properties.anim_import_camera
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
     name_group_dict = {group.group_type.name : group for group in ssbh_anim_data.groups}
     transform_group = name_group_dict.get('Transform')
@@ -476,26 +485,61 @@ def import_camera_anim(context, filepath, first_blender_frame):
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end+1)):
         scene.frame_set(frame)
         if camera_group is not None:
-            update_camera_properties(context, camera_group, index, frame)
+            update_camera_properties(operator, context, camera_group, index, frame)
         if transform_group is not None:
             update_camera_transforms(context, transform_group, index, frame)
 
-def update_camera_properties(context, camera_group, index, frame):
-    camera = context.scene.sub_anim_camera
-    for node in camera_group.nodes:
-        for track in node.tracks:
-            try: 
-                track.values[index]
-            except IndexError:
-                continue
-            value = track.values[index]
-            camera[f'{track.name}'] = value
-            camera.keyframe_insert(
-                data_path=f'["{track.name}"]',
-                frame=frame,
-                group='Camera',
-                options={'INSERTKEY_NEEDED'},
-            ) 
+def update_camera_properties(operator, context, camera_group, index, frame):
+    node: ssbh_data_py.anim_data.NodeData = None
+    # Imported anim should always have at least one node under the camera group
+    if len(camera_group.nodes) == 0:
+        message = f'The camera anim has no Nodes in the Camera group! Skipping setting camera properties'
+        operator.report({'WARNING'}, message)
+        return
+    # The standard behavior
+    if len(camera_group.nodes) == 1:
+        node = camera_group.nodes[0]
+    # If the camera group has multiple nodes instead of just 'gya_cameraShape', just use the 'gya_cameraShape' one
+    if len(camera_group.nodes) > 1:
+        message = f'The camera anim has multiple Camera Property Nodes! Will use the one called "gya_camera_Shape", but will not be able to export the other Node!'
+        operator.report({'WARNING'}, message)
+        for n in camera_group.nodes:
+            if n.name == 'gya_cameraShape':
+                node = n
+        if node is None:
+            node = camera_group.nodes[0]
+    camera = context.scene.sub_scene_properties.anim_import_camera
+    #scp = camera.data.sub_camera_properties
+    for track in node.tracks:
+        if track.name == 'FieldOfView':
+            if index < len(track.values):
+                #scp.field_of_view = track.values[index]
+                #cam_keyframe_insert(camera, 'field_of_view', frame)
+                camera.data.angle_y = track.values[index]
+                camera.data.keyframe_insert(data_path = 'lens', frame=frame)
+        elif track.name == 'FarClip':
+            if index < len(track.values):
+                #scp.far_clip = track.values[index]
+                #cam_keyframe_insert(camera, 'far_clip', frame)
+                camera.data.clip_end= track.values[index]
+                camera.data.keyframe_insert(data_path = 'clip_end', frame=frame)
+        elif track.name == 'NearClip':
+            if index < len(track.values):
+                #scp.near_clip = track.values[index]
+                #cam_keyframe_insert(camera, 'near_clip', frame)
+                camera.data.clip_start = track.values[index]
+                camera.data.keyframe_insert(data_path = 'clip_start', frame=frame)
+        else:
+            operator.report({'WARNING'}, f'Unsupported track {track.name} in camera group, skipping!')
+'''
+def cam_keyframe_insert(camera: bpy.types.Object, property:str, frame: int):
+    camera.data.keyframe_insert(
+        data_path=f'sub_camera_properties.{property}',
+        frame=frame,
+        group='Smash Ultimate Properties',
+        options={'INSERTKEY_NEEDED'},
+        )
+'''
 
 def update_camera_transforms(context, transform_group, index, frame):
     value = transform_group.nodes[0].tracks[0].values[index]
@@ -511,6 +555,6 @@ def update_camera_transforms(context, transform_group, index, frame):
     rsmz = raw_scale_matrix_z = mathutils.Matrix.Scale(rs[2], 4, (0,0,1))
     axis_correction = Matrix.Rotation(math.radians(90), 4, 'X')   
     fm = final_matrix = Matrix(axis_correction @ rtm @ rrm @ rsmx @ rsmy @ rsmz)
-    context.scene.sub_anim_camera.matrix_local = fm
-    keyframe_insert_camera_locrotscale(context.scene.sub_anim_camera, frame)
+    context.scene.sub_scene_properties.anim_import_camera.matrix_local = fm
+    keyframe_insert_camera_locrotscale(context.scene.sub_scene_properties.anim_import_camera, frame)
 

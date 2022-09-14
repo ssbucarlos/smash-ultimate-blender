@@ -9,7 +9,7 @@ mat_sub_types = (
     ('TEXTURE', 'Texture Transform', 'Texture Transform')
 )
 
-class DATA_PT_sub_smush_anim_data_master(bpy.types.Panel):
+class SUB_PT_sub_smush_anim_data_master(bpy.types.Panel):
     bl_label = "Ultimate Animation Data"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -27,13 +27,13 @@ class DATA_PT_sub_smush_anim_data_master(bpy.types.Panel):
         obj = context.object
         arma = obj.data
 
-class DATA_PT_sub_smush_anim_data_vis_tracks(bpy.types.Panel):
+class SUB_PT_sub_smush_anim_data_vis_tracks(bpy.types.Panel):
     bl_label = "Ultimate Visibility Track Entries"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "data"
     bl_options = {'DEFAULT_CLOSED'}
-    bl_parent_id = "DATA_PT_sub_smush_anim_data_master"
+    bl_parent_id = "SUB_PT_sub_smush_anim_data_master"
 
     @classmethod
     def poll(cls, context):
@@ -62,13 +62,13 @@ class DATA_PT_sub_smush_anim_data_vis_tracks(bpy.types.Panel):
         col.separator()
         col.menu("SUB_MT_vis_entry_context_menu", icon='DOWNARROW_HLT', text="")
 
-class DATA_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
+class SUB_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
     bl_label = "Ultimate Material Tracks"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "data"
     bl_options = {'DEFAULT_CLOSED'}
-    bl_parent_id = "DATA_PT_sub_smush_anim_data_master"
+    bl_parent_id = "SUB_PT_sub_smush_anim_data_master"
 
     @classmethod
     def poll(cls, context):
@@ -152,8 +152,33 @@ class DATA_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
         # Sub 3
         split = split.split()
         sr = split.row(align=True)
-        sr.menu(SUB_MT_mat_entry_context_menu.bl_idname, text='Drivers...')
+        sr.menu(SUB_MT_mat_entry_context_menu.bl_idname, text='Drivers...')      
+'''
+class SUB_PT_sub_smush_anim_data_camera(bpy.types.Panel):
+    bl_label = "Ultimate Camera Data"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "data"
+    bl_options = {'DEFAULT_CLOSED'}
 
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'CAMERA'
+    
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+        cam = obj.data
+        scp = cam.sub_camera_properties
+        row = layout.row()
+        row.prop(scp, 'field_of_view', text='Field Of View')
+        row = layout.row()
+        row.prop(scp, 'near_clip', text='Near Clip')
+        row = layout.row()
+        row.prop(scp, 'far_clip', text='Far Clip')
+'''
 class SUB_OP_mat_track_add(bpy.types.Operator):
     bl_idname = 'sub.mat_track_add'
     bl_label  = 'Add Mat Track'

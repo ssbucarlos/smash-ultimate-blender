@@ -26,19 +26,16 @@ class ExportModelPanel(Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
+        ssp = context.scene.sub_scene_properties
         layout = self.layout
         layout.use_property_split = False
-
         row = layout.row(align=True)
         row.label(text='Select an armature. The armature + its meshes will be exported')
-
         row = layout.row(align=True)
-        row.prop(context.scene, 'sub_model_export_armature', icon='ARMATURE_DATA')
-
-        if not context.scene.sub_model_export_armature:
+        row.prop(ssp, 'model_export_arma', icon='ARMATURE_DATA')
+        if not ssp.model_export_arma:
             return
-        
-        if '' == context.scene.sub_vanilla_nusktb:
+        if '' == ssp.vanilla_nusktb:
             row = layout.row(align=True)
             row.label(text='Please select the vanilla .nusktb for the exporter to reference!')
             row = layout.row(align=True)
@@ -49,7 +46,7 @@ class ExportModelPanel(Panel):
             row.operator('sub.vanilla_nusktb_selector', icon='FILE', text='Select Vanilla Nusktb')
         else:
             row = layout.row(align=True)
-            row.label(text='Selected reference .nusktb: ' + context.scene.sub_vanilla_nusktb)
+            row.label(text='Selected reference .nusktb: ' + ssp.vanilla_nusktb)
             row = layout.row(align=True)
             row.operator('sub.vanilla_nusktb_selector', icon='FILE', text='Re-Select Vanilla Nusktb')
 
@@ -65,7 +62,7 @@ class VanillaNusktbSelector(Operator, ImportHelper):
         options={'HIDDEN'}
     )
     def execute(self, context):
-        context.scene.sub_vanilla_nusktb = self.filepath
+        context.scene.sub_scene_properties.vanilla_nusktb = self.filepath
         return {'FINISHED'}   
 
 class ModelExporterOperator(Operator, ImportHelper):
@@ -134,7 +131,7 @@ class ModelExporterOperator(Operator, ImportHelper):
 
 def export_model(operator, context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     # Prepare the scene for export and find the meshes to export.
-    arma = context.scene.sub_model_export_armature
+    arma = context.scene.sub_scene_properties.model_export_arma
     try:
         context.view_layer.objects.active = arma
     except:
@@ -913,15 +910,19 @@ def unreorient_matrix(reoriented_matrix) -> Matrix:
     matrix_unreoriented = matrix_unreordered.transposed()
     return matrix_unreoriented
 
-def unreorient_root(reoriented_matrix) -> Matrix:
-    m = Matrix([
-        [ 1.0, 0.0, 0.0, 0.0],
-        [ 0.0, 1.0, 0.0, 0.0],
-        [ 0.0, 0.0, 1.0, 0.0],
-        [ 0.0, 0.0, 0.0, 1.0]
-    ])
-    return m
-
+def get_unreoriented_root(bone: bpy.types.EditBone) -> Matrix:
+    #arma = bpy.context.scene.sub_scene_properties.model_export_arma
+    #arma.data.edit_bones.active = bone
+    #bpy.ops.transform.rotate(value=math.radians(90), orient_axis='X', center_override=bone.head)
+    #bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='Z', center_override=bone.head)
+    bone.transform(Matrix.Rotation(math.radians(-90), 4, 'X'))
+    bone.transform(Matrix.Rotation(math.radians(90), 4, 'Z'))
+    unreoriented_matrix = unreorient_matrix(bone.matrix)
+    bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
+    bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
+    #bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=bone.head)
+    #bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=bone.head)
+    return unreoriented_matrix
 
 def read_vanilla_nusktb(path, mode):
     if not path:
@@ -936,12 +937,12 @@ def read_vanilla_nusktb(path, mode):
         raise RuntimeError(message)
 
 
-def get_ssbh_bone(blender_bone, parent_index):
+def get_ssbh_bone(blender_bone: bpy.types.EditBone, parent_index):
     if blender_bone.parent:
         unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
         return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
     else:
-        return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreorient_root(blender_bone.matrix), None)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_unreoriented_root(blender_bone), None)
 
 
 def bone_order(bones, name):
@@ -961,7 +962,8 @@ def bone_order(bones, name):
     
 
 def make_skel(operator, context, mode):
-    arma = context.scene.sub_model_export_armature
+    ssp = context.scene.sub_scene_properties
+    arma = ssp.model_export_arma
     bpy.context.view_layer.objects.active = arma
     # The object should be selected and visible before entering edit mode.
     arma.select_set(True)
@@ -973,7 +975,7 @@ def make_skel(operator, context, mode):
     preserve_values = mode == 'ORDER_AND_VALUES'
     preserve_order = mode == 'ORDER_AND_VALUES' or mode == 'ORDER_ONLY'
 
-    vanilla_skel = read_vanilla_nusktb(context.scene.sub_vanilla_nusktb, mode) if preserve_values or preserve_order else None
+    vanilla_skel = read_vanilla_nusktb(ssp.vanilla_nusktb, mode) if preserve_values or preserve_order else None
 
     if vanilla_skel is None:
         message = 'Creating .NUSKTB without a vanilla .NUSKTB file.'
