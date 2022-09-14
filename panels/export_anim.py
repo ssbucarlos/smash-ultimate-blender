@@ -76,7 +76,7 @@ class SUB_OP_export_model_anim(Operator):
     )
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         self.first_blender_frame = context.scene.frame_start
         self.last_blender_frame = context.scene.frame_end
         self.filepath = ""

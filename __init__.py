@@ -27,9 +27,9 @@ def check_unsupported_blender_versions():
         raise ImportError('Cant use a Blender version older than 2.93, please use 2.93 or later')
          
 classes = [
-    panels.import_model.ImportModelPanel,
-    panels.import_model.ModelFolderSelector,
-    panels.import_model.ModelImporter,
+    panels.import_model.SUB_PT_import_model,
+    panels.import_model.SUB_OP_select_model_import_folder,
+    panels.import_model.SUB_OP_import_model,
     panels.export_model.ExportModelPanel,
     panels.export_model.ModelExporterOperator,
     panels.export_model.VanillaNusktbSelector,

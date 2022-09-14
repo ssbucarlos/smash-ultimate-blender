@@ -1,4 +1,5 @@
 import json
+from msilib.schema import Directory
 import os
 import os.path
 from tokenize import String
@@ -8,70 +9,62 @@ import mathutils
 import time
 import math
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..properties import SubSceneProperties
+
 from .. import ssbh_data_py
 import numpy as np
 from pathlib import Path
 
 from bpy.props import StringProperty, BoolProperty
-from bpy_extras.io_utils import ImportHelper
+from bpy.types import Panel, Operator
 from bpy_extras import image_utils
-import bpy_extras
 
 from ..operators import master_shader, material_inputs
 
 import sqlite3
 
-class ImportModelPanel(bpy.types.Panel):
+class SUB_PT_import_model(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Ultimate'
     bl_label = 'Model Importer'
     bl_options = {'DEFAULT_CLOSED'}
 
-    '''
-    def find_model_files(self, context):
-        all_files = os.listdir(context.scene.sub_model_folder_path)
-        model_files = [file for file in all_files if 'model' in file]
-        for model_file in model_files:
-            extension = model_file.split('.')[1]
-            if 'numshb' == extension:
-                context.scene.sub_model_numshb_file_name = model_file
-            elif 'nusktb' == extension:
-                context.scene.sub_model_nusktb_file_name = model_file
-            elif 'numdlb' == extension:
-                context.scene.sub_model_numdlb_file_name = model_file
-    '''
     def draw(self, context):
+        ssp:SubSceneProperties = context.scene.sub_scene_properties
+        
         layout = self.layout
         layout.use_property_split = False
         
-        if '' == context.scene.sub_model_folder_path:
+        if '' == ssp.model_import_folder_path:
             row = layout.row(align=True)
             row.label(text='Please select a folder...')
             row = layout.row(align=True)
-            row.operator('sub.ssbh_model_folder_selector', icon='ZOOM_ALL', text='Browse for the model folder')
+            row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for the model folder')
             return
         
         row = layout.row(align=True)
-        row.label(text='Selected Folder: "' + context.scene.sub_model_folder_path +'"')
+        row.label(text='Selected Folder: "' + ssp.model_import_folder_path +'"')
         row = layout.row(align=True)
-        row.operator('sub.ssbh_model_folder_selector', icon='ZOOM_ALL', text='Browse for a different model folder')
+        row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for a different model folder')
 
         all_requirements_met = True
         min_requirements_met = True
-        if '' == context.scene.sub_model_numshb_file_name:
+
+        if '' == ssp.model_import_numshb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .numshb file found! Cannot import without it!', icon='ERROR')
             all_requirements_met = False
             min_requirements_met = False
-
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUMSHB file: "' + context.scene.sub_model_numshb_file_name+'"', icon='FILE')
+            row.label(text=f'NUMSHB file: "{ssp.model_import_numshb_file_name}"', icon='FILE')
 
-        if '' == context.scene.sub_model_nusktb_file_name:
+        if '' == ssp.model_import_nusktb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .nusktb file found! Cannot import without it!', icon='ERROR')
@@ -80,9 +73,9 @@ class ImportModelPanel(bpy.types.Panel):
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUSKTB file: "' + context.scene.sub_model_nusktb_file_name+'"', icon='FILE')
+            row.label(text=f'NUSKTB file: "{ssp.model_import_nusktb_file_name}"', icon='FILE')
 
-        if '' == context.scene.sub_model_numdlb_file_name:
+        if '' == ssp.model_import_numdlb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .numdlb file found! Can import, but without materials...', icon='ERROR')
@@ -90,9 +83,9 @@ class ImportModelPanel(bpy.types.Panel):
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUMDLB file: "' + context.scene.sub_model_numdlb_file_name+'"', icon='FILE')
+            row.label(text=f'NUMDLB file: "{ssp.model_import_numdlb_file_name}"', icon='FILE')
 
-        if '' ==  context.scene.sub_model_numatb_file_name:
+        if '' ==  ssp.model_import_numatb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .numatb file found! Can import, but without materials...', icon='ERROR')
@@ -100,7 +93,17 @@ class ImportModelPanel(bpy.types.Panel):
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUMATB file: "' + context.scene.sub_model_numatb_file_name+'"', icon='FILE')
+            row.label(text=f'NUMATB file: "{ssp.model_import_numatb_file_name}"', icon='FILE')
+
+        if '' == ssp.model_import_nuhlpb_file_name:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='No .nuhlpb file found! Can import, but without helper bones...', icon='ERROR')
+            all_requirements_met = False
+        else:
+            row = layout.row(align=True)
+            row.alert = False
+            row.label(text=f'NUHLPB file: "{ssp.model_import_nuhlpb_file_name}"', icon='FILE')
 
         if not min_requirements_met:
             row = layout.row(align=True)
@@ -109,63 +112,55 @@ class ImportModelPanel(bpy.types.Panel):
             return
         elif not all_requirements_met:
             row = layout.row(align=True)
-            row.operator('sub.model_importer', icon='IMPORT', text='Limited Model Import')
+            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Limited Model Import')
         else:
             row = layout.row(align=True)
-            row.operator('sub.model_importer', icon='IMPORT', text='Import Model')
+            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Import Model')
         
 
-class ModelFolderSelector(bpy.types.Operator, ImportHelper):
+class SUB_OP_select_model_import_folder(Operator):
     bl_idname = 'sub.ssbh_model_folder_selector'
     bl_label = 'Folder Selector'
 
     filter_glob: StringProperty(
-        default='',
+        default='*.numdlb;*.nusktb;*.numshb;*.numatb;*.nuhlpb',
         options={'HIDDEN'}
     )
-    """
-    Cancelled until further notice.
-    merge_same_name_meshes: BoolProperty(
-        name="Merge Same Name Meshes",
-        description="Merge Same Name Meshes",
-        default=True,
-    )   
-    """
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
 
     # Initially set the filename field to be nothing
     def invoke(self, context, _event):
-        self.filepath = ""
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        context.scene.sub_model_numshb_file_name = '' 
-        context.scene.sub_model_nusktb_file_name = '' 
-        context.scene.sub_model_numdlb_file_name = '' 
-        context.scene.sub_model_numatb_file_name = ''  
-        #context.scene.sub_merge_same_name_meshes = self.merge_same_name_meshes
-        #print(self.filepath)
-        context.scene.sub_model_folder_path = self.filepath
-        all_files = os.listdir(context.scene.sub_model_folder_path)
-        model_files = [file for file in all_files if 'model' in file]
-        for model_file in model_files:
-            print(model_file)
-            name, extension = os.path.splitext(model_file)
-            print(extension)
+        ssp:SubSceneProperties = context.scene.sub_scene_properties
+        ssp.model_import_numdlb_file_name = ''
+        ssp.model_import_nusktb_file_name = ''
+        ssp.model_import_numshb_file_name = ''
+        ssp.model_import_numatb_file_name = ''
+        ssp.model_import_nuhlpb_file_name = ''
+        ssp.model_import_folder_path = self.directory
+        #all_files = os.listdir(ssp.model_import_folder_path)
+        #model_files = [file for file in all_files if 'model' in file]
+        for file_name in os.listdir(ssp.model_import_folder_path):
+            #print(file)
+            _root, extension = os.path.splitext(file_name)
+            #print(extension)
             if '.numshb' == extension:
-                context.scene.sub_model_numshb_file_name = model_file
+                ssp.model_import_numshb_file_name = file_name
             elif '.nusktb' == extension:
-                context.scene.sub_model_nusktb_file_name = model_file
+                ssp.model_import_nusktb_file_name = file_name
             elif '.numdlb' == extension:
-                context.scene.sub_model_numdlb_file_name = model_file
+                ssp.model_import_numdlb_file_name = file_name
             elif '.numatb' == extension:
-                context.scene.sub_model_numatb_file_name = model_file
+                ssp.model_import_numatb_file_name = file_name
             elif '.nuhlpb' == extension:
-                context.scene.sub_model_nuhlpb_file_name = model_file
+                ssp.model_import_nuhlpb_file_name = file_name
         return {'FINISHED'}
 
 
-class ModelImporter(bpy.types.Operator):
+class SUB_OP_import_model(bpy.types.Operator):
     bl_idname = 'sub.model_importer'
     bl_label = 'Model Importer'
 
@@ -180,13 +175,13 @@ class ModelImporter(bpy.types.Operator):
 
 
 def import_model(self, context):
-    dir = Path(context.scene.sub_model_folder_path)
-
-    numdlb_name = dir.joinpath(context.scene.sub_model_numdlb_file_name)
-    numshb_name = dir.joinpath(context.scene.sub_model_numshb_file_name)
-    nusktb_name = dir.joinpath(context.scene.sub_model_nusktb_file_name)
-    numatb_name = dir.joinpath(context.scene.sub_model_numatb_file_name)
-    nuhlpb_name = dir.joinpath(context.scene.sub_model_nuhlpb_file_name)
+    ssp:SubSceneProperties = context.scene.sub_scene_properties
+    dir = Path(ssp.model_import_folder_path)
+    numdlb_name = dir.joinpath(ssp.model_import_numdlb_file_name)
+    numshb_name = dir.joinpath(ssp.model_import_numshb_file_name)
+    nusktb_name = dir.joinpath(ssp.model_import_nusktb_file_name)
+    numatb_name = dir.joinpath(ssp.model_import_numatb_file_name)
+    nuhlpb_name = dir.joinpath(ssp.model_import_nuhlpb_file_name)
 
     start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(str(numdlb_name)) if numdlb_name != '' else None
@@ -690,7 +685,7 @@ def import_material_images(ssbh_matl, context):
     print('texture_name_set = %s' % texture_name_set)
 
     for texture_name in texture_name_set:
-        dir = context.scene.sub_model_folder_path
+        dir = context.scene.sub_scene_properties.model_import_folder_path
         image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
         texture_name_to_image_dict[texture_name] = image
 

@@ -51,7 +51,7 @@ def register():
         default='',
     )
     
-
+    '''
     Scene.numatb_file_path = StringProperty(
         name='.numatb file path',
         description='The Path to the model.numatb file',
@@ -93,7 +93,7 @@ def register():
         description='The path to the model folder',
         default='',
     )
-
+    '''
     Scene.io_matl_armature = PointerProperty(
         name='Armature',
         description='Select the Armature',
@@ -116,11 +116,6 @@ def register():
         default='',
     )
     '''
-    Scene.sub_merge_same_name_meshes = BoolProperty(
-        name='merge_same_name_meshes',
-        description='Wether to merge same name meshes',
-        default=True,
-    )
     '''
     Scene.sub_anim_armature = PointerProperty(
         name='Armature',
@@ -159,7 +154,7 @@ class SubSceneProperties(PropertyGroup):
         name='Armature',
         description='Select the Armature',
         type=Object,
-        poll=exo_skel.poll_armatures,   
+        poll=exo_skel.poll_armatures,  
     )
     anim_export_arma: PointerProperty(
         name='Armature',
@@ -190,6 +185,37 @@ class SubSceneProperties(PropertyGroup):
         description='The path to the vanilla nusktb file',
         default='',
     )
+    model_import_numatb_file_name: StringProperty(
+        name='.numatb file name',
+        description='The name of the .numatb file',
+        default='',
+    )
+    model_import_numshb_file_name: StringProperty(
+        name='.numshb file name',
+        description='The name of the .numshb file',
+        default='',
+    )
+    model_import_nusktb_file_name: StringProperty(
+        name='.nusktb file name',
+        description='The name of the .nusktb file',
+        default='',
+    )
+    model_import_numdlb_file_name: StringProperty(
+        name='.numdlb file name',
+        description='The name of the .numdlb file',
+        default='',
+    )
+    model_import_nuhlpb_file_name: StringProperty(
+        name='.nuhlpb file name',
+        description='The name the .nuhlpb file',
+        default='',
+    )
+    model_import_folder_path: StringProperty(
+        name='Model folder path',
+        description='The path to the model folder',
+        default='',
+    )
+
 
 def vis_track_name_update(self, context):
     sap = context.object.data.sub_anim_properties
