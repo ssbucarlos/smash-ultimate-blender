@@ -1,5 +1,6 @@
 import bpy
 import mathutils
+from mathutils import Matrix
 import math
 from bpy.types import Operator, Panel
 from bpy.props import IntProperty, StringProperty, BoolProperty
@@ -172,33 +173,25 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
         trans_group.nodes.append(node)
     name_to_node = {node.name:node for node in trans_group.nodes}
     # changing frames is expensive so need to setup loop to only do once
-    from .export_model import unreorient_matrix, get_unreoriented_root
+
     for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
         context.scene.frame_set(frame)
+
         for bone in animated_bones:
             m:mathutils.Matrix = None
             if bone.parent:
                 m = bone.parent.matrix.inverted() @ bone.matrix
-                m = unreorient_matrix(m).transposed()
             else:
-                '''
-                from bpy_extras.io_utils import axis_conversion
-                converter_matrix = axis_conversion(
-                    from_forward='Z', 
-                    from_up='-X',
-                    to_forward='-Y',
-                    to_up='Z').to_4x4()
-                m = converter_matrix.inverted() @ bone.matrix
-                '''
-                #t = bone.matrix.translation
-                #m = mathutils.Matrix.Translation([t[0], t[2], -t[1]])
-                #m = get_unreoriented_root(bone)
-                arma.data.bones.active = bone.bone
-                bpy.ops.transform.rotate(value=math.radians(90), orient_axis='X', center_override=arma.location)
-                bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='Z', center_override=arma.location)
-                m = unreorient_matrix(bone.matrix).transposed()
-            ms = m.to_scale()
-            mq = m.to_quaternion()
+                # Convert from Z-up to Y-up to match Ultimate's coordinate system.
+                # TODO: This won't work if the root bone in each chain isn't animated.
+                # TODO: This can be applied to the top of the animated chain of bones.
+                # TODO: Another option is to work from the bottom of the chain up.
+                # TODO: Investigate which matches Smash more closely.
+                # TODO: Is there something like arma.transform for animations?
+                m = bone.matrix @ Matrix.Rotation(math.radians(-90), 4, 'X')
+
+            # TODO: Investigate why this can cause twists on Mario's foot with the vanilla skel.
+            mt, mq, ms = m.decompose()
             '''
             Checking here and fixing the quaternion before using ssbh_data_py seems to not work.
             Luckily ssbh_data_py allows manual editing of the rotation values so can just fix after creation of the
@@ -210,12 +203,11 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
                     #print(f'{node.name}, frame={frame}, mq={mq}, pq={pq}')
                     mq.negate()
             '''
-            mt = m.to_translation()
             node = name_to_node[bone.name]
             track = node.tracks[0]
             new_ssbh_transform = ssbh_data_py.anim_data.Transform(
                 [ms[0], ms[1], ms[2]], 
-                [mq[1], mq[2], mq[3], mq[0]],
+                [mq.x, mq.y, mq.z, mq.w],
                 [mt[0], mt[1], mt[2]]
             )
             track.values.append(new_ssbh_transform)
@@ -226,6 +218,7 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
                 if pq.dot(cq) < 0:
                     #print(f'! {node.name}, frame={frame}, mq={mq}, pq={pq}')
                     track.values[index].rotation = [-c for c in track.values[index].rotation]
+
     return trans_group
 
 def make_visibility_group(context, first_blender_frame, last_blender_frame):

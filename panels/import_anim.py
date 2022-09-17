@@ -1,13 +1,11 @@
-from dataclasses import dataclass
 import math
-from os import name
 import bpy
 from .. import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import IntProperty, StringProperty, BoolProperty
 from bpy.types import Operator, Panel
 import mathutils
-from .import_model import reorient, reorient_root
+from mathutils import Matrix, Quaternion
 import re
 
 class SUB_PT_import_anim(Panel):
@@ -144,6 +142,9 @@ def import_model_anim(context, filepath,
     action = bpy.data.actions.new(action_name)
     arma.animation_data.action = action
 
+    # Convert from Z-up to Y-up to use the unmodified Smash animation data.
+    arma.data.transform(Matrix.Rotation(math.radians(-90), 4, 'X'))
+
     if include_transform_track and transform_group is not None:
         bones = arma.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
@@ -165,6 +166,9 @@ def import_model_anim(context, filepath,
         setup_visibility_drivers(arma)
     if include_material_track and material_group is not None:
         setup_material_drivers(arma)
+
+    # Convert back from Y-up to Z-up to use Blender's coordinate system.
+    arma.data.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
 
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
@@ -211,7 +215,6 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         except IndexError: # Not all bones will have a value at every frame. Many bones only have one frame.
             continue
 
-        from mathutils import Matrix, Quaternion
         t = translation = node.tracks[0].values[index].translation
         r = rotation = node.tracks[0].values[index].rotation
         s = scale = node.tracks[0].values[index].scale
@@ -223,10 +226,9 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         # Blender doesn't have this built in for some reason.
         scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
 
-        raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)   
+        raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)
         if bone.parent is not None:
-            fixed_matrix = reorient(raw_matrix, transpose=False)
-            bone.matrix = bone.parent.matrix @ fixed_matrix
+            bone.matrix = bone.parent.matrix @ raw_matrix
 
             if compensate_scale:
                 # Scale compensation "compensates" the effect of the immediate parent's scale.
@@ -234,11 +236,11 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                 # HACK: Use the transform itself since we may overwrite a scale value.
                 # This assumes the parent is in the animation.
                 # TODO(SMG): Investigate where the parent scale value comes from.
-                # TODO(SMG): Why does setting scale directly work here but not in Cross Mod?
                 parent_node = bone_to_node.get(bone.parent, None)
                 if parent_node is not None:
                     try:
                         parent_scale = parent_node.tracks[0].values[index].scale
+                        # TODO: Does this handle axes correctly with non uniform scale?
                         bone.scale = (bone.scale[0] / parent_scale[0], bone.scale[1] / parent_scale[1], bone.scale[2] / parent_scale[2])
                     except IndexError:
                         # TODO: A single frame in ssbh_data_py should be assumed to be a constant animation.
@@ -246,41 +248,8 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                         # This matches the convention used for Smash Ultimate.
                         pass
         else:
-            # TODO: Investigate root bones in more detail
-            # Converter matrix doesnt work, and using converter matrix on the root bone
-            # in import_model doesnt work as expected.
-            '''
-            from bpy_extras.io_utils import axis_conversion
-            converter_matrix = axis_conversion(
-                from_forward='Z', 
-                from_up='Y',
-                to_forward='-Y',
-                to_up='Z').to_4x4()
-            bone.matrix = raw_matrix @ converter_matrix
-            '''
-            # copied from .import_model
-            '''
-            m = Matrix([
-                    [0.0, 1.0, 0.0, 0.0],
-                    [ 0.0, 0.0, -1.0, 0.0],
-                    [ -1.0, 0.0, 0.0, 0.0],
-                    [ 0.0, 0.0, 0.0, 1.0]
-                ])
-            # Hacky converter just for the root bone
-            from bpy_extras.io_utils import axis_conversion
-            converter_matrix = axis_conversion(
-                from_forward='Z', 
-                from_up='Y',
-                to_forward='Z',
-                to_up='-X').to_4x4()
-            # I just wanna move on with my life
-            bone.matrix = m @ Matrix.Translation((converter_matrix @ raw_matrix).translation)
-            '''
-            # TODO: Investigate how to do this without bpy.ops
-            bone.matrix = reorient(raw_matrix, transpose=False)
-            arma.data.bones.active = bone.bone
-            bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
-            bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)
+            bone.matrix = raw_matrix
+
         keyframe_insert_bone_locrotscale(arma, bone.name, frame, 'Transform')
 
         bone['compensate_scale'] = compensate_scale
@@ -543,18 +512,16 @@ def cam_keyframe_insert(camera: bpy.types.Object, property:str, frame: int):
 
 def update_camera_transforms(context, transform_group, index, frame):
     value = transform_group.nodes[0].tracks[0].values[index]
-    from mathutils import Matrix, Quaternion
     rt = raw_translation = value.translation
     rr = raw_rotation = value.rotation
     rs = raw_scale = value.scale
     rtm = raw_translation_matrix =  Matrix.Translation(rt)
     rqr = raw_quaternion_rotation = Quaternion([rr[3], rr[0], rr[1], rr[2]])
     rrm = raw_rotation_matrix = Matrix.Rotation(rqr.angle, 4, rqr.axis)
-    rsmx = raw_scale_matrix_x = mathutils.Matrix.Scale(rs[0], 4, (1,0,0))
-    rsmy = raw_scale_matrix_y = mathutils.Matrix.Scale(rs[1], 4, (0,1,0))
-    rsmz = raw_scale_matrix_z = mathutils.Matrix.Scale(rs[2], 4, (0,0,1))
+    # Blender doesn't have this built in for some reason.
+    rsm = raw_scale_matrix = Matrix.Diagonal((rs[0], rs[1], rs[2], 1.0))
     axis_correction = Matrix.Rotation(math.radians(90), 4, 'X')   
-    fm = final_matrix = Matrix(axis_correction @ rtm @ rrm @ rsmx @ rsmy @ rsmz)
+    fm = final_matrix = Matrix(axis_correction @ rtm @ rrm @ rsm)
     context.scene.sub_scene_properties.anim_import_camera.matrix_local = fm
     keyframe_insert_camera_locrotscale(context.scene.sub_scene_properties.anim_import_camera, frame)
 
