@@ -3,6 +3,7 @@ import os
 import os.path
 import bpy
 import mathutils
+from mathutils import Matrix
 import time
 import math
 import traceback
@@ -261,59 +262,6 @@ def get_index_from_name(name, bones):
         if bone.name == name:
             return index
 
-def reorient(m, transpose=True):
-    from mathutils import Matrix
-    m = Matrix(m)
-
-    if transpose:
-        m.transpose()
-     
-    c00,c01,c02,c03 = m[0]
-    c10,c11,c12,c13 = m[1]
-    c20,c21,c22,c23 = m[2]
-    c30,c31,c32,c33 = m[3]
-    
-    m = Matrix([
-        [c11, -c10, -c12, -c13],
-        [ -c01, c00, c02, c03],
-        [ -c21, c20, c22, c23],
-        [ c30, c31, c32, c33]
-    ])
-
-    return m 
-
-def reorient_root(m, transpose=True):
-    from mathutils import Matrix
-    m = Matrix(m)
-    
-    if transpose:
-        m.transpose() 
-      
-    c00,c01,c02,c03 = m[0]
-    c10,c11,c12,c13 = m[1]
-    c20,c21,c22,c23 = m[2]
-    c30,c31,c32,c33 = m[3]
-    '''
-   
-    m = Matrix([
-        [],
-        [],
-        [],
-        []
-    ])
-    '''
-    # TODO: Find out if the following does not work for certain skels
-    # This does not work for some articles since thier root bones contain non-identity matrices
-    '''
-    m = Matrix([
-        [0.0, 1.0, 0.0, 0.0],
-        [ 0.0, 0.0, -1.0, 0.0],
-        [ -1.0, 0.0, 0.0, 0.0],
-        [ 0.0, 0.0, 0.0, 1.0]
-    ])
-    '''
-    return m
-
 
 def create_armature(ssbh_skel, context) -> bpy.types.Object: 
     '''
@@ -321,10 +269,10 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
     Also, blender has a different coordinate system for the bones.
     Also, ssbh matrixes need to be transposed first.
     Also, the root bone needs to be modified differently to fix the world orientation
-    Also, the ssbh bones are not guaranteed to appear in 'heirarchal' order, 
+    Also, the ssbh bones are not guaranteed to appear in 'hierarchical' order, 
                  which is where the parent always appears before the child.
     Also, iterating through the blender bones appears to preserve the order of insertion,
-                 so its also not gauranteed heirarchal order.
+                 so its also not guaranteed hierarchical order.
     '''
     start = time.time()
     
@@ -357,45 +305,27 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
         parent_bone = edit_bones.get(parent_bone_name, None)
         blender_bone.parent = parent_bone
 
-    # Get a list of bones in 'heirarchal' order
-    def heirarchy_order(bone, reordered):
+    # Get a list of bones in 'hierarchical' order
+    def hierarchy_order(bone, reordered):
         if bone not in reordered:
             reordered.append(bone)
         for child in bone.children:
-            heirarchy_order(child, reordered)
+            hierarchy_order(child, reordered)
     reordered = []
     if len(edit_bones) > 0:
-        heirarchy_order(edit_bones[0], reordered)
+        hierarchy_order(edit_bones[0], reordered)
 
-    # Transform bones    
+    # Transform bones
+    # TODO(SMG): The transpose isn't necessary with the next ssbh_data_py update.
     for blender_bone in reordered:
         ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
         if blender_bone.parent is None:
-            from mathutils import Matrix
-            #blender_bone.matrix = Matrix(ssbh_bone.transform).transposed()
-            #blender_bone.matrix = Matrix.Rotation(math.radians(-90), 4, 'Z') @ Matrix.Rotation(math.radians(90), 4, 'Y') @ Matrix(ssbh_bone.transform).transposed()
-            '''
-            blender_bone.matrix = blender_bone.matrix @ Matrix.Rotation(math.radians(-90), 4, 'Z')
-            blender_bone.matrix = blender_bone.matrix @ Matrix.Rotation(math.radians(90), 4, 'Y')
-            '''
-            #blender_bone.matrix = reorient_root(ssbh_bone.transform)
-            blender_bone.matrix = reorient(ssbh_bone.transform)
-            blender_bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
-            blender_bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
-            '''
-            The following did not work as expected, while the root bone did point straight up as expected,
-            the overall skel appears rotated 90 degrees.
-            '''
-            '''
-            converter_matrix = bpy_extras.io_utils.axis_conversion(
-                from_forward='Z', 
-                from_up='Y',
-                to_forward='-Y',
-                to_up='Z').to_4x4()
-            blender_bone.matrix = converter_matrix @ mathutils.Matrix(ssbh_bone.transform)
-            '''
+            # Convert from Y up to Z up.
+            # This works since non empty skeletons will always have at least one root bone.
+            # TODO: Investigate if this is causing the twisting issues in exported animations.
+            blender_bone.matrix = Matrix(ssbh_bone.transform).transposed() @ Matrix.Rotation(math.radians(90), 4, 'X')
         else:
-            blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
+            blender_bone.matrix = blender_bone.parent.matrix @ Matrix(ssbh_bone.transform).transposed()
     
 
     # fix bone lengths
@@ -500,16 +430,9 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
                 bone.bone_group = system_group
                 bone.bone.layers[16] = False
                 bone.bone.layers[17] = False
-                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to offset bones
+                bone.bone.use_deform = False
 
-
-    #context.view_layer.objects.active = armature
-    #armature.select_set(True)
     bpy.ops.object.mode_set(mode='OBJECT')
-    #armature.matrix_local = Matrix.Rotation(math.radians(-90), 4, 'Z')
-    #bpy.ops.object.transform_apply(rotation=True)
-    #armature.matrix_local= Matrix.Rotation(math.radians(90), 4, 'X') 
-    #bpy.ops.object.transform_apply(rotation=True)
     end = time.time()
     print(f'Created armature in {end - start} seconds')
 
@@ -517,8 +440,6 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
 
 
 def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_object):
-    from math import radians
-    from mathutils import Matrix
     if skel is not None:
         # Create vertex groups for each bone to support skinning.
         for bone in skel.bones:
@@ -556,7 +477,7 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
                     vertex_group.add([w.vertex_index], w.vertex_weight, 'REPLACE')
 
         # Convert from Y up to Z up.
-        mesh_obj.data.transform(Matrix.Rotation(radians(90), 4, 'X') )
+        mesh_obj.data.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
 
     # Attach the mesh object to the armature object.
     if armature is not None:

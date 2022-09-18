@@ -901,34 +901,6 @@ def make_modl_data(operator, context, export_mesh_groups):
 
     return ssbh_modl_data
 
-def unreorient_matrix(reoriented_matrix) -> Matrix:
-    c00,c01,c02,c03 = reoriented_matrix[0]
-    c10,c11,c12,c13 = reoriented_matrix[1]
-    c20,c21,c22,c23 = reoriented_matrix[2]
-    c30,c31,c32,c33 = reoriented_matrix[3]
-    matrix_unreordered = Matrix([
-        [c11, -c10, c12, c13],
-        [ -c01, c00, -c02, -c03],
-        [ c21, -c20, c22, c23],
-        [ c30, c31, c32, c33]
-    ])
-    matrix_unreoriented = matrix_unreordered.transposed()
-    return matrix_unreoriented
-
-def get_unreoriented_root(bone: bpy.types.EditBone) -> Matrix:
-    #arma = bpy.context.scene.sub_scene_properties.model_export_arma
-    #arma.data.edit_bones.active = bone
-    #bpy.ops.transform.rotate(value=math.radians(90), orient_axis='X', center_override=bone.head)
-    #bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='Z', center_override=bone.head)
-    bone.transform(Matrix.Rotation(math.radians(-90), 4, 'X'))
-    bone.transform(Matrix.Rotation(math.radians(90), 4, 'Z'))
-    unreoriented_matrix = unreorient_matrix(bone.matrix)
-    bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
-    bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
-    #bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=bone.head)
-    #bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=bone.head)
-    return unreoriented_matrix
-
 def read_vanilla_nusktb(path, mode):
     if not path:
         raise RuntimeError(f'Link mode {mode} requires a vanilla .NUSKTB file to be selected.')
@@ -944,10 +916,10 @@ def read_vanilla_nusktb(path, mode):
 
 def get_ssbh_bone(blender_bone: bpy.types.EditBone, parent_index):
     if blender_bone.parent:
-        unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
+        unreoriented_matrix = (blender_bone.parent.matrix.inverted() @ blender_bone.matrix).transposed()
         return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
     else:
-        return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_unreoriented_root(blender_bone), None)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, blender_bone.matrix.transposed(), None)
 
 
 def bone_order(bones, name):
@@ -987,6 +959,9 @@ def make_skel(operator, context, mode):
         message += ' Bone order will not be preserved and may cause animation issues in game.'
         operator.report({'WARNING'}, message)
 
+    # Convert from Z-up to Y-up.
+    arma.data.transform(Matrix.Rotation(math.radians(-90), 4, 'X'))
+
     edit_bones = list(arma.data.edit_bones)
     if vanilla_skel is not None and preserve_order:
         # Sort based on the original order with added bones at the end.
@@ -1005,6 +980,9 @@ def make_skel(operator, context, mode):
                 ssbh_bone = vanilla_skel.bones[vanilla_index]
 
         skel.bones.append(ssbh_bone)
+
+    # Convert from Y-up back to Z-up.
+    arma.data.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
