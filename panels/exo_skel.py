@@ -1,7 +1,11 @@
 import bpy, json, math
 from bpy.types import Scene, Object, PropertyGroup, UIList
 from bpy.props import CollectionProperty, PointerProperty, StringProperty, IntProperty
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from .helper_bone_data import SubHelperBoneData, InterpolationEntry
+    from bpy.types import PoseBone
 
 def poll_armatures(self, obj):
     return obj.type == 'ARMATURE'
@@ -9,10 +13,10 @@ def poll_armatures(self, obj):
 def poll_other_armatures(self, obj):
     return obj.type == 'ARMATURE' and obj != get_smash_armature()
 
-def get_smash_armature():
+def get_smash_armature() -> Object:
     return bpy.context.scene.smash_armature
 
-def get_other_armature():
+def get_other_armature() -> Object:
     return bpy.context.scene.other_armature
 
 def unselect_all_objects_in_context():
@@ -203,22 +207,27 @@ class MakeCombinedSkeleton(bpy.types.Operator):
         Note, for proper implementation in Smash Ultimate,
             'Hip' is the bone to parent the 'root' bone of "Other" to.
         '''
-        new_arma_name = 'Combined'
+        '''
         new_arma = bpy.data.objects.new(
             new_arma_name,
             bpy.data.armatures.new(new_arma_name))
+        '''
+        smash_arma = get_smash_armature()
+        other_arma = get_other_armature()
+        new_arma:Object = smash_arma.copy()
+        new_arma.name = 'Combined'
         output_collection = get_script_output_collection()
         output_collection.objects.link(new_arma)
         unselect_all_objects_in_context()
         new_arma.select_set(True)
         bpy.context.view_layer.objects.active = new_arma
         bpy.ops.object.mode_set(mode='EDIT')
-        smash_arma = get_smash_armature()
-        other_arma = get_other_armature()
+
         
         new_bones = new_arma.data.edit_bones
         smash_bones = smash_arma.data.bones
         other_bones = other_arma.data.bones
+        '''
         for smash_bone in smash_bones:
             new_bone = new_bones.new(smash_bone.name)
             new_bone.head = smash_bone.head_local
@@ -228,7 +237,7 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             new_bone.roll = smash_bone_roll
             if smash_bone.parent:
                 new_bone.parent = new_bones.get(smash_bone.parent.name)
-        
+        '''
         for other_bone in other_arma.data.bones:
             new_bone = new_bones.new(other_bone.name)
             paired_bone_name = None
@@ -240,7 +249,7 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             if paired_bone_name is not None:
                 paired_bone = smash_bones.get(paired_bone_name)
                 
-            print('Paired Bone = %s' % paired_bone)
+            #print('Paired Bone = %s' % paired_bone)
             if paired_bone is not None:
                 '''
                 Need to create the head+tail to match the original smash one, but move it to the new position
@@ -268,9 +277,15 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             
             
         bpy.ops.object.mode_set(mode='POSE')
-        new_bones = new_arma.pose.bones
+        #new_bones = new_arma.pose.bones
         smash_arma = get_smash_armature()
         smash_bones = smash_arma.pose.bones
+
+
+        #helper_bone_data.copy_helper_bone_data(smash_arma, new_arma)
+
+
+        '''
         from .import_model import create_new_empty, get_from_mesh_list_with_pruned_name, copy_empty
         old_nuhlpb_root_empty = get_from_mesh_list_with_pruned_name(smash_arma.children, '_NUHLPB', None)
         old_interpolation_entries_empty = None
@@ -312,8 +327,19 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             for entry in old_interpolation_entries_empty.children:
                 new_interpolation_entry_empty = copy_empty(entry, output_collection)
                 new_interpolation_entry_empty.parent = new_interpolation_entries_empty
+        '''
 
-        for index, new_bone in enumerate(new_bones):
+        for new_bone in new_arma.pose.bones:
+            new_bone: PoseBone
+            if new_bone.name.startswith('H_Exo_'):
+                exo_group = new_arma.pose.bone_groups.get('Exo Skel')
+                if exo_group:
+                    new_bone.bone_group = exo_group
+                    new_bone.bone.layers[16] = True
+                    new_bone.bone.layers[18] = True
+
+        for index, new_bone in enumerate(new_arma.pose.bones):
+            new_bone: PoseBone
             paired_bone_name = None
             for entry in context.scene.bone_list:
                 if entry.bone_name_other == new_bone.name:
@@ -323,8 +349,8 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             paired_bone = smash_bones.get(paired_bone_name, None)
             if paired_bone is None:
                 continue
-            
             if paired_bone.parent:
+                '''
                 self.create_constraints(new_arma, new_bone, paired_bone)
                 new_interpolation_entry_empty = create_new_empty(f'nuHelperBoneRotateInterp{3000+index}', new_interpolation_entries_empty, output_collection)
                 new_interpolation_entry_empty['bone_name'] = paired_bone.parent.name
@@ -337,8 +363,26 @@ class MakeCombinedSkeleton(bpy.types.Operator):
                 new_interpolation_entry_empty['quat2'] = [0.0, 0.0, 0.0, 1.0]
                 new_interpolation_entry_empty['range_min'] = [-180, -180, -180]
                 new_interpolation_entry_empty['range_max'] = [180, 180, 180]
+                '''
+                shbd: SubHelperBoneData = new_arma.data.sub_helper_bone_data
+                new_interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
+                new_interpolation_entry.name = f'nuHelperBoneRotateInterp{3000+index}'
+                new_interpolation_entry.bone_name = paired_bone.parent.name
+                new_interpolation_entry.root_bone_name = paired_bone.parent.name
+                new_interpolation_entry.parent_bone_name = paired_bone.name
+                new_interpolation_entry.driver_bone_name = new_bone.name
+                new_interpolation_entry.unk_type = 1
+                new_interpolation_entry.aoi = [1.0, 1.0, 1.0]
+                new_interpolation_entry.quat_1 = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry.quat_2 = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry.range_min = [-180.0, -180.0, -180.0]
+                new_interpolation_entry.range_max = [180.0, 180.0, 180.0]
+
             else:
                 self.report({'ERROR'}, f'Cannot pair {new_bone.name} to {paired_bone.name}. {paired_bone.name} has no parent.')
+        
+        from .import_model import refresh_helper_bone_constraints
+        refresh_helper_bone_constraints(new_arma)
 
         return {'FINISHED'}
 

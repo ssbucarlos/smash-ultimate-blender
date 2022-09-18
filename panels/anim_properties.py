@@ -1,5 +1,6 @@
 import bpy
 import re
+from bpy.types import Panel, Operator, UIList, Menu
 
 mat_sub_types = (
     ('VECTOR', 'Custom Vector', 'Custom Vector'),
@@ -9,7 +10,7 @@ mat_sub_types = (
     ('TEXTURE', 'Texture Transform', 'Texture Transform')
 )
 
-class SUB_PT_sub_smush_anim_data_master(bpy.types.Panel):
+class SUB_PT_sub_smush_anim_data_master(Panel):
     bl_label = "Ultimate Animation Data"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -27,7 +28,7 @@ class SUB_PT_sub_smush_anim_data_master(bpy.types.Panel):
         obj = context.object
         arma = obj.data
 
-class SUB_PT_sub_smush_anim_data_vis_tracks(bpy.types.Panel):
+class SUB_PT_sub_smush_anim_data_vis_tracks(Panel):
     bl_label = "Ultimate Visibility Track Entries"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -62,7 +63,7 @@ class SUB_PT_sub_smush_anim_data_vis_tracks(bpy.types.Panel):
         col.separator()
         col.menu("SUB_MT_vis_entry_context_menu", icon='DOWNARROW_HLT', text="")
 
-class SUB_PT_sub_smush_anim_data_mat_tracks(bpy.types.Panel):
+class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
     bl_label = "Ultimate Material Tracks"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -179,7 +180,7 @@ class SUB_PT_sub_smush_anim_data_camera(bpy.types.Panel):
         row = layout.row()
         row.prop(scp, 'far_clip', text='Far Clip')
 '''
-class SUB_OP_mat_track_add(bpy.types.Operator):
+class SUB_OP_mat_track_add(Operator):
     bl_idname = 'sub.mat_track_add'
     bl_label  = 'Add Mat Track'
 
@@ -191,7 +192,7 @@ class SUB_OP_mat_track_add(bpy.types.Operator):
         sap.active_mat_track_index = sap.mat_tracks.find(mat_track.name)
         return {'FINISHED'}
 
-class SUB_OP_mat_track_remove(bpy.types.Operator):
+class SUB_OP_mat_track_remove(Operator):
     bl_idname = 'sub.mat_track_remove'
     bl_label = 'Remove Mat Track'
 
@@ -242,7 +243,7 @@ class SUB_OP_mat_track_remove(bpy.types.Operator):
         setup_material_drivers(context.object)
         return {'FINISHED'}
 
-class SUB_OP_mat_property_add(bpy.types.Operator):
+class SUB_OP_mat_property_add(Operator):
     bl_idname = 'sub.mat_prop_add'
     bl_label = 'Add Material Property'
     bl_property = "sub_type"
@@ -277,7 +278,7 @@ class SUB_OP_mat_property_add(bpy.types.Operator):
         context.window_manager.invoke_search_popup(self)
         return {'RUNNING_MODAL'}
 
-class SUB_OP_mat_property_remove(bpy.types.Operator):
+class SUB_OP_mat_property_remove(Operator):
     bl_idname = 'sub.mat_prop_remove'
     bl_label = 'Remove Material Property'
 
@@ -335,7 +336,7 @@ class SUB_OP_mat_property_remove(bpy.types.Operator):
         setup_material_drivers(context.object)
         return {'FINISHED'}
 
-class SUB_OP_vis_entry_add(bpy.types.Operator):
+class SUB_OP_vis_entry_add(Operator):
     bl_idname = 'sub.vis_entry_add'
     bl_label = 'Add Vis Track Entry'
 
@@ -348,7 +349,7 @@ class SUB_OP_vis_entry_add(bpy.types.Operator):
         sap.active_vis_track_index = entries.find(entry.name)
         return {'FINISHED'} 
 
-class SUB_OP_vis_entry_remove(bpy.types.Operator):
+class SUB_OP_vis_entry_remove(Operator):
     bl_idname = 'sub.vis_entry_remove'
     bl_label = 'Remove Vis Track Entry'
 
@@ -392,7 +393,7 @@ class SUB_OP_vis_entry_remove(bpy.types.Operator):
         setup_visibility_drivers(context.object)        
         return {'FINISHED'} 
 
-class SUB_OP_vis_drivers_refresh(bpy.types.Operator):
+class SUB_OP_vis_drivers_refresh(Operator):
     bl_idname = 'sub.vis_drivers_refresh'
     bl_label = 'Refresh Visibility Drivers'
 
@@ -401,7 +402,7 @@ class SUB_OP_vis_drivers_refresh(bpy.types.Operator):
         setup_visibility_drivers(context.object)
         return {'FINISHED'} 
 
-class SUB_OP_vis_drivers_remove(bpy.types.Operator):
+class SUB_OP_vis_drivers_remove(Operator):
     bl_idname = 'sub.vis_drivers_remove'
     bl_label = 'Remove Visibility Drivers'
 
@@ -429,7 +430,7 @@ def remove_material_drivers(arma:bpy.types.Object):
                 if hasattr(input, 'default_value'):
                     input.driver_remove('default_value')
 
-class SUB_OP_mat_drivers_refresh(bpy.types.Operator):
+class SUB_OP_mat_drivers_refresh(Operator):
     bl_idname = 'sub.mat_drivers_refresh'
     bl_label = 'Refresh Material Drivers'   
 
@@ -439,7 +440,7 @@ class SUB_OP_mat_drivers_refresh(bpy.types.Operator):
         setup_material_drivers(context.object)
         return {'FINISHED'}  
 
-class SUB_OP_mat_drivers_remove(bpy.types.Operator):
+class SUB_OP_mat_drivers_remove(Operator):
     bl_idname = 'sub.mat_drivers_remove'
     bl_label = 'Remove Material Drivers'
 
@@ -447,7 +448,7 @@ class SUB_OP_mat_drivers_remove(bpy.types.Operator):
         remove_material_drivers(context.object)
         return {'FINISHED'}  
 
-class SUB_MT_vis_entry_context_menu(bpy.types.Menu):
+class SUB_MT_vis_entry_context_menu(Menu):
     bl_label = "Vis Entry Specials"
 
     def draw(self, context):
@@ -455,7 +456,7 @@ class SUB_MT_vis_entry_context_menu(bpy.types.Menu):
         layout.operator('sub.vis_drivers_refresh', icon='FILE_REFRESH', text='Refresh Visibility Drivers')
         layout.operator('sub.vis_drivers_remove', icon='X', text='Remove Visibility Drivers')
 
-class SUB_MT_mat_entry_context_menu(bpy.types.Menu):
+class SUB_MT_mat_entry_context_menu(Menu):
     bl_idname = 'sub.mat_entry_context_menu'
     bl_label = "Mat Entry Specials"
 
@@ -464,7 +465,7 @@ class SUB_MT_mat_entry_context_menu(bpy.types.Menu):
         layout.operator(SUB_OP_mat_drivers_refresh.bl_idname, icon='FILE_REFRESH', text='Refresh Material Drivers')
         layout.operator(SUB_OP_mat_drivers_remove.bl_idname, icon='X', text='Remove Material Drivers')
 
-class SUB_UL_vis_track_entries(bpy.types.UIList):
+class SUB_UL_vis_track_entries(UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         # assert(isinstance(item, bpy.types.ShapeKey))
         obj = active_data
@@ -482,7 +483,7 @@ class SUB_UL_vis_track_entries(bpy.types.UIList):
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
-class SUB_UL_mat_tracks(bpy.types.UIList):
+class SUB_UL_mat_tracks(UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         obj = active_data
         entry = item
@@ -493,7 +494,7 @@ class SUB_UL_mat_tracks(bpy.types.UIList):
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
-class SUB_UL_mat_properties(bpy.types.UIList):
+class SUB_UL_mat_properties(UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         obj = active_data
         entry = item
@@ -504,7 +505,7 @@ class SUB_UL_mat_properties(bpy.types.UIList):
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
-class SUB_UL_mat_property_values(bpy.types.UIList):
+class SUB_UL_mat_property_values(UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         obj = active_data
         entry = item

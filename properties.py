@@ -3,8 +3,9 @@ import re
 from bpy.types import Scene, Object, Armature, PropertyGroup, Camera
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty
-from .panels import exo_skel, io_matl, import_anim
+from .panels import exo_skel, io_matl, import_anim, helper_bone_data
 from . import panels
+
 def register():
     Scene.smash_armature = PointerProperty(
         name='Smash Armature',
@@ -142,6 +143,9 @@ def register():
         type=SubCameraProperties
     )
     '''
+    Armature.sub_helper_bone_data = PointerProperty(
+        type=helper_bone_data.SubHelperBoneData
+    )
 
 class SubSceneProperties(PropertyGroup):
     mat_reimport_arma: PointerProperty(
@@ -351,3 +355,4 @@ class SubCameraProperties(PropertyGroup):
     near_clip: FloatProperty(name='Near Clip', default=1.0)
     far_clip: FloatProperty(name='Far Clip', default=100000.0)
 '''
+

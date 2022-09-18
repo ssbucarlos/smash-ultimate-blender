@@ -1,5 +1,6 @@
 import os
 import time
+
 from .import_model import get_ssbh_lib_json_exe_path
 import bpy
 import os.path
@@ -17,6 +18,10 @@ import subprocess
 from mathutils import Vector, Matrix
 import math
 from ..operators import material_inputs
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
 
 class ExportModelPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -1016,7 +1021,8 @@ def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
     return
 
 
-def create_and_save_nuhlpb(folder, armature:bpy.types.Object):
+def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
+    '''
     root_empty = None
     for child in armature.children:
         if child.name.startswith('_NUHLPB') and child.type == 'EMPTY':
@@ -1036,64 +1042,77 @@ def create_and_save_nuhlpb(folder, armature:bpy.types.Object):
     if aim_entries_empty is None or interpolation_entries_empty is None:
         print(f'Selected armature had the _NUHLPB empty but not the aim_entries_empty or interpolation_entries_empty!')
         return
-    
+    '''
+    shbd:SubHelperBoneData = arma.data.sub_helper_bone_data
+
     nuhlpb_json = {}
     nuhlpb_json['data'] = {}
     nuhlpb_json['data']['Hlpb'] = {}
-    nuhlpb_json['data']['Hlpb']['major_version'] = root_empty['major_version']
-    nuhlpb_json['data']['Hlpb']['minor_version'] = root_empty['minor_version']
+    nuhlpb_json['data']['Hlpb']['major_version'] = shbd.major_version
+    nuhlpb_json['data']['Hlpb']['minor_version'] = shbd.minor_version
     
     nuhlpb_json['data']['Hlpb']['aim_entries'] = []
     nuhlpb_json['data']['Hlpb']['interpolation_entries'] = []
     nuhlpb_json['data']['Hlpb']['list1'] = []
     nuhlpb_json['data']['Hlpb']['list2'] = []
 
-    for index, aim_entry_empty in enumerate(aim_entries_empty.children):
-        aim_entry = {}
-        aim_entry['name'] = re.split(r'\.\d\d\d$', aim_entry_empty.name)[0]
-        aim_entry['aim_bone_name1'] = aim_entry_empty['aim_bone_name1']
-        aim_entry['aim_bone_name2'] = aim_entry_empty['aim_bone_name2']
-        aim_entry['aim_type1'] = aim_entry_empty['aim_type1']
-        aim_entry['aim_type2'] = aim_entry_empty['aim_type2']
-        aim_entry['target_bone_name1'] = aim_entry_empty['target_bone_name1']
-        aim_entry['target_bone_name2'] = aim_entry_empty['target_bone_name2']
+    for index, arma_aim_entry in enumerate(shbd.aim_entries):
+        arma_aim_entry: AimEntry
+        json_aim_entry = {}
+        for k,v in arma_aim_entry.items():
+            json_aim_entry[k] = v
+        '''
+        aim_entry['name'] = arma_aim_entry.name
+        aim_entry['aim_bone_name1'] = arma_aim_entry.aim_bone_name_1
+        aim_entry['aim_bone_name2'] = arma_aim_entry.aim_bone_name_2
+        aim_entry['aim_type1'] = arma_aim_entry.aim_type_1
+        aim_entry['aim_type2'] = arma_aim_entry.aim_type_2
+        aim_entry['target_bone_name1'] = arma_aim_entry.target_bone_name_1
+        aim_entry['target_bone_name2'] = arma_aim_entry.target_bone_name_2
         for unk_index in range(1, 22+1):
             aim_entry[f'unk{unk_index}'] = aim_entry_empty[f'unk{unk_index}']
-        nuhlpb_json['data']['Hlpb']['aim_entries'].append(aim_entry)
+        '''
+        nuhlpb_json['data']['Hlpb']['aim_entries'].append(json_aim_entry)
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(0)
 
-    for index, interpolation_entry_empty in enumerate(interpolation_entries_empty.children):
-        interpolation_entry = {}
-        interpolation_entry['name'] = re.split(r'\.\d\d\d$', interpolation_entry_empty.name)[0]
-        interpolation_entry['bone_name'] = interpolation_entry_empty['bone_name']
-        interpolation_entry['root_bone_name'] = interpolation_entry_empty['root_bone_name']
-        interpolation_entry['parent_bone_name'] = interpolation_entry_empty['parent_bone_name']
-        interpolation_entry['driver_bone_name'] = interpolation_entry_empty['driver_bone_name']
-        interpolation_entry['unk_type'] = interpolation_entry_empty['unk_type']
-        interpolation_entry['aoi'] = {}
-        interpolation_entry['aoi']['x'] = interpolation_entry_empty['aoi'][0]
-        interpolation_entry['aoi']['y'] = interpolation_entry_empty['aoi'][1]
-        interpolation_entry['aoi']['z'] = interpolation_entry_empty['aoi'][2]
-        interpolation_entry['quat1'] = {}
-        interpolation_entry['quat1']['x'] = interpolation_entry_empty['quat1'][0]
-        interpolation_entry['quat1']['y'] = interpolation_entry_empty['quat1'][1]
-        interpolation_entry['quat1']['z'] = interpolation_entry_empty['quat1'][2]
-        interpolation_entry['quat1']['w'] = interpolation_entry_empty['quat1'][3]
-        interpolation_entry['quat2'] = {}
-        interpolation_entry['quat2']['x'] = interpolation_entry_empty['quat1'][0]
-        interpolation_entry['quat2']['y'] = interpolation_entry_empty['quat1'][1]
-        interpolation_entry['quat2']['z'] = interpolation_entry_empty['quat1'][2]
-        interpolation_entry['quat2']['w'] = interpolation_entry_empty['quat1'][3]
-        interpolation_entry['range_min'] = {}
-        interpolation_entry['range_min']['x'] = interpolation_entry_empty['range_min'][0]
-        interpolation_entry['range_min']['y'] = interpolation_entry_empty['range_min'][1] 
-        interpolation_entry['range_min']['z'] = interpolation_entry_empty['range_min'][2]
-        interpolation_entry['range_max'] = {}
-        interpolation_entry['range_max']['x'] = interpolation_entry_empty['range_max'][0]
-        interpolation_entry['range_max']['y'] = interpolation_entry_empty['range_max'][1] 
-        interpolation_entry['range_max']['z'] = interpolation_entry_empty['range_max'][2]
-        nuhlpb_json['data']['Hlpb']['interpolation_entries'].append(interpolation_entry)
+    for index, arma_interpolation_entry in enumerate(shbd.interpolation_entries):
+        arma_interpolation_entry: InterpolationEntry
+        arma_interpolation_entry_aoi: Vector = arma_interpolation_entry.aoi
+        arma_interpolation_entry_quat1: Vector = arma_interpolation_entry.quat_1
+        arma_interpolation_entry_quat2: Vector = arma_interpolation_entry.quat_2
+        arma_interpolation_entry_range_min: Vector = arma_interpolation_entry.range_min
+        arma_interpolation_entry_range_max: Vector = arma_interpolation_entry.range_max
+        json_interpolation_entry = {}
+        json_interpolation_entry['name'] = arma_interpolation_entry.name
+        json_interpolation_entry['bone_name'] = arma_interpolation_entry.bone_name
+        json_interpolation_entry['root_bone_name'] = arma_interpolation_entry.root_bone_name
+        json_interpolation_entry['parent_bone_name'] = arma_interpolation_entry.parent_bone_name
+        json_interpolation_entry['driver_bone_name'] = arma_interpolation_entry.driver_bone_name
+        json_interpolation_entry['unk_type'] = arma_interpolation_entry.unk_type
+        json_interpolation_entry['aoi'] = {}
+        json_interpolation_entry['aoi']['x'] = arma_interpolation_entry_aoi.x
+        json_interpolation_entry['aoi']['y'] = arma_interpolation_entry_aoi.y
+        json_interpolation_entry['aoi']['z'] = arma_interpolation_entry_aoi.z
+        json_interpolation_entry['quat1'] = {}
+        json_interpolation_entry['quat1']['x'] = arma_interpolation_entry_quat1.x
+        json_interpolation_entry['quat1']['y'] = arma_interpolation_entry_quat1.y
+        json_interpolation_entry['quat1']['z'] = arma_interpolation_entry_quat1.z
+        json_interpolation_entry['quat1']['w'] = arma_interpolation_entry_quat1.w
+        json_interpolation_entry['quat2'] = {}
+        json_interpolation_entry['quat2']['x'] = arma_interpolation_entry_quat2.x
+        json_interpolation_entry['quat2']['y'] = arma_interpolation_entry_quat2.y
+        json_interpolation_entry['quat2']['z'] = arma_interpolation_entry_quat2.z
+        json_interpolation_entry['quat2']['w'] = arma_interpolation_entry_quat2.w
+        json_interpolation_entry['range_min'] = {}
+        json_interpolation_entry['range_min']['x'] = arma_interpolation_entry_range_min.x
+        json_interpolation_entry['range_min']['y'] = arma_interpolation_entry_range_min.y
+        json_interpolation_entry['range_min']['z'] = arma_interpolation_entry_range_min.z
+        json_interpolation_entry['range_max'] = {}
+        json_interpolation_entry['range_max']['x'] = arma_interpolation_entry_range_max.x
+        json_interpolation_entry['range_max']['y'] = arma_interpolation_entry_range_max.y
+        json_interpolation_entry['range_max']['z'] = arma_interpolation_entry_range_max.z
+        nuhlpb_json['data']['Hlpb']['interpolation_entries'].append(json_interpolation_entry)
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(1)
 

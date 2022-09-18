@@ -1,22 +1,20 @@
 import json
-from msilib.schema import Directory
 import os
 import os.path
-from tokenize import String
-from traceback import format_exc
 import bpy
 import mathutils
 import time
 import math
+import traceback
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
-
+    from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
+    from bpy.types import PoseBone
 from .. import ssbh_data_py
 import numpy as np
 from pathlib import Path
-
 from bpy.props import StringProperty, BoolProperty
 from bpy.types import Panel, Operator
 from bpy_extras import image_utils
@@ -181,7 +179,7 @@ def import_model(self, context):
     numshb_name = dir.joinpath(ssp.model_import_numshb_file_name)
     nusktb_name = dir.joinpath(ssp.model_import_nusktb_file_name)
     numatb_name = dir.joinpath(ssp.model_import_numatb_file_name)
-    nuhlpb_name = dir.joinpath(ssp.model_import_nuhlpb_file_name)
+    nuhlpb_name = dir.joinpath(ssp.model_import_nuhlpb_file_name) if ssp.model_import_nuhlpb_file_name != '' else ''
 
     start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(str(numdlb_name)) if numdlb_name != '' else None
@@ -194,22 +192,24 @@ def import_model(self, context):
     end = time.time()
     print(f'Read files in {end - start} seconds')
 
-    from traceback import format_exc
     try:
         armature = create_armature(ssbh_skel, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{format_exc()}')
+        self.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     try:
         create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB: {e}')
+        self.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     try:
         nuhlpb_json = read_nuhlpb_json(str(nuhlpb_name)) if nuhlpb_name != '' else None
-        import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import {nuhlpb_name}: {e}')
+        self.report({'ERROR'}, f'Failed to import {nuhlpb_name}: Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+
+    if nuhlpb_json is not None:
+        import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
+        setup_helper_bone_constraints(armature)
 
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
@@ -315,7 +315,7 @@ def reorient_root(m, transpose=True):
     return m
 
 
-def create_armature(ssbh_skel, context): 
+def create_armature(ssbh_skel, context) -> bpy.types.Object: 
     '''
     So blender bone matrixes are not relative to their parent, unlike the ssbh skel.
     Also, blender has a different coordinate system for the bones.
@@ -469,14 +469,22 @@ def create_armature(ssbh_skel, context):
     system_group.name = 'System'
     system_group.color_set = 'THEME10'
 
+    exo_group = bpy.context.object.pose.bone_groups.new()
+    exo_group.name = 'Exo Skel'
+    exo_group.color_set = 'THEME09'
+
     system_bone_names = ['Trans', 'Rot', 'Throw']
     system_bone_suffixes = ['_null', '_eff', '_offset']
     for bone in bpy.context.object.pose.bones:
+        bone: PoseBone
         bone.bone.layers[16] = True
-        if 'H_' == bone.name[:2]:
+        if bone.name.startswith('H_Exo_'):
+            bone.bone_group = exo_group
+            bone.bone.layers[18] = True
+        elif bone.name.startswith('H_'):
             bone.bone_group = helper_group
             bone.bone.layers[2] = True
-        elif 'S_' == bone.name[:2]:
+        elif bone.name.startswith('S_'):
             bone.bone.layers[1] = True
             bone.bone.layers[17] = True
             bone.bone_group = swing_group
@@ -484,7 +492,7 @@ def create_armature(ssbh_skel, context):
                 bone.bone_group = system_group
                 bone.bone.layers[16] = False
                 bone.bone.layers[17] = False
-                bone.bone.use_deform = False
+                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to null bones
         else:
             bone.bone_group = default_group
             if any(system_bone_name == bone.name for system_bone_name in system_bone_names) \
@@ -492,7 +500,7 @@ def create_armature(ssbh_skel, context):
                 bone.bone_group = system_group
                 bone.bone.layers[16] = False
                 bone.bone.layers[17] = False
-                bone.bone.use_deform = False
+                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to offset bones
 
 
     #context.view_layer.objects.active = armature
@@ -927,17 +935,16 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
         create_and_enable_color_set('colorSet5', 1)
 
 def read_nuhlpb_json(nuhlpb_path) -> str:
-    import subprocess
+    import subprocess, os
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
     output_json_path = nuhlpb_path + '.json'
-    try:
-        subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
-    except:
-        pass # Lol
+    subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
     
-    nuhlpb_json = None
     with open(output_json_path) as f:
         nuhlpb_json = json.load(f)
+    
+    os.remove(output_json_path)
+
     return nuhlpb_json
 
 def create_new_empty(name, parent, specified_collection=None) -> bpy.types.Object:
@@ -965,9 +972,10 @@ def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.type
         specified_collection.objects.link(copy)
     return copy
 
-def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
+def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context):
     '''
     The nuhlpb data will be stored in a tree of empty objects.
+    '''
     '''
     root_empty = create_new_empty('_NUHLPB', armature)
     root_empty['major_version'] = nuhlpb_json['data']['Hlpb']['major_version']
@@ -1010,12 +1018,67 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
             [aoi['y'], aoi['x'], aoi['z']]
         )
     '''
+    '''
     list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
     '''
+    shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
+    shbd.major_version = nuhlpb_json['data']['Hlpb']['major_version']
+    shbd.minor_version = nuhlpb_json['data']['Hlpb']['minor_version']
+    for json_aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
+        aim_entry: AimEntry             = shbd.aim_entries.add()
+        aim_entry.name                  = json_aim_entry['name']
+        aim_entry.aim_bone_name1       = json_aim_entry['aim_bone_name1']
+        aim_entry.aim_bone_name2       = json_aim_entry['aim_bone_name2'] 
+        aim_entry.aim_type1            = json_aim_entry['aim_type1']
+        aim_entry.aim_type2            = json_aim_entry['aim_type2']
+        aim_entry.target_bone_name1    = json_aim_entry['target_bone_name1'] 
+        aim_entry.target_bone_name2    = json_aim_entry['target_bone_name2']
+        aim_entry.unk1                 = json_aim_entry['unk1']
+        aim_entry.unk2                 = json_aim_entry['unk2'] 
+        aim_entry.unk3                 = json_aim_entry['unk3'] 
+        aim_entry.unk4                 = json_aim_entry['unk4'] 
+        aim_entry.unk5                 = json_aim_entry['unk5'] 
+        aim_entry.unk6                 = json_aim_entry['unk6'] 
+        aim_entry.unk7                 = json_aim_entry['unk7'] 
+        aim_entry.unk8                 = json_aim_entry['unk8'] 
+        aim_entry.unk9                 = json_aim_entry['unk9'] 
+        aim_entry.unk10                = json_aim_entry['unk10'] 
+        aim_entry.unk11                = json_aim_entry['unk11']
+        aim_entry.unk12                = json_aim_entry['unk12']   
+        aim_entry.unk13                = json_aim_entry['unk13']   
+        aim_entry.unk14                = json_aim_entry['unk14']   
+        aim_entry.unk15                = json_aim_entry['unk15']   
+        aim_entry.unk16                = json_aim_entry['unk16']   
+        aim_entry.unk17                = json_aim_entry['unk17']   
+        aim_entry.unk18                = json_aim_entry['unk18']   
+        aim_entry.unk19                = json_aim_entry['unk19']   
+        aim_entry.unk20                = json_aim_entry['unk20']   
+        aim_entry.unk21                = json_aim_entry['unk21']   
+        aim_entry.unk22                = json_aim_entry['unk22']
+
+    for json_interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
+        json_aoi        = json_interpolation_entry['aoi']
+        json_quat1      = json_interpolation_entry['quat1']
+        json_quat2      = json_interpolation_entry['quat2']
+        json_range_min  = json_interpolation_entry['range_min']
+        json_range_max  = json_interpolation_entry['range_max']
+
+        interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
+        interpolation_entry.name                = json_interpolation_entry['name']
+        interpolation_entry.bone_name           = json_interpolation_entry['bone_name']
+        interpolation_entry.root_bone_name      = json_interpolation_entry['root_bone_name']
+        interpolation_entry.parent_bone_name    = json_interpolation_entry['parent_bone_name']
+        interpolation_entry.driver_bone_name    = json_interpolation_entry['driver_bone_name']
+        interpolation_entry.unk_type            = json_interpolation_entry['unk_type']
+        interpolation_entry.aoi                 = [json_aoi['x'], json_aoi['y'], json_aoi['z']]
+        interpolation_entry.quat_1              = [json_quat1['w'], json_quat1['x'], json_quat1['y'], json_quat1['z']]
+        interpolation_entry.quat_2              = [json_quat2['w'], json_quat2['x'], json_quat2['y'], json_quat2['z']]
+        interpolation_entry.range_min           = [json_range_min['x'], json_range_min['y'], json_range_min['z']]
+        interpolation_entry.range_max           = [json_range_max['x'], json_range_max['y'], json_range_max['z']]        
 
 
 def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
-    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    #bpy.ops.object.mode_set(mode='POSE', toggle=False)
     #print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
     owner_bone = armature.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
@@ -1025,11 +1088,11 @@ def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bon
         new_constraint.influence = 1.0
         new_constraint.target = armature
         new_constraint.subtarget = target_bone_name
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+    #bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
 
 def create_interpolation_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name, aoi_xyz_list):
-    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    #bpy.ops.object.mode_set(mode='POSE', toggle=False)
     owner_bone = armature.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
         x,y,z = 'X', 'Y', 'Z'
@@ -1044,4 +1107,32 @@ def create_interpolation_type_helper_bone_constraints(constraint_name, armature,
             crc.use_y = True if axis is y else False
             crc.use_z = True if axis is z else False
             crc.influence = aoi_xyz_list[index]
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+    #bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+
+def setup_helper_bone_constraints(arma: bpy.types.Object):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    shbd: SubHelperBoneData = arma.data.sub_helper_bone_data
+    for aim_entry in shbd.aim_entries:
+        aim_entry: AimEntry
+        create_aim_type_helper_bone_constraints(aim_entry.name, arma, aim_entry.target_bone_name1, aim_entry.aim_bone_name1)
+    for interpolation_entry in shbd.interpolation_entries:
+        interpolation_entry: InterpolationEntry
+        aoi:mathutils.Vector = interpolation_entry.aoi
+        create_interpolation_type_helper_bone_constraints(
+            interpolation_entry.name,
+            arma,
+            interpolation_entry.driver_bone_name,
+            interpolation_entry.parent_bone_name,
+            [aoi.y, aoi.x, aoi.z]
+        )
+
+def remove_helper_bone_constraints(arma: bpy.types.Object):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    helper_bones: list[PoseBone] = [bone for bone in arma.pose.bones if bone.name.startswith('H_')]
+    for bone in helper_bones:
+        for constraint in bone.constraints:
+            bone.constraints.remove(constraint)
+
+def refresh_helper_bone_constraints(arma: bpy.types.Object):
+    remove_helper_bone_constraints(arma)
+    setup_helper_bone_constraints(arma)
