@@ -1,7 +1,8 @@
 import bpy
 import mathutils
-from mathutils import Matrix
 import math
+
+from mathutils import Matrix
 from bpy.types import Operator, Panel
 from bpy.props import IntProperty, StringProperty, BoolProperty
 from .. import ssbh_data_py
@@ -174,6 +175,7 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
     name_to_node = {node.name:node for node in trans_group.nodes}
     # changing frames is expensive so need to setup loop to only do once
 
+    from .export_model import unreorient_matrix, get_unreoriented_root
     for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
         context.scene.frame_set(frame)
 
@@ -181,14 +183,12 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
             m:mathutils.Matrix = None
             if bone.parent:
                 m = bone.parent.matrix.inverted() @ bone.matrix
+                m = unreorient_matrix(m).transposed()
             else:
-                # Convert from Z-up to Y-up to match Ultimate's coordinate system.
-                # TODO: This won't work if the root bone in each chain isn't animated.
-                # TODO: This can be applied to the top of the animated chain of bones.
-                # TODO: Another option is to work from the bottom of the chain up.
-                # TODO: Investigate which matches Smash more closely.
-                # TODO: Is there something like arma.transform for animations?
-                m = bone.matrix @ Matrix.Rotation(math.radians(-90), 4, 'X')
+                arma.data.bones.active = bone.bone
+                bpy.ops.transform.rotate(value=math.radians(90), orient_axis='X', center_override=arma.location)
+                bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='Z', center_override=arma.location)
+                m = unreorient_matrix(bone.matrix).transposed()
 
             # TODO: Investigate why this can cause twists on Mario's foot with the vanilla skel.
             mt, mq, ms = m.decompose()

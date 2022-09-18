@@ -3,26 +3,25 @@ import os
 import os.path
 import bpy
 import mathutils
-from mathutils import Matrix
+import sqlite3
 import time
 import math
 import traceback
+import numpy as np
+
+from .. import ssbh_data_py
+from pathlib import Path
+from bpy.props import StringProperty, BoolProperty
+from bpy.types import Panel, Operator
+from bpy_extras import image_utils
+from ..operators import master_shader, material_inputs
+from mathutils import Matrix
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
     from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
-    from bpy.types import PoseBone
-from .. import ssbh_data_py
-import numpy as np
-from pathlib import Path
-from bpy.props import StringProperty, BoolProperty
-from bpy.types import Panel, Operator
-from bpy_extras import image_utils
-
-from ..operators import master_shader, material_inputs
-
-import sqlite3
+    from bpy.types import PoseBone, EditBone
 
 class SUB_PT_import_model(Panel):
     bl_space_type = 'VIEW_3D'
@@ -262,6 +261,25 @@ def get_index_from_name(name, bones):
         if bone.name == name:
             return index
 
+def reorient(m, transpose=True) -> Matrix:
+    m = Matrix(m)
+
+    if transpose:
+        m.transpose()
+
+    c00,c01,c02,c03 = m[0]
+    c10,c11,c12,c13 = m[1]
+    c20,c21,c22,c23 = m[2]
+    c30,c31,c32,c33 = m[3]
+
+    m = Matrix([
+        [c11, -c10, -c12, -c13],
+        [ -c01, c00, c02, c03],
+        [ -c21, c20, c22, c23],
+        [ c30, c31, c32, c33]
+    ])
+
+    return m 
 
 def create_armature(ssbh_skel, context) -> bpy.types.Object: 
     '''
@@ -318,14 +336,21 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
     # Transform bones
     # TODO(SMG): The transpose isn't necessary with the next ssbh_data_py update.
     for blender_bone in reordered:
+        blender_bone: EditBone
         ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
         if blender_bone.parent is None:
             # Convert from Y up to Z up.
             # This works since non empty skeletons will always have at least one root bone.
             # TODO: Investigate if this is causing the twisting issues in exported animations.
-            blender_bone.matrix = Matrix(ssbh_bone.transform).transposed() @ Matrix.Rotation(math.radians(90), 4, 'X')
+            # This rotates a bone around its local X axis, the rotation needs to be in global space for some skeletons
+            #  like dr marios stethoscope to work as expected.
+            ## blender_bone.matrix = Matrix(ssbh_bone.transform).transposed() @ Matrix.Rotation(math.radians(90), 4, 'X')
+            blender_bone.matrix = reorient(ssbh_bone.transform)
+            blender_bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
+            blender_bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
+
         else:
-            blender_bone.matrix = blender_bone.parent.matrix @ Matrix(ssbh_bone.transform).transposed()
+            blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
     
 
     # fix bone lengths

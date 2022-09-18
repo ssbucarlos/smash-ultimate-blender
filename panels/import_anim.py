@@ -1,12 +1,14 @@
 import math
 import bpy
+import mathutils
+import re
+
 from .. import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import IntProperty, StringProperty, BoolProperty
 from bpy.types import Operator, Panel
-import mathutils
 from mathutils import Matrix, Quaternion
-import re
+from .import_model import reorient
 
 class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -142,9 +144,6 @@ def import_model_anim(context, filepath,
     action = bpy.data.actions.new(action_name)
     arma.animation_data.action = action
 
-    # Convert from Z-up to Y-up to use the unmodified Smash animation data.
-    arma.data.transform(Matrix.Rotation(math.radians(-90), 4, 'X'))
-
     if include_transform_track and transform_group is not None:
         bones = arma.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
@@ -166,9 +165,6 @@ def import_model_anim(context, filepath,
         setup_visibility_drivers(arma)
     if include_material_track and material_group is not None:
         setup_material_drivers(arma)
-
-    # Convert back from Y-up to Z-up to use Blender's coordinate system.
-    arma.data.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
 
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
@@ -228,7 +224,8 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
 
         raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)
         if bone.parent is not None:
-            bone.matrix = bone.parent.matrix @ raw_matrix
+            fixed_matrix = reorient(raw_matrix, transpose=False)
+            bone.matrix = bone.parent.matrix @ fixed_matrix
 
             if compensate_scale:
                 # Scale compensation "compensates" the effect of the immediate parent's scale.
@@ -248,8 +245,11 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                         # This matches the convention used for Smash Ultimate.
                         pass
         else:
-            bone.matrix = raw_matrix
-
+            # TODO: Investigate how to do this without bpy.ops
+            bone.matrix = reorient(raw_matrix, transpose=False)
+            arma.data.bones.active = bone.bone
+            bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
+            bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)
         keyframe_insert_bone_locrotscale(arma, bone.name, frame, 'Transform')
 
         bone['compensate_scale'] = compensate_scale

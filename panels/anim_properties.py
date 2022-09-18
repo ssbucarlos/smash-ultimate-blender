@@ -457,7 +457,6 @@ class SUB_MT_vis_entry_context_menu(Menu):
         layout.operator('sub.vis_drivers_remove', icon='X', text='Remove Visibility Drivers')
 
 class SUB_MT_mat_entry_context_menu(Menu):
-    bl_idname = 'sub.mat_entry_context_menu'
     bl_label = "Mat Entry Specials"
 
     def draw(self, context):

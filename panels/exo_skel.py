@@ -215,6 +215,7 @@ class MakeCombinedSkeleton(bpy.types.Operator):
         smash_arma = get_smash_armature()
         other_arma = get_other_armature()
         new_arma:Object = smash_arma.copy()
+        new_arma.data = smash_arma.data.copy()
         new_arma.name = 'Combined'
         output_collection = get_script_output_collection()
         output_collection.objects.link(new_arma)
