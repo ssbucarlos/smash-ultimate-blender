@@ -8,7 +8,7 @@ from bpy_extras.io_utils import ImportHelper
 from bpy.props import IntProperty, StringProperty, BoolProperty
 from bpy.types import Operator, Panel
 from mathutils import Matrix, Quaternion
-from .import_model import reorient
+from .import_model import get_blender_transform
 
 class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -224,7 +224,8 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
 
         raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)
         if bone.parent is not None:
-            fixed_matrix = reorient(raw_matrix, transpose=False)
+            # TODO: Investigate twisting on mario's wait animations.
+            fixed_matrix = get_blender_transform(raw_matrix, transpose=False)
             bone.matrix = bone.parent.matrix @ fixed_matrix
 
             if compensate_scale:
@@ -246,7 +247,7 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
                         pass
         else:
             # TODO: Investigate how to do this without bpy.ops
-            bone.matrix = reorient(raw_matrix, transpose=False)
+            bone.matrix = get_blender_transform(raw_matrix, transpose=False)
             arma.data.bones.active = bone.bone
             bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
             bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)

@@ -902,24 +902,24 @@ def make_modl_data(operator, context, export_mesh_groups):
 
     return ssbh_modl_data
 
-def unreorient_matrix(reoriented_matrix) -> Matrix:
-    c00,c01,c02,c03 = reoriented_matrix[0]
-    c10,c11,c12,c13 = reoriented_matrix[1]
-    c20,c21,c22,c23 = reoriented_matrix[2]
-    c30,c31,c32,c33 = reoriented_matrix[3]
-    matrix_unreordered = Matrix([
-        [c11, -c10, c12, c13],
-        [ -c01, c00, -c02, -c03],
-        [ c21, -c20, c22, c23],
-        [ c30, c31, c32, c33]
+def get_smash_transform(m) -> Matrix:
+    # This is the inverse of the get_blender_transform permutation matrix.
+    # https://en.wikipedia.org/wiki/Matrix_similarity
+    p = Matrix([
+        [0, 1, 0, 0],
+        [-1, 0, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1]
     ])
-    matrix_unreoriented = matrix_unreordered.transposed()
-    return matrix_unreoriented
+    # Perform the transformation m in Blender's basis and convert back to Ultimate.
+    # TODO(SMG): Transposing won't be necessary in the next ssbh_data_py update.
+    return (p @ m @ p.inverted()).transposed()
 
-def get_unreoriented_root(bone: bpy.types.EditBone) -> Matrix:
+
+def get_smash_root_transform(bone: bpy.types.EditBone) -> Matrix:
     bone.transform(Matrix.Rotation(math.radians(-90), 4, 'X'))
     bone.transform(Matrix.Rotation(math.radians(90), 4, 'Z'))
-    unreoriented_matrix = unreorient_matrix(bone.matrix)
+    unreoriented_matrix = get_smash_transform(bone.matrix)
     bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
     bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
     return unreoriented_matrix
@@ -939,10 +939,10 @@ def read_vanilla_nusktb(path, mode):
 
 def get_ssbh_bone(blender_bone: bpy.types.EditBone, parent_index):
     if blender_bone.parent:
-        unreoriented_matrix = unreorient_matrix(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
+        unreoriented_matrix = get_smash_transform(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
         return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
     else:
-        return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_unreoriented_root(blender_bone), None)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_smash_root_transform(blender_bone), None)
 
 
 def bone_order(bones, name):
