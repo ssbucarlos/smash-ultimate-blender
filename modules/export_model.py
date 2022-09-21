@@ -429,7 +429,6 @@ def find_principled_node(material):
     # We can't differentiate the ultimate node group from other node groups.
     # Just assume all node groups are correct and handle errors on export.
     node = output_node.inputs['Surface'].links[0].from_node
-    print(node.bl_idname)
     if node is not None and node.bl_idname == 'ShaderNodeBsdfPrincipled':
         return node
     else:
@@ -1017,27 +1016,6 @@ def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
 
 
 def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
-    '''
-    root_empty = None
-    for child in armature.children:
-        if child.name.startswith('_NUHLPB') and child.type == 'EMPTY':
-            root_empty = child
-            break
-    
-    if root_empty is None:
-        return
-    
-    aim_entries_empty, interpolation_entries_empty = None, None
-    for child in root_empty.children:
-        if child.name.startswith('aim_entries'):
-            aim_entries_empty = child
-        elif child.name.startswith('interpolation_entries'):
-            interpolation_entries_empty = child
-    
-    if aim_entries_empty is None or interpolation_entries_empty is None:
-        print(f'Selected armature had the _NUHLPB empty but not the aim_entries_empty or interpolation_entries_empty!')
-        return
-    '''
     shbd:SubHelperBoneData = arma.data.sub_helper_bone_data
 
     nuhlpb_json = {}
@@ -1056,17 +1034,6 @@ def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
         json_aim_entry = {}
         for k,v in arma_aim_entry.items():
             json_aim_entry[k] = v
-        '''
-        aim_entry['name'] = arma_aim_entry.name
-        aim_entry['aim_bone_name1'] = arma_aim_entry.aim_bone_name_1
-        aim_entry['aim_bone_name2'] = arma_aim_entry.aim_bone_name_2
-        aim_entry['aim_type1'] = arma_aim_entry.aim_type_1
-        aim_entry['aim_type2'] = arma_aim_entry.aim_type_2
-        aim_entry['target_bone_name1'] = arma_aim_entry.target_bone_name_1
-        aim_entry['target_bone_name2'] = arma_aim_entry.target_bone_name_2
-        for unk_index in range(1, 22+1):
-            aim_entry[f'unk{unk_index}'] = aim_entry_empty[f'unk{unk_index}']
-        '''
         nuhlpb_json['data']['Hlpb']['aim_entries'].append(json_aim_entry)
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(0)

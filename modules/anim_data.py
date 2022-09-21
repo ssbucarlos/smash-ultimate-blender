@@ -154,32 +154,7 @@ class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
         split = split.split()
         sr = split.row(align=True)
         sr.menu(SUB_MT_mat_entry_context_menu.bl_idname, text='Drivers...')      
-'''
-class SUB_PT_sub_smush_anim_data_camera(bpy.types.Panel):
-    bl_label = "Ultimate Camera Data"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
 
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'CAMERA'
-    
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-        cam = obj.data
-        scp = cam.sub_camera_properties
-        row = layout.row()
-        row.prop(scp, 'field_of_view', text='Field Of View')
-        row = layout.row()
-        row.prop(scp, 'near_clip', text='Near Clip')
-        row = layout.row()
-        row.prop(scp, 'far_clip', text='Far Clip')
-'''
 class SUB_OP_mat_track_add(Operator):
     bl_idname = 'sub.mat_track_add'
     bl_label  = 'Add Mat Track'
@@ -360,7 +335,7 @@ class SUB_OP_vis_entry_remove(Operator):
 
     def execute(self, context):
         sap = context.object.data.sub_anim_properties
-                # Find matching Fcurve and Remove
+        # Find matching Fcurve and Remove
         try:
             fcurves = context.object.data.animation_data.action.fcurves
         except AttributeError:

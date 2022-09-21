@@ -72,7 +72,6 @@ class SUB_OP_rename_other_bones(Operator):
     
     def execute(self, context):
         armature_other = get_other_armature()
-        print('Test: First bone name = %s' % armature_other.data.bones[0].name)
         prefix = bpy.context.scene.sub_scene_properties.armature_prefix
         for bone in armature_other.data.bones:
             bone.name = prefix + bone.name
@@ -212,11 +211,6 @@ class SUB_OP_make_combined_skeleton(Operator):
         Note, for proper implementation in Smash Ultimate,
             'Hip' is the bone to parent the 'root' bone of "Other" to.
         '''
-        '''
-        new_arma = bpy.data.objects.new(
-            new_arma_name,
-            bpy.data.armatures.new(new_arma_name))
-        '''
         ssp: SubSceneProperties = context.scene.sub_scene_properties
         smash_arma = get_smash_armature()
         other_arma = get_other_armature()
@@ -234,17 +228,7 @@ class SUB_OP_make_combined_skeleton(Operator):
         new_bones = new_arma.data.edit_bones
         smash_bones = smash_arma.data.bones
         other_bones = other_arma.data.bones
-        '''
-        for smash_bone in smash_bones:
-            new_bone = new_bones.new(smash_bone.name)
-            new_bone.head = smash_bone.head_local
-            new_bone.tail = smash_bone.tail_local
-            axis_roll_tuple = smash_bone.AxisRollFromMatrix(smash_bone.matrix_local.to_3x3())
-            smash_bone_roll = axis_roll_tuple[1]
-            new_bone.roll = smash_bone_roll
-            if smash_bone.parent:
-                new_bone.parent = new_bones.get(smash_bone.parent.name)
-        '''
+
         for other_bone in other_arma.data.bones:
             new_bone = new_bones.new(other_bone.name)
             paired_bone_name = None
@@ -256,7 +240,6 @@ class SUB_OP_make_combined_skeleton(Operator):
             if paired_bone_name is not None:
                 paired_bone = smash_bones.get(paired_bone_name)
                 
-            #print('Paired Bone = %s' % paired_bone)
             if paired_bone is not None:
                 '''
                 Need to create the head+tail to match the original smash one, but move it to the new position
@@ -284,57 +267,9 @@ class SUB_OP_make_combined_skeleton(Operator):
             
             
         bpy.ops.object.mode_set(mode='POSE')
-        #new_bones = new_arma.pose.bones
+
         smash_arma = get_smash_armature()
         smash_bones = smash_arma.pose.bones
-
-
-        #helper_bone_data.copy_helper_bone_data(smash_arma, new_arma)
-
-
-        '''
-        from .import_model import create_new_empty, get_from_mesh_list_with_pruned_name, copy_empty
-        old_nuhlpb_root_empty = get_from_mesh_list_with_pruned_name(smash_arma.children, '_NUHLPB', None)
-        old_interpolation_entries_empty = None
-        old_aim_entries_empty = None
-
-        new_nuhlpb_root_empty = None
-        new_nuhlpb_root_empty = None
-        new_interpolation_entries_empty = None
-        new_aim_entries_empty = None
-
-        if old_nuhlpb_root_empty:
-            new_nuhlpb_root_empty = copy_empty(old_nuhlpb_root_empty, output_collection)
-            new_nuhlpb_root_empty.parent = new_arma
-            
-            old_aim_entries_empty = get_from_mesh_list_with_pruned_name(old_nuhlpb_root_empty.children, 'aim_entries', None)
-            new_aim_entries_empty = copy_empty(old_aim_entries_empty, output_collection)
-            new_aim_entries_empty.parent = new_nuhlpb_root_empty
-            old_interpolation_entries_empty = get_from_mesh_list_with_pruned_name(old_nuhlpb_root_empty.children, 'interpolation_entries', None)
-            new_interpolation_entries_empty = copy_empty(old_interpolation_entries_empty, output_collection)
-            new_interpolation_entries_empty.parent = new_nuhlpb_root_empty
-        else:
-            # This case usually means the user didn't import the smash armature using a more recent version.
-            # TODO: Infer the helper bones from constraints and only use custom properties for additional fields?
-            message = 'No _NUHLPB empty detected for the Smash Armature. Original helper bones may be lost on export.'
-            message += ' Reimport the Smash Armature to include bones and helper bones.'
-            self.report({'WARNING'}, message)
-
-            new_nuhlpb_root_empty = create_new_empty('_NUHLPB', new_arma, output_collection)
-            new_nuhlpb_root_empty['major_version'] = 1
-            new_nuhlpb_root_empty['minor_version'] = 1
-            new_aim_entries_empty = create_new_empty('aim_entries', new_nuhlpb_root_empty, output_collection)
-            new_interpolation_entries_empty = create_new_empty('interpolation_entries', new_nuhlpb_root_empty, output_collection)
-
-        if old_aim_entries_empty:
-            for entry in old_aim_entries_empty.children:
-                new_aim_entry_empty = copy_empty(entry, output_collection)
-                new_aim_entry_empty.parent = new_aim_entries_empty
-        if old_interpolation_entries_empty:
-            for entry in old_interpolation_entries_empty.children:
-                new_interpolation_entry_empty = copy_empty(entry, output_collection)
-                new_interpolation_entry_empty.parent = new_interpolation_entries_empty
-        '''
 
         for new_bone in new_arma.pose.bones:
             new_bone: PoseBone
@@ -357,20 +292,6 @@ class SUB_OP_make_combined_skeleton(Operator):
             if paired_bone is None:
                 continue
             if paired_bone.parent:
-                '''
-                self.create_constraints(new_arma, new_bone, paired_bone)
-                new_interpolation_entry_empty = create_new_empty(f'nuHelperBoneRotateInterp{3000+index}', new_interpolation_entries_empty, output_collection)
-                new_interpolation_entry_empty['bone_name'] = paired_bone.parent.name
-                new_interpolation_entry_empty['root_bone_name'] = paired_bone.parent.name
-                new_interpolation_entry_empty['parent_bone_name'] = paired_bone.name
-                new_interpolation_entry_empty['driver_bone_name'] = new_bone.name
-                new_interpolation_entry_empty['unk_type'] = 1
-                new_interpolation_entry_empty['aoi'] = [1.0, 1.0, 1.0]
-                new_interpolation_entry_empty['quat1'] = [0.0, 0.0, 0.0, 1.0]
-                new_interpolation_entry_empty['quat2'] = [0.0, 0.0, 0.0, 1.0]
-                new_interpolation_entry_empty['range_min'] = [-180, -180, -180]
-                new_interpolation_entry_empty['range_max'] = [180, 180, 180]
-                '''
                 shbd: SubHelperBoneData = new_arma.data.sub_helper_bone_data
                 new_interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
                 new_interpolation_entry.name = f'nuHelperBoneRotateInterp{3000+index}'

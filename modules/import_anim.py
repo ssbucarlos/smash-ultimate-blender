@@ -41,23 +41,6 @@ class SUB_PT_import_anim(Panel):
             row.prop(ssp, 'anim_import_camera', icon='VIEW_CAMERA', text='')
             row = layout.row(align=True)
             row.operator('sub.anim_camera_importer', icon='IMPORT', text='Import a Camera Animation')
-'''
-class SUB_OP_anim_armature_clear_operator(Operator):
-    bl_idname = 'sub.anim_armature_clear'
-    bl_label = 'Anim Armature Clear Operator'
-
-    def execute(self, context):
-        context.scene.sub_anim_armature = None
-        return {'FINISHED'}
-
-class AnimCameraClearOperator(Operator):
-    bl_idname = 'sub.anim_camera_clear'
-    bl_label = 'Anim Camera Clear Operator'
-
-    def execute(self, context):
-        context.scene.sub_anim_camera = None
-        return {'FINISHED'}
-'''
 
 class SUB_OP_import_model_anim(Operator, ImportHelper):
     bl_idname = 'sub.anim_model_importer'
@@ -204,7 +187,6 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
     for bone in reordered:
         node = bone_to_node.get(bone, None)
         if node is None: # Not all bones will have a transform node. For example, helper bones never have transforms in the anim.
-            #print(f'Skipping bone "{bone.name}", no associated node')
             continue   
         try:
             node.tracks[0].values[index]
@@ -423,7 +405,17 @@ def do_visibility_stuff(context, visibility_group, index, frame):
         entry_index = entries.find(sub_vis_track_entry.name)
         arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{entry_index}].value', frame=frame, group='Visibility', options={'INSERTKEY_NEEDED'})
 
-
+'''
+Typical SSBH Camera Layout.
+Group: 'Camera'
+    Node: 'gya_cameraShape'
+        Track: 'FieldOfView'
+        Track: 'FarClip'
+        Track: 'NearClip'
+Group: 'Transform'
+    Node: 'gya_camera'
+        Track: 'Transform'
+'''
 def import_camera_anim(operator, context, filepath, first_blender_frame):
     camera = context.scene.sub_scene_properties.anim_import_camera
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
@@ -501,15 +493,6 @@ def update_camera_properties(operator, context, camera_group, index, frame):
                 camera.data.keyframe_insert(data_path = 'clip_start', frame=frame)
         else:
             operator.report({'WARNING'}, f'Unsupported track {track.name} in camera group, skipping!')
-'''
-def cam_keyframe_insert(camera: bpy.types.Object, property:str, frame: int):
-    camera.data.keyframe_insert(
-        data_path=f'sub_camera_properties.{property}',
-        frame=frame,
-        group='Smash Ultimate Properties',
-        options={'INSERTKEY_NEEDED'},
-        )
-'''
 
 def update_camera_transforms(context, transform_group, index, frame):
     value = transform_group.nodes[0].tracks[0].values[index]

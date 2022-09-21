@@ -196,12 +196,6 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
             Checking here and fixing the quaternion before using ssbh_data_py seems to not work.
             Luckily ssbh_data_py allows manual editing of the rotation values so can just fix after creation of the
             transform.
-            # Check for quaternion interpolation issues
-            if frame != first_blender_frame:
-                pq = mathutils.Quaternion(track.values[index-1].rotation)
-                if pq.dot(mq) < 0:
-                    #print(f'{node.name}, frame={frame}, mq={mq}, pq={pq}')
-                    mq.negate()
             '''
             node = name_to_node[bone.name]
             track = node.tracks[0]
@@ -216,7 +210,6 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
                 pq = mathutils.Quaternion(track.values[index-1].rotation)
                 cq = mathutils.Quaternion(track.values[index].rotation)
                 if pq.dot(cq) < 0:
-                    #print(f'! {node.name}, frame={frame}, mq={mq}, pq={pq}')
                     track.values[index].rotation = [-c for c in track.values[index].rotation]
 
     return trans_group

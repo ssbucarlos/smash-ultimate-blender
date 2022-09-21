@@ -141,9 +141,7 @@ class SUB_OP_select_model_import_folder(Operator):
         #all_files = os.listdir(ssp.model_import_folder_path)
         #model_files = [file for file in all_files if 'model' in file]
         for file_name in os.listdir(ssp.model_import_folder_path):
-            #print(file)
             _root, extension = os.path.splitext(file_name)
-            #print(extension)
             if '.numshb' == extension:
                 ssp.model_import_numshb_file_name = file_name
             elif '.nusktb' == extension:
@@ -629,10 +627,7 @@ def import_material_images(ssbh_matl, dir):
         for attribute in ssbh_mat_entry.textures:
             texture_name_set.add(attribute.data)
 
-    print('texture_name_set = %s' % texture_name_set)
-
     for texture_name in texture_name_set:
-        #dir = context.scene.sub_scene_properties.model_import_folder_path
         image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
         texture_name_to_image_dict[texture_name] = image
 
@@ -1017,8 +1012,6 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context
 
 
 def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
-    #bpy.ops.object.mode_set(mode='POSE', toggle=False)
-    #print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
     owner_bone = armature.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
         new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
@@ -1027,11 +1020,9 @@ def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bon
         new_constraint.influence = 1.0
         new_constraint.target = armature
         new_constraint.subtarget = target_bone_name
-    #bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
 
 def create_interpolation_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name, aoi_xyz_list):
-    #bpy.ops.object.mode_set(mode='POSE', toggle=False)
     owner_bone = armature.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
         x,y,z = 'X', 'Y', 'Z'
@@ -1046,7 +1037,6 @@ def create_interpolation_type_helper_bone_constraints(constraint_name, armature,
             crc.use_y = True if axis is y else False
             crc.use_z = True if axis is z else False
             crc.influence = aoi_xyz_list[index]
-    #bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
 def setup_helper_bone_constraints(arma: bpy.types.Object):
     bpy.ops.object.mode_set(mode='POSE', toggle=False)
