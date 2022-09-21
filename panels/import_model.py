@@ -126,7 +126,6 @@ class SUB_OP_select_model_import_folder(Operator):
     )
     directory: bpy.props.StringProperty(subtype="DIR_PATH")
 
-    # Initially set the filename field to be nothing
     def invoke(self, context, _event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -593,7 +592,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     master_shader.create_master_shader()
 
     texture_name_to_image_dict = {}
-    texture_name_to_image_dict = import_material_images(ssbh_matl, context)
+    texture_name_to_image_dict = import_material_images(ssbh_matl, context.scene.sub_scene_properties.model_import_folder_path)
 
     label_to_material_dict = {}
     for label in unique_numdlb_material_labels:
@@ -628,7 +627,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
 
     return created_meshes
 
-def import_material_images(ssbh_matl, context):
+def import_material_images(ssbh_matl, dir):
     texture_name_to_image_dict = {}
     texture_name_set = set()
 
@@ -639,7 +638,7 @@ def import_material_images(ssbh_matl, context):
     print('texture_name_set = %s' % texture_name_set)
 
     for texture_name in texture_name_set:
-        dir = context.scene.sub_scene_properties.model_import_folder_path
+        #dir = context.scene.sub_scene_properties.model_import_folder_path
         image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
         texture_name_to_image_dict[texture_name] = image
 

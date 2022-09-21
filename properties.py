@@ -3,10 +3,11 @@ import re
 from bpy.types import Scene, Object, Armature, PropertyGroup, Camera
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty
-from .panels import exo_skel, io_matl, import_anim, helper_bone_data
+from .panels import exo_skel, import_anim, helper_bone_data
 from . import panels
 
 def register():
+    '''
     Scene.smash_armature = PointerProperty(
         name='Smash Armature',
         description='Select the Smash armature',
@@ -45,13 +46,15 @@ def register():
         description="The Prefix that will be added to the bones in the 'Other' armature. Must begin with H_ or else it wont work!",
         default="H_Exo_"
     )
-
+    '''
+    '''
+    
     Scene.ssbh_lib_json_path = StringProperty(
         name='ssbh_lib_json path',
         description='The Path to the ssbh_lib_json.exe file',
         default='',
     )
-    
+    '''
     '''
     Scene.numatb_file_path = StringProperty(
         name='.numatb file path',
@@ -95,13 +98,14 @@ def register():
         default='',
     )
     '''
+    '''
     Scene.io_matl_armature = PointerProperty(
         name='Armature',
         description='Select the Armature',
         type=Object,
         poll=exo_skel.poll_armatures,
     )
-
+    '''
     '''
     Scene.sub_model_export_armature = PointerProperty(
         name='Armature',
@@ -148,12 +152,6 @@ def register():
     )
 
 class SubSceneProperties(PropertyGroup):
-    mat_reimport_arma: PointerProperty(
-        name='Armature',
-        description='Select the Armature',
-        type=Object,
-        poll=exo_skel.poll_armatures,
-    )
     anim_import_arma: PointerProperty(
         name='Armature',
         description='Select the Armature',
@@ -219,7 +217,52 @@ class SubSceneProperties(PropertyGroup):
         description='The path to the model folder',
         default='',
     )
-
+    smash_armature: PointerProperty(
+        name='Smash Armature',
+        description='Select the Smash armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,
+    )
+    other_armature: PointerProperty(
+        name='Other Armature',
+        description='Select the Other armature',
+        type=Object,
+        poll=exo_skel.poll_other_armatures,
+    )
+    bone_list: CollectionProperty(
+        type=exo_skel.BoneListItem
+    )
+    saved_bone_list: CollectionProperty(
+        type=exo_skel.BoneListItem
+    )
+    bone_list_index: IntProperty(
+        name="Index for the exo bone list",
+        default=0
+    )
+    pairable_bone_list: CollectionProperty(
+        type=exo_skel.PairableBoneListItem
+    )
+    armature_prefix: StringProperty(
+        name="Prefix",
+        description="The Prefix that will be added to the bones in the 'Other' armature. Must begin with H_ or else it wont work!",
+        default="H_Exo_"
+    )
+    material_reimport_arma: PointerProperty(
+        name='Armature',
+        description='Select the Armature',
+        type=Object,
+        poll=exo_skel.poll_armatures,  
+    )
+    material_reimport_folder: StringProperty(
+        name='Material Reimport folder',
+        description='The folder w/ .numatb & textures',
+        default='',
+    )
+    material_reimport_numatb_path: StringProperty(
+        name='Material Reimport .numatb',
+        description='The selected .numatb',
+        default='',
+    )
 
 def vis_track_name_update(self, context):
     sap = context.object.data.sub_anim_properties

@@ -1,30 +1,28 @@
 import os
 import time
-
-from .import_model import get_ssbh_lib_json_exe_path
 import bpy
 import os.path
 import numpy as np
+import math
+import bmesh
+import json
+import subprocess
+import re
+
 from pathlib import Path
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator, Panel
-import re
 from .. import ssbh_data_py
-import bmesh
-import sys
-import json
-import subprocess
 from mathutils import Vector, Matrix
-import math
 from ..operators import material_inputs
-
+from .import_model import get_ssbh_lib_json_exe_path
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from bpy.types import EditBone
     from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
 
-class ExportModelPanel(Panel):
+class SUB_PT_export_model(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Ultimate'
@@ -59,7 +57,7 @@ class ExportModelPanel(Panel):
         row = layout.row(align=True)
         row.operator('sub.model_exporter', icon='EXPORT', text='Export Model Files to a Folder')
     
-class VanillaNusktbSelector(Operator, ImportHelper):
+class SUB_OP_vanilla_nusktb_selector(Operator, ImportHelper):
     bl_idname = 'sub.vanilla_nusktb_selector'
     bl_label = 'Vanilla Nusktb Selector'
 
@@ -71,15 +69,16 @@ class VanillaNusktbSelector(Operator, ImportHelper):
         context.scene.sub_scene_properties.vanilla_nusktb = self.filepath
         return {'FINISHED'}   
 
-class ModelExporterOperator(Operator, ImportHelper):
+class SUB_OP_model_exporter(Operator):
     bl_idname = 'sub.model_exporter'
     bl_label = 'Export To This Folder'
 
     filter_glob: StringProperty(
-        default="",
+        default='*.numdlb;*.nusktb;*.numshb;*.numatb;*.nuhlpb',
         options={'HIDDEN'},
-        maxlen=255,  # Max internal buffer length, longer would be clamped. Also blender has this in the example but tbh idk what it does yet
+        #maxlen=255,  # Max internal buffer length, longer would be clamped. Also blender has this in the example but tbh idk what it does yet
     )
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
 
     include_numdlb: BoolProperty(
         name="Export .NUMDLB",
@@ -125,17 +124,16 @@ class ModelExporterOperator(Operator, ImportHelper):
 
     # Initially set the filename field to be nothing
     def invoke(self, context, _event):
-        self.filepath = ""
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     
     def execute(self, context):
-        export_model(self, context, self.filepath, self.include_numdlb, self.include_numshb, self.include_numshexb,
+        export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
                      self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings)
         return {'FINISHED'}
 
 
-def export_model(operator, context, filepath, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
+def export_model(operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     # Prepare the scene for export and find the meshes to export.
     arma = context.scene.sub_scene_properties.model_export_arma
     try:
@@ -187,10 +185,12 @@ def export_model(operator, context, filepath, include_numdlb, include_numshb, in
 
     # Make sure this is a folder instead of a file.
     # TODO: This doesn't work if the file path isn't actually a file on disk?
+    '''
     folder = Path(filepath)
     if folder.is_file():
         folder = folder.parent
-
+    '''
+    folder = Path(directory)
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
     if include_numdlb:
