@@ -66,6 +66,10 @@ classes = [
     modules.anim_data.SUB_OP_vis_drivers_remove,
     modules.anim_data.SUB_MT_vis_entry_context_menu,
     modules.anim_data.SUB_MT_mat_entry_context_menu,
+    modules.anim_data.VisTrackEntry,
+    modules.anim_data.MatTrackProperty,
+    modules.anim_data.MatTrack,
+    modules.anim_data.SubAnimProperties,
     modules.helper_bone_data.SUB_PT_helper_bone_data_master,
     modules.helper_bone_data.SUB_PT_helper_bone_data_aim_entries,
     modules.helper_bone_data.SUB_PT_helper_bone_data_interpolation_entries,
@@ -84,10 +88,6 @@ classes = [
     modules.reimport_materials.SUB_OP_mat_reimport_numatb_selector,
     modules.reimport_materials.SUB_OP_reimport_materials,
     properties.SubSceneProperties,
-    properties.VisTrackEntry,
-    properties.MatTrackProperty,
-    properties.MatTrack,
-    properties.SubAnimProperties,
 ]
 
 def register():
