@@ -175,7 +175,7 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
     name_to_node = {node.name:node for node in trans_group.nodes}
     # changing frames is expensive so need to setup loop to only do once
 
-    from .export_model import unreorient_matrix, get_unreoriented_root
+    from .export_model import get_smash_transform, get_smash_root_transform
     for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
         context.scene.frame_set(frame)
 
@@ -183,12 +183,12 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
             m:mathutils.Matrix = None
             if bone.parent:
                 m = bone.parent.matrix.inverted() @ bone.matrix
-                m = unreorient_matrix(m).transposed()
+                m = get_smash_transform(m).transposed()
             else:
                 arma.data.bones.active = bone.bone
                 bpy.ops.transform.rotate(value=math.radians(90), orient_axis='X', center_override=arma.location)
                 bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='Z', center_override=arma.location)
-                m = unreorient_matrix(bone.matrix).transposed()
+                m = get_smash_transform(bone.matrix).transposed()
 
             # TODO: Investigate why this can cause twists on Mario's foot with the vanilla skel.
             mt, mq, ms = m.decompose()

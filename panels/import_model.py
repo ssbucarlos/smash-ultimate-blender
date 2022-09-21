@@ -260,25 +260,24 @@ def get_index_from_name(name, bones):
         if bone.name == name:
             return index
 
-def reorient(m, transpose=True) -> Matrix:
+def get_blender_transform(m, transpose=True) -> Matrix:
     m = Matrix(m)
 
+    # TODO(SMG): Transposing won't be necessary in the next ssbh_data_py update.
     if transpose:
         m.transpose()
 
-    c00,c01,c02,c03 = m[0]
-    c10,c11,c12,c13 = m[1]
-    c20,c21,c22,c23 = m[2]
-    c30,c31,c32,c33 = m[3]
-
-    m = Matrix([
-        [c11, -c10, -c12, -c13],
-        [ -c01, c00, c02, c03],
-        [ -c21, c20, c22, c23],
-        [ c30, c31, c32, c33]
+    # In Ultimate, the bone's x-axis points from parent to child.
+    # In Blender, the bone's y-axis points from parent to child.
+    # https://en.wikipedia.org/wiki/Matrix_similarity
+    p = Matrix([
+        [0, -1, 0, 0],
+        [1, 0, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1]
     ])
-
-    return m 
+    # Perform the transformation m in Ultimate's basis and convert back to Blender.
+    return p @ m @ p.inverted()
 
 def create_armature(ssbh_skel, context) -> bpy.types.Object: 
     '''
@@ -333,23 +332,18 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
         hierarchy_order(edit_bones[0], reordered)
 
     # Transform bones
-    # TODO(SMG): The transpose isn't necessary with the next ssbh_data_py update.
     for blender_bone in reordered:
         blender_bone: EditBone
         ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
         if blender_bone.parent is None:
-            # Convert from Y up to Z up.
-            # This works since non empty skeletons will always have at least one root bone.
-            # TODO: Investigate if this is causing the twisting issues in exported animations.
-            # This rotates a bone around its local X axis, the rotation needs to be in global space for some skeletons
-            #  like dr marios stethoscope to work as expected.
-            ## blender_bone.matrix = Matrix(ssbh_bone.transform).transposed() @ Matrix.Rotation(math.radians(90), 4, 'X')
-            blender_bone.matrix = reorient(ssbh_bone.transform)
+            blender_bone.matrix = get_blender_transform(ssbh_bone.transform)
+            # TODO: Why is this necessary?
             blender_bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
+            # Convert from Y up to Z up only at root bones.
+            # This works since non empty skeletons will always have at least one root bone.
             blender_bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
-
         else:
-            blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
+            blender_bone.matrix = blender_bone.parent.matrix @ get_blender_transform(ssbh_bone.transform)
     
 
     # fix bone lengths
