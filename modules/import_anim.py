@@ -407,14 +407,14 @@ def do_visibility_stuff(context, visibility_group, index, frame):
 
 '''
 Typical SSBH Camera Layout.
-Group: 'Camera'
-    Node: 'gya_cameraShape'
-        Track: 'FieldOfView'
-        Track: 'FarClip'
-        Track: 'NearClip'
 Group: 'Transform'
     Node: 'gya_camera'
         Track: 'Transform'
+Group: 'Camera'
+    Node: 'gya_cameraShape'
+        Track: 'FarClip'
+        Track: 'FieldOfView'
+        Track: 'NearClip'
 '''
 def import_camera_anim(operator, context, filepath, first_blender_frame):
     camera = context.scene.sub_scene_properties.anim_import_camera

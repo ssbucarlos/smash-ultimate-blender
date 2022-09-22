@@ -3,9 +3,13 @@ import mathutils
 import math
 
 from mathutils import Matrix
-from bpy.types import Operator, Panel
+from bpy.types import Operator, Panel, Context
 from bpy.props import IntProperty, StringProperty, BoolProperty
 from .. import ssbh_data_py
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..properties import SubSceneProperties
 
 class SUB_PT_export_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -40,7 +44,8 @@ class SUB_PT_export_anim(Panel):
         elif ssp.anim_export_camera is not None:
             row = layout.row(align=True)
             row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA', text='')
-            row.operator('sub.anim_camera_exporter', icon='EXPORT', text='Export a Camera Animation')
+            row = layout.row(align=True)
+            row.operator('sub.export_camera_anim', icon='EXPORT', text='Export a Camera Animation')
 
 class SUB_OP_export_model_anim(Operator):
     bl_idname = 'sub.anim_model_exporter'
@@ -133,11 +138,53 @@ class SUB_OP_export_camera_anim(Operator):
         if not self.filepath.endswith('.nuanmb'):
             self.filepath += '.nuanmb'
         export_camera_anim(self, context, self.filepath, self.first_blender_frame, self.last_blender_frame)
+        return {'FINISHED'}  
 
-def export_camera_anim(operator: Operator, context, filepath, first_blender_frame, last_blender_frame):
+def export_camera_anim(operator: Operator, context: Context, filepath, first_blender_frame, last_blender_frame):
+    scene = context.scene
+    ssp: SubSceneProperties = context.scene.sub_scene_properties
+    camera: bpy.types.Object = ssp.anim_export_camera
     ssbh_anim_data = ssbh_data_py.anim_data.AnimData()
     ssbh_anim_data.final_frame_index = last_blender_frame - first_blender_frame
     
+    transform_group = ssbh_data_py.anim_data.GroupData(ssbh_data_py.anim_data.GroupType.Transform)
+    transform_group.nodes.append(ssbh_data_py.anim_data.NodeData('gya_camera'))
+    transform_group.nodes[0].tracks.append(ssbh_data_py.anim_data.TrackData('Transform'))
+
+    camera_group = ssbh_data_py.anim_data.GroupData(ssbh_data_py.anim_data.GroupType.Camera)
+    camera_group.nodes.append(ssbh_data_py.anim_data.NodeData('gya_cameraShape'))
+    camera_group.nodes[0].tracks.append(ssbh_data_py.anim_data.TrackData('FarClip'))
+    camera_group.nodes[0].tracks.append(ssbh_data_py.anim_data.TrackData('FieldOfView'))
+    camera_group.nodes[0].tracks.append(ssbh_data_py.anim_data.TrackData('NearClip'))
+
+    track_name_to_track = {track.name : track for track in camera_group.nodes[0].tracks}
+    trans_track = transform_group.nodes[0].tracks[0]
+    for index, frame in enumerate(range(first_blender_frame, last_blender_frame + 1)):
+        scene.frame_set(frame)
+        track_name_to_track['FieldOfView'].values.append(camera.data.angle_y)
+        track_name_to_track['FarClip'].values.append(camera.data.clip_end)
+        track_name_to_track['NearClip'].values.append(camera.data.clip_start)
+        fixed_matrix = camera.matrix_local.copy()
+        axis_correction = Matrix.Rotation(math.radians(90), 4, 'X') 
+        original_matrix = axis_correction.inverted() @ fixed_matrix
+
+        mt, mq, ms = original_matrix.decompose()
+        new_ssbh_transform = ssbh_data_py.anim_data.Transform(
+            [ms[0], ms[1], ms[2]], 
+            [mq.x, mq.y, mq.z, mq.w],
+            [mt[0], mt[1], mt[2]]
+        )
+        trans_track.values.append(new_ssbh_transform)
+        # Check for quaternion interpolation issues
+        if index > 0:
+            pq = mathutils.Quaternion(trans_track.values[index-1].rotation)
+            cq = mathutils.Quaternion(trans_track.values[index].rotation)
+            if pq.dot(cq) < 0:
+                trans_track.values[index].rotation = [-c for c in trans_track.values[index].rotation]
+
+    ssbh_anim_data.groups.append(transform_group)
+    ssbh_anim_data.groups.append(camera_group)
+
     ssbh_anim_data.save(filepath)
 
 def export_model_anim(context, filepath,
