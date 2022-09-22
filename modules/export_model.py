@@ -1032,25 +1032,52 @@ def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
     for index, arma_aim_entry in enumerate(shbd.aim_entries):
         arma_aim_entry: AimEntry
         json_aim_entry = {}
-        for k,v in arma_aim_entry.items():
-            json_aim_entry[k] = v
+        json_aim_entry['name'] = arma_aim_entry.name
+        json_aim_entry['aim_bone_name1'] = arma_aim_entry.aim_bone_name1
+        json_aim_entry['aim_bone_name2'] = arma_aim_entry.aim_bone_name2
+        json_aim_entry['aim_type1'] = arma_aim_entry.aim_type1
+        json_aim_entry['aim_type2'] = arma_aim_entry.aim_type2
+        json_aim_entry['target_bone_name1'] = arma_aim_entry.target_bone_name1
+        json_aim_entry['target_bone_name2'] = arma_aim_entry.target_bone_name2
+        json_aim_entry['unk1'] = arma_aim_entry.unk1
+        json_aim_entry['unk2'] = arma_aim_entry.unk2
+        json_aim_entry['unk3'] = arma_aim_entry.aim.x
+        json_aim_entry['unk4'] = arma_aim_entry.aim.y
+        json_aim_entry['unk5'] = arma_aim_entry.aim.z
+        json_aim_entry['unk6'] = arma_aim_entry.up.x
+        json_aim_entry['unk7'] = arma_aim_entry.up.y
+        json_aim_entry['unk8'] = arma_aim_entry.up.z
+        json_aim_entry['unk9'] = arma_aim_entry.quat1.x
+        json_aim_entry['unk10'] = arma_aim_entry.quat1.y
+        json_aim_entry['unk11'] = arma_aim_entry.quat1.z
+        json_aim_entry['unk12'] = arma_aim_entry.quat1.w
+        json_aim_entry['unk13'] = arma_aim_entry.quat2.x
+        json_aim_entry['unk14'] = arma_aim_entry.quat2.y
+        json_aim_entry['unk15'] = arma_aim_entry.quat2.z
+        json_aim_entry['unk16'] = arma_aim_entry.quat2.w
+        json_aim_entry['unk17'] = arma_aim_entry.unk17
+        json_aim_entry['unk18'] = arma_aim_entry.unk18
+        json_aim_entry['unk19'] = arma_aim_entry.unk19
+        json_aim_entry['unk20'] = arma_aim_entry.unk20
+        json_aim_entry['unk21'] = arma_aim_entry.unk21
+        json_aim_entry['unk22'] = arma_aim_entry.unk22
         nuhlpb_json['data']['Hlpb']['aim_entries'].append(json_aim_entry)
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(0)
 
     for index, arma_interpolation_entry in enumerate(shbd.interpolation_entries):
         arma_interpolation_entry: InterpolationEntry
-        arma_interpolation_entry_aoi: Vector = arma_interpolation_entry.aoi
-        arma_interpolation_entry_quat1: Vector = arma_interpolation_entry.quat_1
-        arma_interpolation_entry_quat2: Vector = arma_interpolation_entry.quat_2
+        arma_interpolation_entry_aoi: Vector = arma_interpolation_entry.constraint_axes
+        arma_interpolation_entry_quat1: Vector = arma_interpolation_entry.quat1
+        arma_interpolation_entry_quat2: Vector = arma_interpolation_entry.quat2
         arma_interpolation_entry_range_min: Vector = arma_interpolation_entry.range_min
         arma_interpolation_entry_range_max: Vector = arma_interpolation_entry.range_max
         json_interpolation_entry = {}
         json_interpolation_entry['name'] = arma_interpolation_entry.name
-        json_interpolation_entry['bone_name'] = arma_interpolation_entry.bone_name
-        json_interpolation_entry['root_bone_name'] = arma_interpolation_entry.root_bone_name
-        json_interpolation_entry['parent_bone_name'] = arma_interpolation_entry.parent_bone_name
-        json_interpolation_entry['driver_bone_name'] = arma_interpolation_entry.driver_bone_name
+        json_interpolation_entry['bone_name'] = arma_interpolation_entry.parent_bone_name1
+        json_interpolation_entry['root_bone_name'] = arma_interpolation_entry.parent_bone_name2
+        json_interpolation_entry['parent_bone_name'] = arma_interpolation_entry.source_bone_name
+        json_interpolation_entry['driver_bone_name'] = arma_interpolation_entry.target_bone_name
         json_interpolation_entry['unk_type'] = arma_interpolation_entry.unk_type
         json_interpolation_entry['aoi'] = {}
         json_interpolation_entry['aoi']['x'] = arma_interpolation_entry_aoi.x

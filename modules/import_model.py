@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
     from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
-    from bpy.types import PoseBone, EditBone
+    from bpy.types import PoseBone, EditBone, CopyRotationConstraint, DampedTrackConstraint
 
 class SUB_PT_import_model(Panel):
     bl_space_type = 'VIEW_3D'
@@ -907,54 +907,6 @@ def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.type
     return copy
 
 def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context):
-    '''
-    The nuhlpb data will be stored in a tree of empty objects.
-    '''
-    '''
-    root_empty = create_new_empty('_NUHLPB', armature)
-    root_empty['major_version'] = nuhlpb_json['data']['Hlpb']['major_version']
-    root_empty['minor_version'] = nuhlpb_json['data']['Hlpb']['minor_version']
-    aim_entries_empty = create_new_empty('aim_entries', root_empty)
-    for aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
-        aim_entry_empty = create_new_empty(aim_entry['name'], aim_entries_empty)
-        aim_entry_empty['aim_bone_name1'] = aim_entry['aim_bone_name1']
-        aim_entry_empty['aim_bone_name2'] = aim_entry['aim_bone_name2'] 
-        aim_entry_empty['aim_type1'] = aim_entry['aim_type1']
-        aim_entry_empty['aim_type2'] = aim_entry['aim_type2']
-        aim_entry_empty['target_bone_name1'] = aim_entry['target_bone_name1'] 
-        aim_entry_empty['target_bone_name2'] = aim_entry['target_bone_name2']
-        for unk_index in range(1, 22+1):
-            aim_entry_empty[f'unk{unk_index}'] = aim_entry[f'unk{unk_index}']
-        create_aim_type_helper_bone_constraints(aim_entry['name'], armature, aim_entry['target_bone_name1'], aim_entry['aim_bone_name1'])
-          
-    interpolation_entries_empty = create_new_empty('interpolation_entries', root_empty)
-    for interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
-        ie = interpolation_entry
-        ie_empty = create_new_empty(ie['name'], interpolation_entries_empty)
-        ie_empty['bone_name'] = ie['bone_name']
-        ie_empty['root_bone_name'] = ie['root_bone_name']
-        ie_empty['parent_bone_name'] = ie['parent_bone_name']
-        ie_empty['driver_bone_name'] = ie['driver_bone_name']
-        ie_empty['unk_type'] = ie['unk_type']
-        aoi = ie['aoi']
-        ie_empty['aoi'] = [aoi['x'], aoi['y'], aoi['z']]
-        quat1 = ie['quat1']
-        ie_empty['quat1'] = [quat1['x'],quat1['y'],quat1['z'],quat1['w']]
-        quat2 = ie['quat2']
-        ie_empty['quat2'] = [quat2['x'],quat2['y'],quat2['z'],quat2['w']]
-        range_min = ie['range_min']
-        ie_empty['range_min'] = [range_min['x'], range_min['y'], range_min['z']]
-        range_max = ie['range_max']
-        ie_empty['range_max'] = [range_max['x'], range_max['y'], range_max['z']]
-        create_interpolation_type_helper_bone_constraints(
-            ie['name'], armature,
-            ie['driver_bone_name'], ie['parent_bone_name'],
-            [aoi['y'], aoi['x'], aoi['z']]
-        )
-    '''
-    '''
-    list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
-    '''
     shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
     shbd.major_version = nuhlpb_json['data']['Hlpb']['major_version']
     shbd.minor_version = nuhlpb_json['data']['Hlpb']['minor_version']
@@ -968,21 +920,17 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context
         aim_entry.target_bone_name1    = json_aim_entry['target_bone_name1'] 
         aim_entry.target_bone_name2    = json_aim_entry['target_bone_name2']
         aim_entry.unk1                 = json_aim_entry['unk1']
-        aim_entry.unk2                 = json_aim_entry['unk2'] 
-        aim_entry.unk3                 = json_aim_entry['unk3'] 
-        aim_entry.unk4                 = json_aim_entry['unk4'] 
-        aim_entry.unk5                 = json_aim_entry['unk5'] 
-        aim_entry.unk6                 = json_aim_entry['unk6'] 
-        aim_entry.unk7                 = json_aim_entry['unk7'] 
-        aim_entry.unk8                 = json_aim_entry['unk8'] 
-        aim_entry.unk9                 = json_aim_entry['unk9'] 
-        aim_entry.unk10                = json_aim_entry['unk10'] 
-        aim_entry.unk11                = json_aim_entry['unk11']
-        aim_entry.unk12                = json_aim_entry['unk12']   
-        aim_entry.unk13                = json_aim_entry['unk13']   
-        aim_entry.unk14                = json_aim_entry['unk14']   
-        aim_entry.unk15                = json_aim_entry['unk15']   
-        aim_entry.unk16                = json_aim_entry['unk16']   
+        aim_entry.unk2                 = json_aim_entry['unk2']
+        aim_entry.aim                  = [json_aim_entry['unk3'], json_aim_entry['unk4'], json_aim_entry['unk5']]
+        aim_entry.up                   = [json_aim_entry['unk6'], json_aim_entry['unk7'], json_aim_entry['unk8']]
+        aim_entry.quat1                = [json_aim_entry['unk12'], #Smash is XYZW but blender is WXYZ 
+                                          json_aim_entry['unk9'], 
+                                          json_aim_entry['unk10'], 
+                                          json_aim_entry['unk11']]  
+        aim_entry.quat2                = [json_aim_entry['unk16'], #Smash is XYZW but blender is WXYZ 
+                                          json_aim_entry['unk13'], 
+                                          json_aim_entry['unk14'], 
+                                          json_aim_entry['unk15']]    
         aim_entry.unk17                = json_aim_entry['unk17']   
         aim_entry.unk18                = json_aim_entry['unk18']   
         aim_entry.unk19                = json_aim_entry['unk19']   
@@ -999,37 +947,41 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context
 
         interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
         interpolation_entry.name                = json_interpolation_entry['name']
-        interpolation_entry.bone_name           = json_interpolation_entry['bone_name']
-        interpolation_entry.root_bone_name      = json_interpolation_entry['root_bone_name']
-        interpolation_entry.parent_bone_name    = json_interpolation_entry['parent_bone_name']
-        interpolation_entry.driver_bone_name    = json_interpolation_entry['driver_bone_name']
+        interpolation_entry.parent_bone_name1   = json_interpolation_entry['bone_name']
+        interpolation_entry.parent_bone_name2   = json_interpolation_entry['root_bone_name']
+        interpolation_entry.source_bone_name    = json_interpolation_entry['parent_bone_name']
+        interpolation_entry.target_bone_name    = json_interpolation_entry['driver_bone_name']
         interpolation_entry.unk_type            = json_interpolation_entry['unk_type']
-        interpolation_entry.aoi                 = [json_aoi['x'], json_aoi['y'], json_aoi['z']]
-        interpolation_entry.quat_1              = [json_quat1['w'], json_quat1['x'], json_quat1['y'], json_quat1['z']]
-        interpolation_entry.quat_2              = [json_quat2['w'], json_quat2['x'], json_quat2['y'], json_quat2['z']]
+        interpolation_entry.constraint_axes     = [json_aoi['x'], json_aoi['y'], json_aoi['z']]
+        interpolation_entry.quat1               = [json_quat1['w'], json_quat1['x'], json_quat1['y'], json_quat1['z']]
+        interpolation_entry.quat2               = [json_quat2['w'], json_quat2['x'], json_quat2['y'], json_quat2['z']]
         interpolation_entry.range_min           = [json_range_min['x'], json_range_min['y'], json_range_min['z']]
         interpolation_entry.range_max           = [json_range_max['x'], json_range_max['y'], json_range_max['z']]        
+    '''
+    list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
+    '''
 
-
-def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
-    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+def create_aim_type_helper_bone_constraints(constraint_name: str, arma: bpy.types.Object,
+                                            owner_bone_name: str, target_bone_name: str):
+    owner_bone = arma.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
-        new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
-        new_constraint.name = constraint_name
-        new_constraint.track_axis = 'TRACK_Y'
-        new_constraint.influence = 1.0
-        new_constraint.target = armature
-        new_constraint.subtarget = target_bone_name
+        dtc: DampedTrackConstraint = owner_bone.constraints.new('DAMPED_TRACK')
+        dtc.name = constraint_name
+        dtc.track_axis = 'TRACK_Y'
+        dtc.influence = 1.0
+        dtc.target = arma
+        dtc.subtarget = target_bone_name
 
-
-def create_interpolation_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name, aoi_xyz_list):
-    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+def create_interpolation_type_helper_bone_constraints(constraint_name: str, arma: bpy.types.Object,
+                                                      owner_bone_name: str, target_bone_name: str,
+                                                      aoi_xyz_list: list[float]):
+    owner_bone: PoseBone = arma.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
         x,y,z = 'X', 'Y', 'Z'
         for index, axis in enumerate([x,y,z]):
-            crc = owner_bone.constraints.new('COPY_ROTATION')
+            crc: CopyRotationConstraint = owner_bone.constraints.new('COPY_ROTATION')
             crc.name = f'{constraint_name}.{axis}'
-            crc.target = armature
+            crc.target = arma
             crc.subtarget =  target_bone_name
             crc.target_space = 'POSE'
             crc.owner_space = 'POSE'
@@ -1046,13 +998,13 @@ def setup_helper_bone_constraints(arma: bpy.types.Object):
         create_aim_type_helper_bone_constraints(aim_entry.name, arma, aim_entry.target_bone_name1, aim_entry.aim_bone_name1)
     for interpolation_entry in shbd.interpolation_entries:
         interpolation_entry: InterpolationEntry
-        aoi:mathutils.Vector = interpolation_entry.aoi
+        constraint_axes: mathutils.Vector = interpolation_entry.constraint_axes
         create_interpolation_type_helper_bone_constraints(
             interpolation_entry.name,
             arma,
-            interpolation_entry.driver_bone_name,
-            interpolation_entry.parent_bone_name,
-            [aoi.y, aoi.x, aoi.z]
+            interpolation_entry.target_bone_name,
+            interpolation_entry.source_bone_name,
+            [constraint_axes.y, constraint_axes.x, constraint_axes.z]
         )
 
 def remove_helper_bone_constraints(arma: bpy.types.Object):

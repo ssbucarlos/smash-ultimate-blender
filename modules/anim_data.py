@@ -155,7 +155,7 @@ class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
         # Sub 3
         split = split.split()
         sr = split.row(align=True)
-        sr.menu(SUB_MT_mat_entry_context_menu.bl_idname, text='Drivers...')      
+        sr.menu('SUB_MT_mat_entry_context_menu', text='Drivers...')      
 
 class SUB_OP_mat_track_add(Operator):
     bl_idname = 'sub.mat_track_add'

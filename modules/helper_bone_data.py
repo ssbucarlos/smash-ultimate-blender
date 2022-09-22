@@ -48,6 +48,35 @@ class SUB_PT_helper_bone_data_aim_entries(Panel):
             shbd,
             "active_aim_entry_index",
         )
+        col = row.column(align=True)
+        col.operator('sub.add_aim_entry', icon='ADD', text="")
+        col.operator('sub.remove_aim_entry', icon='REMOVE', text="")
+        col.separator()
+        col.menu('SUB_MT_interpolation_entry_context_menu',icon='DOWNARROW_HLT', text='')
+        active_index = shbd.active_aim_entry_index 
+        if active_index >= len(shbd.aim_entries):
+            return
+        active_entry = shbd.aim_entries[active_index]
+        row = layout.row()
+        row.prop(active_entry, 'aim_bone_name1')
+        row = layout.row()
+        row.prop(active_entry, 'aim_bone_name2')
+        row = layout.row()
+        row.prop(active_entry, 'aim_type1')
+        row = layout.row()
+        row.prop(active_entry, 'aim_type2')
+        row = layout.row()
+        row.prop(active_entry, 'target_bone_name1')
+        row = layout.row()
+        row.prop(active_entry, 'target_bone_name2')
+        row = layout.row()
+        row.prop(active_entry, 'aim')
+        row = layout.row()
+        row.prop(active_entry, 'up')
+        row = layout.row()
+        row.prop(active_entry, 'quat1')
+        row = layout.row()
+        row.prop(active_entry, 'quat2')
 
 class SUB_PT_helper_bone_data_interpolation_entries(Panel):
     bl_label = "Interpolation Entries"
@@ -79,7 +108,7 @@ class SUB_PT_helper_bone_data_interpolation_entries(Panel):
         )
         col = row.column(align=True)
         col.operator('sub.add_interpolation_entry', icon='ADD', text="")
-        col.operator('sub.add_interpolation_entry', icon='REMOVE', text="")
+        col.operator('sub.remove_interpolation_entry', icon='REMOVE', text="")
         col.separator()
         col.menu('SUB_MT_interpolation_entry_context_menu',icon='DOWNARROW_HLT', text='')
         active_index = shbd.active_interpolation_entry_index 
@@ -87,21 +116,21 @@ class SUB_PT_helper_bone_data_interpolation_entries(Panel):
             return
         active_entry = shbd.interpolation_entries[active_index]
         row = layout.row()
-        row.prop(active_entry, 'bone_name')
+        row.prop(active_entry, 'parent_bone_name1')
         row = layout.row()
-        row.prop(active_entry, 'root_bone_name')
+        row.prop(active_entry, 'parent_bone_name2')
         row = layout.row()
-        row.prop(active_entry, 'parent_bone_name')
+        row.prop(active_entry, 'source_bone_name')
         row = layout.row()
-        row.prop(active_entry, 'driver_bone_name')
+        row.prop(active_entry, 'target_bone_name')
         row = layout.row()
         row.prop(active_entry, 'unk_type')
         row = layout.row()
-        row.prop(active_entry, 'aoi')
+        row.prop(active_entry, 'constraint_axes')
         row = layout.row()
-        row.prop(active_entry, 'quat_1')
+        row.prop(active_entry, 'quat1')
         row = layout.row()
-        row.prop(active_entry, 'quat_2')
+        row.prop(active_entry, 'quat2')
         row = layout.row()
         row.prop(active_entry, 'range_min')
         row = layout.row()
@@ -168,6 +197,54 @@ class SUB_OP_add_interpolation_entry(Operator):
         shbd.active_interpolation_entry_index = insertion_index
         return {'FINISHED'} 
 
+class SUB_OP_remove_interpolation_entry(Operator):
+    bl_idname = 'sub.remove_interpolation_entry'
+    bl_label = 'Remove Interpolation Entry'
+
+    @classmethod
+    def poll(cls, context):
+        shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
+        return len(shbd.interpolation_entries) > 0
+
+    def execute(self, context):
+        shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
+        entries = shbd.interpolation_entries
+        entries.remove(shbd.active_interpolation_entry_index)
+        i = shbd.active_interpolation_entry_index
+        shbd.active_interpolation_entry_index= max(0 , min(i-1, len(entries)-1))
+        return {'FINISHED'} 
+
+class SUB_OP_add_aim_entry(Operator):
+    bl_idname = 'sub.add_aim_entry'
+    bl_label = 'Add Aim Entry'
+
+    def execute(self, context):
+        shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
+        entries = shbd.aim_entries
+        entry: AimEntry = entries.add()
+        entry.name = 'nuHelperBoneRotateAim999'
+        # Entries are not gauranteed to be unique so find the index
+        insertion_index = len(entries) - 1
+        shbd.active_aim_entry_index = insertion_index
+        return {'FINISHED'} 
+
+class SUB_OP_remove_aim_entry(Operator):
+    bl_idname = 'sub.remove_aim_entry'
+    bl_label = 'Remove Aim Entry'
+
+    @classmethod
+    def poll(cls, context):
+        shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
+        return len(shbd.aim_entries) > 0
+
+    def execute(self, context):
+        shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
+        entries = shbd.aim_entries
+        entries.remove(shbd.active_aim_entry_index)
+        i = shbd.active_aim_entry_index
+        shbd.active_aim_entry_index = max(0 , min(i-1, len(entries)-1))
+        return {'FINISHED'} 
+
 class SUP_OP_helper_bone_constraints_remove(Operator):
     bl_idname = 'sub.helper_bone_constraints_remove'
     bl_label = 'Remove Helper Bone constraints'
@@ -204,47 +281,53 @@ class AimEntry(PropertyGroup):
     aim_type2: StringProperty(default="")
     target_bone_name1: StringProperty(default="")
     target_bone_name2: StringProperty(default="")
-    unk1: IntProperty(default=0)
-    unk2: IntProperty(default=0)
-    unk3: IntProperty(default=0)
-    unk4: FloatProperty(default=0.0)
-    unk5: FloatProperty(default=0.0)
-    unk6: FloatProperty(default=0.0)
-    unk7: FloatProperty(default=0.0)
-    unk8: FloatProperty(default=0.0)
-    unk9: FloatProperty(default=0.0)
-    unk10: FloatProperty(default=0.0)
-    unk11: FloatProperty(default=0.0)
-    unk12: FloatProperty(default=0.0)
-    unk13: FloatProperty(default=0.0)
-    unk14: FloatProperty(default=0.0)
-    unk15: FloatProperty(default=0.0)
-    unk16: FloatProperty(default=0.0)
-    unk17: FloatProperty(default=0.0)
-    unk18: FloatProperty(default=0.0)
-    unk19: FloatProperty(default=0.0)
-    unk20: FloatProperty(default=0.0)
-    unk21: FloatProperty(default=0.0)
-    unk22: FloatProperty(default=0.0)
+    unk1: IntProperty(default=0) # always 0, dont expose in UI
+    unk2: IntProperty(default=1) # always 1, dont expose in UI
+    aim: FloatVectorProperty(
+        size=3,
+        subtype='XYZ',
+        default=(1.0, 0.0, 0.0),
+    ) # unks 3 4 5
+    up: FloatVectorProperty(
+        size=3,
+        subtype='XYZ',
+        default=(1.0, 0.0, 0.0),
+    ) # unks 6 7 8
+    quat1: FloatVectorProperty(
+        size=4,
+        subtype='QUATERNION',
+        default=(0.0, 0.0, 0.0, 0.0),
+    ) # unks 9 10 11 12
+    quat2: FloatVectorProperty(
+        size=4,
+        subtype='QUATERNION',
+        default=(0.0, 0.0, 0.0, 0.0),
+    ) # unks 13 14 15 16
+    unk17: FloatProperty(default=0.0) # always 0, dont expose in UI
+    unk18: FloatProperty(default=0.0) # always 0, dont expose in UI
+    unk19: FloatProperty(default=0.0) # always 0, dont expose in UI
+    unk20: FloatProperty(default=0.0) # always 0, dont expose in UI
+    unk21: FloatProperty(default=0.0) # always 0, dont expose in UI
+    unk22: FloatProperty(default=0.0) # always 0, dont expose in UI
 
 class InterpolationEntry(PropertyGroup):
     name: StringProperty(default="")
-    bone_name: StringProperty(name='Bone Name', default="")
-    root_bone_name: StringProperty(name='Root Bone Name', default="")
-    parent_bone_name: StringProperty(name='Parent Bone Name', default="")
-    driver_bone_name: StringProperty(name='Driver Bone Name', default="")
+    parent_bone_name1: StringProperty(name='parent_bone_name1', default="")
+    parent_bone_name2: StringProperty(name='parent_bone_name2', default="")
+    source_bone_name: StringProperty(name='source_bone_name', default="")
+    target_bone_name: StringProperty(name='target_bone_name', default="")
     unk_type: IntProperty(name='unk_type', default=1, soft_min=1, soft_max=2)
-    aoi: FloatVectorProperty(
+    constraint_axes: FloatVectorProperty(
         size=3,
         subtype='XYZ',
         default=(0.0, 0.0, 0.0),
     )
-    quat_1: FloatVectorProperty(
+    quat1: FloatVectorProperty(
         size=4,
         subtype='QUATERNION',
         default=(0.0, 0.0, 0.0, 0.0),
     )
-    quat_2: FloatVectorProperty(
+    quat2: FloatVectorProperty(
         size=4,
         subtype='QUATERNION',
         default=(0.0, 0.0, 0.0, 0.0),
