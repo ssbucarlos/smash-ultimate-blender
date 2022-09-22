@@ -19,8 +19,9 @@ from ..operators import material_inputs
 from .import_model import get_ssbh_lib_json_exe_path
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from bpy.types import EditBone
+    from bpy.types import EditBone, Mesh, MeshVertex
     from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
+    from ..properties import SubSceneProperties
 
 class SUB_PT_export_model(Panel):
     bl_space_type = 'VIEW_3D'
@@ -665,10 +666,11 @@ def make_mesh_data(operator, context, export_mesh_groups):
     return ssbh_mesh_data
 
 
-def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
+def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, mesh_name):
     # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
     # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+    mesh_data: bpy.types.Mesh = mesh.data
     ssbh_mesh_object = ssbh_data_py.mesh_data.MeshObjectData(group_name, i)
     position0 = ssbh_data_py.mesh_data.AttributeData('Position0')
 
@@ -676,25 +678,25 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
     axis_correction = np.array(Matrix.Rotation(math.radians(90), 3, 'X'))
 
     # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
-    positions = np.zeros(len(mesh.data.vertices) * 3, dtype=np.float32)
-    mesh.data.vertices.foreach_get("co", positions)
+    positions = np.zeros(len(mesh_data.vertices) * 3, dtype=np.float32)
+    mesh_data.vertices.foreach_get("co", positions)
     # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
     position0.data = positions.reshape((-1, 3)) @ axis_correction
     ssbh_mesh_object.positions = [position0]
 
     # Store vertex indices as a numpy array for faster indexing later.
-    vertex_indices = np.zeros(len(mesh.data.loops), dtype=np.uint32)
-    mesh.data.loops.foreach_get("vertex_index", vertex_indices)
+    vertex_indices = np.zeros(len(mesh_data.loops), dtype=np.uint32)
+    mesh_data.loops.foreach_get("vertex_index", vertex_indices)
     ssbh_mesh_object.vertex_indices = vertex_indices
 
     # We use the loop normals rather than vertex normals to allow exporting custom normals.
-    mesh.data.calc_normals_split()
+    mesh_data.calc_normals_split()
 
     # Export Normals
     normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
-    loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
-    mesh.data.loops.foreach_get("normal", loop_normals)
-    normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh.data.vertices), 3))
+    loop_normals = np.zeros(len(mesh_data.loops) * 3, dtype=np.float32)
+    mesh_data.loops.foreach_get("normal", loop_normals)
+    normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh_data.vertices), 3))
     normals = normals @ axis_correction
 
     # Pad normals to 4 components instead of 3 components.
@@ -710,8 +712,17 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
     group_to_weights = { vg.index : (vg.name, []) for vg in mesh.vertex_groups }
     has_unweighted_vertices = False
     # TODO: Skip this for performance reasons if there are no vertex groups?
-    for vertex in mesh.data.vertices:
-        if len(vertex.groups) > 4:
+    '''
+    Vertex groups can either be 'Deform' groups used for actual mesh deformation, or 'Other'
+    Only want the 'Deform' groups exported.
+    '''
+    ssp: SubSceneProperties = context.scene.sub_scene_properties
+    arma = ssp.model_export_arma
+    deform_vertex_group_indices = {vg.index for vg in mesh.vertex_groups if vg.name in arma.data.bones}
+    for vertex in mesh_data.vertices:
+        vertex: MeshVertex 
+        deform_groups = [g for g in vertex.groups if g.group in deform_vertex_group_indices]
+        if len(deform_groups) > 4:
             # We won't fix this automatically since removing influences may break animations.
             message = f'Vertex with more than 4 weights detected for mesh {mesh_name}.'
             message += ' Select all in Edit Mode and click Mesh > Weights > Limit Total with the limit set to 4.'
@@ -719,13 +730,13 @@ def make_mesh_object(operator, context, mesh, group_name, i, mesh_name):
             raise RuntimeError(message)
 
         # Only report this warning once.
-        if len(vertex.groups) == 0 or all([g.weight == 0.0 for g in vertex.groups]):
+        if len(deform_groups) == 0 or all([g.weight == 0.0 for g in deform_groups]):
             has_unweighted_vertices = True
 
         # Blender doesn't enforce normalization, since it normalizes while animating.
         # Normalize on export to ensure the weights work correctly in game.
-        weight_sum = sum([g.weight for g in vertex.groups])
-        for group in vertex.groups:
+        weight_sum = sum([g.weight for g in deform_groups])
+        for group in deform_groups:
             # Remove unused weights on export.
             if group.weight > 0.0:
                 ssbh_weight = ssbh_data_py.mesh_data.VertexWeight(vertex.index, group.weight / weight_sum)
