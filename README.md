@@ -1,7 +1,7 @@
 # smash-ultimate-blender 
 [![wiki](https://img.shields.io/badge/wiki-guide-success)](https://github.com/ssbucarlos/smash-ultimate-blender/wiki)
 
-Blender Plugin that contains utilities for Smash Ultimate Models and (eventually) Animations.
+Blender Plugin that contains utilities for Smash Ultimate models and animations.
 
 **Blender 3.1 support is planned for a future update but not supported at this time. You can download Blender 3.0 from https://download.blender.org/release/Blender3.0/**
 
@@ -27,11 +27,10 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 
 ## Current Features
 1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
-2.  .NUMDLB, .NUMSHB, .NUSKTB, .NUMATB, .NUMSHEXB Import And Export
+2.  .NUMDLB, .NUMSHB, .NUSKTB, .NUMATB, .NUMSHEXB, .NUANMB Import And Export
 
 ## Planned Features
-1. Animation export
-2. Swing bone visualization
+1. Swing bone visualization
 
 ## Useful Tools
 * SSBH Editor (view models and animations and edit materials) https://github.com/ScanMountGoat/ssbh_editor
