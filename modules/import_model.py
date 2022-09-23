@@ -1,75 +1,68 @@
 import json
 import os
 import os.path
-from tokenize import String
 import bpy
 import mathutils
+import sqlite3
 import time
 import math
+import traceback
+import numpy as np
 
 from .. import ssbh_data_py
-import numpy as np
 from pathlib import Path
-
 from bpy.props import StringProperty, BoolProperty
-from bpy_extras.io_utils import ImportHelper
+from bpy.types import Panel, Operator
 from bpy_extras import image_utils
-
 from ..operators import master_shader, material_inputs
+from mathutils import Matrix
 
-import sqlite3
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..properties import SubSceneProperties
+    from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
+    from bpy.types import PoseBone, EditBone, CopyRotationConstraint, DampedTrackConstraint
 
-class ImportModelPanel(bpy.types.Panel):
+class SUB_PT_import_model(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Ultimate'
     bl_label = 'Model Importer'
     bl_options = {'DEFAULT_CLOSED'}
 
-    '''
-    def find_model_files(self, context):
-        all_files = os.listdir(context.scene.sub_model_folder_path)
-        model_files = [file for file in all_files if 'model' in file]
-        for model_file in model_files:
-            extension = model_file.split('.')[1]
-            if 'numshb' == extension:
-                context.scene.sub_model_numshb_file_name = model_file
-            elif 'nusktb' == extension:
-                context.scene.sub_model_nusktb_file_name = model_file
-            elif 'numdlb' == extension:
-                context.scene.sub_model_numdlb_file_name = model_file
-    '''
     def draw(self, context):
+        ssp:SubSceneProperties = context.scene.sub_scene_properties
+        
         layout = self.layout
         layout.use_property_split = False
         
-        if '' == context.scene.sub_model_folder_path:
+        if '' == ssp.model_import_folder_path:
             row = layout.row(align=True)
             row.label(text='Please select a folder...')
             row = layout.row(align=True)
-            row.operator('sub.ssbh_model_folder_selector', icon='ZOOM_ALL', text='Browse for the model folder')
+            row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for the model folder')
             return
         
         row = layout.row(align=True)
-        row.label(text='Selected Folder: "' + context.scene.sub_model_folder_path +'"')
+        row.label(text='Selected Folder: "' + ssp.model_import_folder_path +'"')
         row = layout.row(align=True)
-        row.operator('sub.ssbh_model_folder_selector', icon='ZOOM_ALL', text='Browse for a different model folder')
+        row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for a different model folder')
 
         all_requirements_met = True
         min_requirements_met = True
-        if '' == context.scene.sub_model_numshb_file_name:
+
+        if '' == ssp.model_import_numshb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .numshb file found! Cannot import without it!', icon='ERROR')
             all_requirements_met = False
             min_requirements_met = False
-
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUMSHB file: "' + context.scene.sub_model_numshb_file_name+'"', icon='FILE')
+            row.label(text=f'NUMSHB file: "{ssp.model_import_numshb_file_name}"', icon='FILE')
 
-        if '' == context.scene.sub_model_nusktb_file_name:
+        if '' == ssp.model_import_nusktb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .nusktb file found! Cannot import without it!', icon='ERROR')
@@ -78,9 +71,9 @@ class ImportModelPanel(bpy.types.Panel):
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUSKTB file: "' + context.scene.sub_model_nusktb_file_name+'"', icon='FILE')
+            row.label(text=f'NUSKTB file: "{ssp.model_import_nusktb_file_name}"', icon='FILE')
 
-        if '' == context.scene.sub_model_numdlb_file_name:
+        if '' == ssp.model_import_numdlb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .numdlb file found! Can import, but without materials...', icon='ERROR')
@@ -88,9 +81,9 @@ class ImportModelPanel(bpy.types.Panel):
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUMDLB file: "' + context.scene.sub_model_numdlb_file_name+'"', icon='FILE')
+            row.label(text=f'NUMDLB file: "{ssp.model_import_numdlb_file_name}"', icon='FILE')
 
-        if '' ==  context.scene.sub_model_numatb_file_name:
+        if '' ==  ssp.model_import_numatb_file_name:
             row = layout.row(align=True)
             row.alert = True
             row.label(text='No .numatb file found! Can import, but without materials...', icon='ERROR')
@@ -98,7 +91,17 @@ class ImportModelPanel(bpy.types.Panel):
         else:
             row = layout.row(align=True)
             row.alert = False
-            row.label(text='NUMATB file: "' + context.scene.sub_model_numatb_file_name+'"', icon='FILE')
+            row.label(text=f'NUMATB file: "{ssp.model_import_numatb_file_name}"', icon='FILE')
+
+        if '' == ssp.model_import_nuhlpb_file_name:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='No .nuhlpb file found! Can import, but without helper bones...', icon='ERROR')
+            all_requirements_met = False
+        else:
+            row = layout.row(align=True)
+            row.alert = False
+            row.label(text=f'NUHLPB file: "{ssp.model_import_nuhlpb_file_name}"', icon='FILE')
 
         if not min_requirements_met:
             row = layout.row(align=True)
@@ -107,63 +110,52 @@ class ImportModelPanel(bpy.types.Panel):
             return
         elif not all_requirements_met:
             row = layout.row(align=True)
-            row.operator('sub.model_importer', icon='IMPORT', text='Limited Model Import')
+            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Limited Model Import')
         else:
             row = layout.row(align=True)
-            row.operator('sub.model_importer', icon='IMPORT', text='Import Model')
+            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Import Model')
         
 
-class ModelFolderSelector(bpy.types.Operator, ImportHelper):
+class SUB_OP_select_model_import_folder(Operator):
     bl_idname = 'sub.ssbh_model_folder_selector'
     bl_label = 'Folder Selector'
 
     filter_glob: StringProperty(
-        default='',
+        default='*.numdlb;*.nusktb;*.numshb;*.numatb;*.nuhlpb',
         options={'HIDDEN'}
     )
-    """
-    Cancelled until further notice.
-    merge_same_name_meshes: BoolProperty(
-        name="Merge Same Name Meshes",
-        description="Merge Same Name Meshes",
-        default=True,
-    )   
-    """
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
 
-    # Initially set the filename field to be nothing
     def invoke(self, context, _event):
-        self.filepath = ""
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        context.scene.sub_model_numshb_file_name = '' 
-        context.scene.sub_model_nusktb_file_name = '' 
-        context.scene.sub_model_numdlb_file_name = '' 
-        context.scene.sub_model_numatb_file_name = ''  
-        #context.scene.sub_merge_same_name_meshes = self.merge_same_name_meshes
-        #print(self.filepath)
-        context.scene.sub_model_folder_path = self.filepath
-        all_files = os.listdir(context.scene.sub_model_folder_path)
-        model_files = [file for file in all_files if 'model' in file]
-        for model_file in model_files:
-            print(model_file)
-            name, extension = os.path.splitext(model_file)
-            print(extension)
+        ssp:SubSceneProperties = context.scene.sub_scene_properties
+        ssp.model_import_numdlb_file_name = ''
+        ssp.model_import_nusktb_file_name = ''
+        ssp.model_import_numshb_file_name = ''
+        ssp.model_import_numatb_file_name = ''
+        ssp.model_import_nuhlpb_file_name = ''
+        ssp.model_import_folder_path = self.directory
+        #all_files = os.listdir(ssp.model_import_folder_path)
+        #model_files = [file for file in all_files if 'model' in file]
+        for file_name in os.listdir(ssp.model_import_folder_path):
+            _root, extension = os.path.splitext(file_name)
             if '.numshb' == extension:
-                context.scene.sub_model_numshb_file_name = model_file
+                ssp.model_import_numshb_file_name = file_name
             elif '.nusktb' == extension:
-                context.scene.sub_model_nusktb_file_name = model_file
+                ssp.model_import_nusktb_file_name = file_name
             elif '.numdlb' == extension:
-                context.scene.sub_model_numdlb_file_name = model_file
+                ssp.model_import_numdlb_file_name = file_name
             elif '.numatb' == extension:
-                context.scene.sub_model_numatb_file_name = model_file
+                ssp.model_import_numatb_file_name = file_name
             elif '.nuhlpb' == extension:
-                context.scene.sub_model_nuhlpb_file_name = model_file
+                ssp.model_import_nuhlpb_file_name = file_name
         return {'FINISHED'}
 
 
-class ModelImporter(bpy.types.Operator):
+class SUB_OP_import_model(bpy.types.Operator):
     bl_idname = 'sub.model_importer'
     bl_label = 'Model Importer'
 
@@ -178,13 +170,13 @@ class ModelImporter(bpy.types.Operator):
 
 
 def import_model(self, context):
-    dir = Path(context.scene.sub_model_folder_path)
-
-    numdlb_name = dir.joinpath(context.scene.sub_model_numdlb_file_name)
-    numshb_name = dir.joinpath(context.scene.sub_model_numshb_file_name)
-    nusktb_name = dir.joinpath(context.scene.sub_model_nusktb_file_name)
-    numatb_name = dir.joinpath(context.scene.sub_model_numatb_file_name)
-    nuhlpb_name = dir.joinpath(context.scene.sub_model_nuhlpb_file_name)
+    ssp:SubSceneProperties = context.scene.sub_scene_properties
+    dir = Path(ssp.model_import_folder_path)
+    numdlb_name = dir.joinpath(ssp.model_import_numdlb_file_name)
+    numshb_name = dir.joinpath(ssp.model_import_numshb_file_name)
+    nusktb_name = dir.joinpath(ssp.model_import_nusktb_file_name)
+    numatb_name = dir.joinpath(ssp.model_import_numatb_file_name)
+    nuhlpb_name = dir.joinpath(ssp.model_import_nuhlpb_file_name) if ssp.model_import_nuhlpb_file_name != '' else ''
 
     start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(str(numdlb_name)) if numdlb_name != '' else None
@@ -200,18 +192,21 @@ def import_model(self, context):
     try:
         armature = create_armature(ssbh_skel, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import {nusktb_name}: {e}')
+        self.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     try:
         create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB: {e}')
+        self.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     try:
         nuhlpb_json = read_nuhlpb_json(str(nuhlpb_name)) if nuhlpb_name != '' else None
-        import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import {nuhlpb_name}: {e}')
+        self.report({'ERROR'}, f'Failed to import {nuhlpb_name}: Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+
+    if nuhlpb_json is not None:
+        import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
+        setup_helper_bone_constraints(armature)
 
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
@@ -263,60 +258,35 @@ def get_index_from_name(name, bones):
         if bone.name == name:
             return index
 
-def reorient(m, transpose=True):
-    from mathutils import Matrix
+def get_blender_transform(m, transpose=True) -> Matrix:
     m = Matrix(m)
 
+    # TODO(SMG): Transposing won't be necessary in the next ssbh_data_py update.
     if transpose:
         m.transpose()
-     
-    c00,c01,c02,c03 = m[0]
-    c10,c11,c12,c13 = m[1]
-    c20,c21,c22,c23 = m[2]
-    c30,c31,c32,c33 = m[3]
-    
-    m = Matrix([
-        [c11, -c10, -c12, -c13],
-        [ -c01, c00, c02, c03],
-        [ -c21, c20, c22, c23],
-        [ c30, c31, c32, c33]
+
+    # In Ultimate, the bone's x-axis points from parent to child.
+    # In Blender, the bone's y-axis points from parent to child.
+    # https://en.wikipedia.org/wiki/Matrix_similarity
+    p = Matrix([
+        [0, -1, 0, 0],
+        [1, 0, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1]
     ])
+    # Perform the transformation m in Ultimate's basis and convert back to Blender.
+    return p @ m @ p.inverted()
 
-    return m 
-
-def reorient_root(m, transpose=True):
-    from mathutils import Matrix
-    m = Matrix(m)
-    
-    if transpose:
-        m.transpose() 
-      
-    c00,c01,c02,c03 = m[0]
-    c10,c11,c12,c13 = m[1]
-    c20,c21,c22,c23 = m[2]
-    c30,c31,c32,c33 = m[3]
-    
-    # TODO: Find out if the following does not work for certain skels
-    m = Matrix([
-        [0.0, 1.0, 0.0, 0.0],
-        [ 0.0, 0.0, -1.0, 0.0],
-        [ -1.0, 0.0, 0.0, 0.0],
-        [ 0.0, 0.0, 0.0, 1.0]
-    ])
-    
-    return m
-
-
-def create_armature(ssbh_skel, context): 
+def create_armature(ssbh_skel, context) -> bpy.types.Object: 
     '''
     So blender bone matrixes are not relative to their parent, unlike the ssbh skel.
     Also, blender has a different coordinate system for the bones.
     Also, ssbh matrixes need to be transposed first.
     Also, the root bone needs to be modified differently to fix the world orientation
-    Also, the ssbh bones are not guaranteed to appear in 'heirarchal' order, 
+    Also, the ssbh bones are not guaranteed to appear in 'hierarchical' order, 
                  which is where the parent always appears before the child.
     Also, iterating through the blender bones appears to preserve the order of insertion,
-                 so its also not gauranteed heirarchal order.
+                 so its also not guaranteed hierarchical order.
     '''
     start = time.time()
     
@@ -349,23 +319,29 @@ def create_armature(ssbh_skel, context):
         parent_bone = edit_bones.get(parent_bone_name, None)
         blender_bone.parent = parent_bone
 
-    # Get a list of bones in 'heirarchal' order
-    def heirarchy_order(bone, reordered):
+    # Get a list of bones in 'hierarchical' order
+    def hierarchy_order(bone, reordered):
         if bone not in reordered:
             reordered.append(bone)
         for child in bone.children:
-            heirarchy_order(child, reordered)
+            hierarchy_order(child, reordered)
     reordered = []
     if len(edit_bones) > 0:
-        heirarchy_order(edit_bones[0], reordered)
+        hierarchy_order(edit_bones[0], reordered)
 
-    # Transform bones    
+    # Transform bones
     for blender_bone in reordered:
+        blender_bone: EditBone
         ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
         if blender_bone.parent is None:
-            blender_bone.matrix = reorient_root(ssbh_bone.transform)
-            continue
-        blender_bone.matrix = blender_bone.parent.matrix @ reorient(ssbh_bone.transform)
+            blender_bone.matrix = get_blender_transform(ssbh_bone.transform)
+            # TODO: Why is this necessary?
+            blender_bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
+            # Convert from Y up to Z up only at root bones.
+            # This works since non empty skeletons will always have at least one root bone.
+            blender_bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
+        else:
+            blender_bone.matrix = blender_bone.parent.matrix @ get_blender_transform(ssbh_bone.transform)
     
 
     # fix bone lengths
@@ -439,14 +415,22 @@ def create_armature(ssbh_skel, context):
     system_group.name = 'System'
     system_group.color_set = 'THEME10'
 
+    exo_group = bpy.context.object.pose.bone_groups.new()
+    exo_group.name = 'Exo Skel'
+    exo_group.color_set = 'THEME09'
+
     system_bone_names = ['Trans', 'Rot', 'Throw']
     system_bone_suffixes = ['_null', '_eff', '_offset']
     for bone in bpy.context.object.pose.bones:
+        bone: PoseBone
         bone.bone.layers[16] = True
-        if 'H_' == bone.name[:2]:
+        if bone.name.startswith('H_Exo_'):
+            bone.bone_group = exo_group
+            bone.bone.layers[18] = True
+        elif bone.name.startswith('H_'):
             bone.bone_group = helper_group
             bone.bone.layers[2] = True
-        elif 'S_' == bone.name[:2]:
+        elif bone.name.startswith('S_'):
             bone.bone.layers[1] = True
             bone.bone.layers[17] = True
             bone.bone_group = swing_group
@@ -454,7 +438,7 @@ def create_armature(ssbh_skel, context):
                 bone.bone_group = system_group
                 bone.bone.layers[16] = False
                 bone.bone.layers[17] = False
-                bone.bone.use_deform = False
+                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to null bones
         else:
             bone.bone_group = default_group
             if any(system_bone_name == bone.name for system_bone_name in system_bone_names) \
@@ -464,8 +448,6 @@ def create_armature(ssbh_skel, context):
                 bone.bone.layers[17] = False
                 bone.bone.use_deform = False
 
-
-    
     bpy.ops.object.mode_set(mode='OBJECT')
     end = time.time()
     print(f'Created armature in {end - start} seconds')
@@ -474,8 +456,6 @@ def create_armature(ssbh_skel, context):
 
 
 def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_object):
-    from math import radians
-    from mathutils import Matrix
     if skel is not None:
         # Create vertex groups for each bone to support skinning.
         for bone in skel.bones:
@@ -513,7 +493,7 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
                     vertex_group.add([w.vertex_index], w.vertex_weight, 'REPLACE')
 
         # Convert from Y up to Z up.
-        mesh_obj.data.transform(Matrix.Rotation(radians(90), 4, 'X') )
+        mesh_obj.data.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
 
     # Attach the mesh object to the armature object.
     if armature is not None:
@@ -604,7 +584,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     master_shader.create_master_shader()
 
     texture_name_to_image_dict = {}
-    texture_name_to_image_dict = import_material_images(ssbh_matl, context)
+    texture_name_to_image_dict = import_material_images(ssbh_matl, context.scene.sub_scene_properties.model_import_folder_path)
 
     label_to_material_dict = {}
     for label in unique_numdlb_material_labels:
@@ -639,7 +619,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
 
     return created_meshes
 
-def import_material_images(ssbh_matl, context):
+def import_material_images(ssbh_matl, dir):
     texture_name_to_image_dict = {}
     texture_name_set = set()
 
@@ -647,10 +627,7 @@ def import_material_images(ssbh_matl, context):
         for attribute in ssbh_mat_entry.textures:
             texture_name_set.add(attribute.data)
 
-    print('texture_name_set = %s' % texture_name_set)
-
     for texture_name in texture_name_set:
-        dir = context.scene.sub_model_folder_path
         image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
         texture_name_to_image_dict[texture_name] = image
 
@@ -892,17 +869,16 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
         create_and_enable_color_set('colorSet5', 1)
 
 def read_nuhlpb_json(nuhlpb_path) -> str:
-    import subprocess
+    import subprocess, os
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
     output_json_path = nuhlpb_path + '.json'
-    try:
-        subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
-    except:
-        pass # Lol
+    subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
     
-    nuhlpb_json = None
     with open(output_json_path) as f:
         nuhlpb_json = json.load(f)
+    
+    os.remove(output_json_path)
+
     return nuhlpb_json
 
 def create_new_empty(name, parent, specified_collection=None) -> bpy.types.Object:
@@ -930,78 +906,82 @@ def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.type
         specified_collection.objects.link(copy)
     return copy
 
-def import_nuhlpb_data_from_json(nuhlpb_json, armature, context):
-    '''
-    The nuhlpb data will be stored in a tree of empty objects.
-    '''
-    root_empty = create_new_empty('_NUHLPB', armature)
-    root_empty['major_version'] = nuhlpb_json['data']['Hlpb']['major_version']
-    root_empty['minor_version'] = nuhlpb_json['data']['Hlpb']['minor_version']
-    aim_entries_empty = create_new_empty('aim_entries', root_empty)
-    for aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
-        aim_entry_empty = create_new_empty(aim_entry['name'], aim_entries_empty)
-        aim_entry_empty['aim_bone_name1'] = aim_entry['aim_bone_name1']
-        aim_entry_empty['aim_bone_name2'] = aim_entry['aim_bone_name2'] 
-        aim_entry_empty['aim_type1'] = aim_entry['aim_type1']
-        aim_entry_empty['aim_type2'] = aim_entry['aim_type2']
-        aim_entry_empty['target_bone_name1'] = aim_entry['target_bone_name1'] 
-        aim_entry_empty['target_bone_name2'] = aim_entry['target_bone_name2']
-        for unk_index in range(1, 22+1):
-            aim_entry_empty[f'unk{unk_index}'] = aim_entry[f'unk{unk_index}']
-        create_aim_type_helper_bone_constraints(aim_entry['name'], armature, aim_entry['target_bone_name1'], aim_entry['aim_bone_name1'])
-          
-    interpolation_entries_empty = create_new_empty('interpolation_entries', root_empty)
-    for interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
-        ie = interpolation_entry
-        ie_empty = create_new_empty(ie['name'], interpolation_entries_empty)
-        ie_empty['bone_name'] = ie['bone_name']
-        ie_empty['root_bone_name'] = ie['root_bone_name']
-        ie_empty['parent_bone_name'] = ie['parent_bone_name']
-        ie_empty['driver_bone_name'] = ie['driver_bone_name']
-        ie_empty['unk_type'] = ie['unk_type']
-        aoi = ie['aoi']
-        ie_empty['aoi'] = [aoi['x'], aoi['y'], aoi['z']]
-        quat1 = ie['quat1']
-        ie_empty['quat1'] = [quat1['x'],quat1['y'],quat1['z'],quat1['w']]
-        quat2 = ie['quat2']
-        ie_empty['quat2'] = [quat2['x'],quat2['y'],quat2['z'],quat2['w']]
-        range_min = ie['range_min']
-        ie_empty['range_min'] = [range_min['x'], range_min['y'], range_min['z']]
-        range_max = ie['range_max']
-        ie_empty['range_max'] = [range_max['x'], range_max['y'], range_max['z']]
-        create_interpolation_type_helper_bone_constraints(
-            ie['name'], armature,
-            ie['driver_bone_name'], ie['parent_bone_name'],
-            [aoi['y'], aoi['x'], aoi['z']]
-        )
+def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context):
+    shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
+    shbd.major_version = nuhlpb_json['data']['Hlpb']['major_version']
+    shbd.minor_version = nuhlpb_json['data']['Hlpb']['minor_version']
+    for json_aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
+        aim_entry: AimEntry             = shbd.aim_entries.add()
+        aim_entry.name                  = json_aim_entry['name']
+        aim_entry.aim_bone_name1       = json_aim_entry['aim_bone_name1']
+        aim_entry.aim_bone_name2       = json_aim_entry['aim_bone_name2'] 
+        aim_entry.aim_type1            = json_aim_entry['aim_type1']
+        aim_entry.aim_type2            = json_aim_entry['aim_type2']
+        aim_entry.target_bone_name1    = json_aim_entry['target_bone_name1'] 
+        aim_entry.target_bone_name2    = json_aim_entry['target_bone_name2']
+        aim_entry.unk1                 = json_aim_entry['unk1']
+        aim_entry.unk2                 = json_aim_entry['unk2']
+        aim_entry.aim                  = [json_aim_entry['unk3'], json_aim_entry['unk4'], json_aim_entry['unk5']]
+        aim_entry.up                   = [json_aim_entry['unk6'], json_aim_entry['unk7'], json_aim_entry['unk8']]
+        aim_entry.quat1                = [json_aim_entry['unk12'], #Smash is XYZW but blender is WXYZ 
+                                          json_aim_entry['unk9'], 
+                                          json_aim_entry['unk10'], 
+                                          json_aim_entry['unk11']]  
+        aim_entry.quat2                = [json_aim_entry['unk16'], #Smash is XYZW but blender is WXYZ 
+                                          json_aim_entry['unk13'], 
+                                          json_aim_entry['unk14'], 
+                                          json_aim_entry['unk15']]    
+        aim_entry.unk17                = json_aim_entry['unk17']   
+        aim_entry.unk18                = json_aim_entry['unk18']   
+        aim_entry.unk19                = json_aim_entry['unk19']   
+        aim_entry.unk20                = json_aim_entry['unk20']   
+        aim_entry.unk21                = json_aim_entry['unk21']   
+        aim_entry.unk22                = json_aim_entry['unk22']
+
+    for json_interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
+        json_aoi        = json_interpolation_entry['aoi']
+        json_quat1      = json_interpolation_entry['quat1']
+        json_quat2      = json_interpolation_entry['quat2']
+        json_range_min  = json_interpolation_entry['range_min']
+        json_range_max  = json_interpolation_entry['range_max']
+
+        interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
+        interpolation_entry.name                = json_interpolation_entry['name']
+        interpolation_entry.parent_bone_name1   = json_interpolation_entry['bone_name']
+        interpolation_entry.parent_bone_name2   = json_interpolation_entry['root_bone_name']
+        interpolation_entry.source_bone_name    = json_interpolation_entry['parent_bone_name']
+        interpolation_entry.target_bone_name    = json_interpolation_entry['driver_bone_name']
+        interpolation_entry.unk_type            = json_interpolation_entry['unk_type']
+        interpolation_entry.constraint_axes     = [json_aoi['x'], json_aoi['y'], json_aoi['z']]
+        interpolation_entry.quat1               = [json_quat1['w'], json_quat1['x'], json_quat1['y'], json_quat1['z']]
+        interpolation_entry.quat2               = [json_quat2['w'], json_quat2['x'], json_quat2['y'], json_quat2['z']]
+        interpolation_entry.range_min           = [json_range_min['x'], json_range_min['y'], json_range_min['z']]
+        interpolation_entry.range_max           = [json_range_max['x'], json_range_max['y'], json_range_max['z']]        
     '''
     list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
     '''
 
-
-def create_aim_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name):
-    bpy.ops.object.mode_set(mode='POSE', toggle=False)
-    #print(f'{constraint_name}, {armature}, {owner_bone_name}, {target_bone_name}')
-    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+def create_aim_type_helper_bone_constraints(constraint_name: str, arma: bpy.types.Object,
+                                            owner_bone_name: str, target_bone_name: str):
+    owner_bone = arma.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
-        new_constraint = owner_bone.constraints.new('DAMPED_TRACK')
-        new_constraint.name = constraint_name
-        new_constraint.track_axis = 'TRACK_Y'
-        new_constraint.influence = 1.0
-        new_constraint.target = armature
-        new_constraint.subtarget = target_bone_name
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+        dtc: DampedTrackConstraint = owner_bone.constraints.new('DAMPED_TRACK')
+        dtc.name = constraint_name
+        dtc.track_axis = 'TRACK_Y'
+        dtc.influence = 1.0
+        dtc.target = arma
+        dtc.subtarget = target_bone_name
 
-
-def create_interpolation_type_helper_bone_constraints(constraint_name, armature, owner_bone_name, target_bone_name, aoi_xyz_list):
-    bpy.ops.object.mode_set(mode='POSE', toggle=False)
-    owner_bone = armature.pose.bones.get(owner_bone_name, None)
+def create_interpolation_type_helper_bone_constraints(constraint_name: str, arma: bpy.types.Object,
+                                                      owner_bone_name: str, target_bone_name: str,
+                                                      aoi_xyz_list: list[float]):
+    owner_bone: PoseBone = arma.pose.bones.get(owner_bone_name, None)
     if owner_bone is not None:
         x,y,z = 'X', 'Y', 'Z'
         for index, axis in enumerate([x,y,z]):
-            crc = owner_bone.constraints.new('COPY_ROTATION')
+            crc: CopyRotationConstraint = owner_bone.constraints.new('COPY_ROTATION')
             crc.name = f'{constraint_name}.{axis}'
-            crc.target = armature
+            crc.target = arma
             crc.subtarget =  target_bone_name
             crc.target_space = 'POSE'
             crc.owner_space = 'POSE'
@@ -1009,4 +989,31 @@ def create_interpolation_type_helper_bone_constraints(constraint_name, armature,
             crc.use_y = True if axis is y else False
             crc.use_z = True if axis is z else False
             crc.influence = aoi_xyz_list[index]
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+
+def setup_helper_bone_constraints(arma: bpy.types.Object):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    shbd: SubHelperBoneData = arma.data.sub_helper_bone_data
+    for aim_entry in shbd.aim_entries:
+        aim_entry: AimEntry
+        create_aim_type_helper_bone_constraints(aim_entry.name, arma, aim_entry.target_bone_name1, aim_entry.aim_bone_name1)
+    for interpolation_entry in shbd.interpolation_entries:
+        interpolation_entry: InterpolationEntry
+        constraint_axes: mathutils.Vector = interpolation_entry.constraint_axes
+        create_interpolation_type_helper_bone_constraints(
+            interpolation_entry.name,
+            arma,
+            interpolation_entry.target_bone_name,
+            interpolation_entry.source_bone_name,
+            [constraint_axes.y, constraint_axes.x, constraint_axes.z]
+        )
+
+def remove_helper_bone_constraints(arma: bpy.types.Object):
+    bpy.ops.object.mode_set(mode='POSE', toggle=False)
+    helper_bones: list[PoseBone] = [bone for bone in arma.pose.bones if bone.name.startswith('H_')]
+    for bone in helper_bones:
+        for constraint in bone.constraints:
+            bone.constraints.remove(constraint)
+
+def refresh_helper_bone_constraints(arma: bpy.types.Object):
+    remove_helper_bone_constraints(arma)
+    setup_helper_bone_constraints(arma)

@@ -1,7 +1,11 @@
 import bpy, json, math
-from bpy.types import Scene, Object, PropertyGroup, UIList
+from bpy.types import Object, PropertyGroup, UIList, Operator, Panel
 from bpy.props import CollectionProperty, PointerProperty, StringProperty, IntProperty
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..properties import SubSceneProperties
+    from .helper_bone_data import SubHelperBoneData, InterpolationEntry
+    from bpy.types import PoseBone
 
 def poll_armatures(self, obj):
     return obj.type == 'ARMATURE'
@@ -9,11 +13,11 @@ def poll_armatures(self, obj):
 def poll_other_armatures(self, obj):
     return obj.type == 'ARMATURE' and obj != get_smash_armature()
 
-def get_smash_armature():
-    return bpy.context.scene.smash_armature
+def get_smash_armature() -> Object:
+    return bpy.context.scene.sub_scene_properties.smash_armature
 
-def get_other_armature():
-    return bpy.context.scene.other_armature
+def get_other_armature() -> Object:
+    return bpy.context.scene.sub_scene_properties.other_armature
 
 def unselect_all_objects_in_context():
     for obj in bpy.context.selected_objects:
@@ -60,7 +64,7 @@ class BoneListItem(PropertyGroup):
 class PairableBoneListItem(PropertyGroup):
     name: StringProperty('bone name')
 
-class RenameOtherBones(bpy.types.Operator):
+class SUB_OP_rename_other_bones(Operator):
     bl_idname = 'sub.rename_other_bones'
     bl_label = 'Rename Other Bones'
     bl_description = 'Prefixes the "prefix" to all bones in the other armature to ensure functionality within smash and to prevent name collisions. Preserves the rigging so dont worry about rigging dying after this'    
@@ -68,13 +72,12 @@ class RenameOtherBones(bpy.types.Operator):
     
     def execute(self, context):
         armature_other = get_other_armature()
-        print('Test: First bone name = %s' % armature_other.data.bones[0].name)
-        prefix = bpy.context.scene.armature_prefix
+        prefix = bpy.context.scene.sub_scene_properties.armature_prefix
         for bone in armature_other.data.bones:
             bone.name = prefix + bone.name
         return {'FINISHED'}
 
-class BuildBoneList(bpy.types.Operator):
+class SUB_OP_build_bone_list(Operator):
     bl_idname = 'sub.build_bone_list'
     bl_label = 'Make Bone Pairing List'    
     bl_description = 'Creates a pairing list where you match bones from the smash armature to the other armature'
@@ -84,26 +87,29 @@ class BuildBoneList(bpy.types.Operator):
         armature_smash = get_smash_armature()
         armature_other = get_other_armature()
         
-        context.scene.bone_list.clear()
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        bone_list = ssp.bone_list
+        bone_list.clear()
 
         for bone in armature_other.data.bones:
             if not bone.name.startswith('H_'):
                 continue
-            bone_item = context.scene.bone_list.add()
+            bone_item = bone_list.add()
             bone_item.bone_name_other = bone.name
 
-        context.scene.pairable_bone_list.clear()
+        pairable_bone_list = ssp.pairable_bone_list
+        pairable_bone_list.clear()
 
         for bone in armature_smash.data.bones:
             # Prevent users from pairing bones with no parent.
             # This ensure the nuhlpb entries can be initialized later.
             if bone.parent:
-                bone_item = context.scene.pairable_bone_list.add()
+                bone_item = pairable_bone_list.add()
                 bone_item.name = bone.name
         
         return {'FINISHED'}
 
-class PopulateBoneList(bpy.types.Operator):
+class SUB_OP_populate_bone_list(Operator):
     bl_idname = 'sub.populate_bone_list'
     bl_label = 'Auto Populate Bone List'    
     bl_description = 'Automatically assign a smash bone to an entry if its name matches with the prefix removed.'
@@ -112,9 +118,10 @@ class PopulateBoneList(bpy.types.Operator):
     def execute(self, context):
         armature_smash = get_smash_armature()
         armature_other = get_other_armature()
-        prefix = bpy.context.scene.armature_prefix
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        prefix = ssp.armature_prefix
         
-        for bone_item in context.scene.bone_list:
+        for bone_item in ssp.bone_list:
             # Auto populate list if bone's name without the prefix is in the Smash Armature. If value is already assigned, skip.
             if bone_item.bone_name_other.startswith(prefix):
                 # Only replace the prefix once.
@@ -126,33 +133,34 @@ class PopulateBoneList(bpy.types.Operator):
         
         return {'FINISHED'}
 
-class UpdateBoneList(bpy.types.Operator):
+class SUB_OP_update_bone_list(Operator):
     bl_idname = 'sub.update_bone_list'
     bl_label = 'Update Bone Pairing List'
     bl_description = 'Updates the current pairing list where you match bones from the smash armature to the other armature'
     bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}  
     
     def execute(self, context):
-        context.scene.saved_bone_list.clear()
-        for bone_item in context.scene.bone_list:
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp.saved_bone_list.clear()
+        for bone_item in ssp.bone_list:
             if bone_item.bone_name_smash:
-                saved_bone_item = context.scene.saved_bone_list.add()
+                saved_bone_item = ssp.saved_bone_list.add()
                 saved_bone_item.bone_name_other = bone_item.bone_name_other
                 saved_bone_item.bone_name_smash = bone_item.bone_name_smash
 
-        BuildBoneList.execute(self, context)
+        SUB_OP_build_bone_list.execute(self, context)
 
-        cur_bone_other_list = [bone_item.bone_name_other for bone_item in context.scene.bone_list]
+        cur_bone_other_list = [bone_item.bone_name_other for bone_item in ssp.bone_list]
         
-        if context.scene.saved_bone_list:
-            for saved_bone_item in context.scene.saved_bone_list:
+        if ssp.saved_bone_list:
+            for saved_bone_item in ssp.saved_bone_list:
                 if saved_bone_item.bone_name_other in cur_bone_other_list:
                     index = cur_bone_other_list.index(saved_bone_item.bone_name_other)
-                    context.scene.bone_list[index].bone_name_smash = saved_bone_item.bone_name_smash
+                    ssp.bone_list[index].bone_name_smash = saved_bone_item.bone_name_smash
           
         return {'FINISHED'}
     
-class MakeCombinedSkeleton(bpy.types.Operator):
+class SUB_OP_make_combined_skeleton(Operator):
     bl_idname = 'sub.make_combined_skeleton'
     bl_label = 'Make New Combined Skeleton'
     bl_description = 'Creates a new skeleton that basically appends the "Other" armature to the "Smash" armature'
@@ -203,36 +211,28 @@ class MakeCombinedSkeleton(bpy.types.Operator):
         Note, for proper implementation in Smash Ultimate,
             'Hip' is the bone to parent the 'root' bone of "Other" to.
         '''
-        new_arma_name = 'Combined'
-        new_arma = bpy.data.objects.new(
-            new_arma_name,
-            bpy.data.armatures.new(new_arma_name))
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        smash_arma = get_smash_armature()
+        other_arma = get_other_armature()
+        new_arma:Object = smash_arma.copy()
+        new_arma.data = smash_arma.data.copy()
+        new_arma.name = 'Combined'
         output_collection = get_script_output_collection()
         output_collection.objects.link(new_arma)
         unselect_all_objects_in_context()
         new_arma.select_set(True)
         bpy.context.view_layer.objects.active = new_arma
         bpy.ops.object.mode_set(mode='EDIT')
-        smash_arma = get_smash_armature()
-        other_arma = get_other_armature()
+
         
         new_bones = new_arma.data.edit_bones
         smash_bones = smash_arma.data.bones
         other_bones = other_arma.data.bones
-        for smash_bone in smash_bones:
-            new_bone = new_bones.new(smash_bone.name)
-            new_bone.head = smash_bone.head_local
-            new_bone.tail = smash_bone.tail_local
-            axis_roll_tuple = smash_bone.AxisRollFromMatrix(smash_bone.matrix_local.to_3x3())
-            smash_bone_roll = axis_roll_tuple[1]
-            new_bone.roll = smash_bone_roll
-            if smash_bone.parent:
-                new_bone.parent = new_bones.get(smash_bone.parent.name)
-        
+
         for other_bone in other_arma.data.bones:
             new_bone = new_bones.new(other_bone.name)
             paired_bone_name = None
-            for entry in context.scene.bone_list:
+            for entry in ssp.bone_list:
                 if entry.bone_name_other == other_bone.name:
                     paired_bone_name = entry.bone_name_smash
            
@@ -240,7 +240,6 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             if paired_bone_name is not None:
                 paired_bone = smash_bones.get(paired_bone_name)
                 
-            print('Paired Bone = %s' % paired_bone)
             if paired_bone is not None:
                 '''
                 Need to create the head+tail to match the original smash one, but move it to the new position
@@ -268,54 +267,23 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             
             
         bpy.ops.object.mode_set(mode='POSE')
-        new_bones = new_arma.pose.bones
+
         smash_arma = get_smash_armature()
         smash_bones = smash_arma.pose.bones
-        from .import_model import create_new_empty, get_from_mesh_list_with_pruned_name, copy_empty
-        old_nuhlpb_root_empty = get_from_mesh_list_with_pruned_name(smash_arma.children, '_NUHLPB', None)
-        old_interpolation_entries_empty = None
-        old_aim_entries_empty = None
 
-        new_nuhlpb_root_empty = None
-        new_nuhlpb_root_empty = None
-        new_interpolation_entries_empty = None
-        new_aim_entries_empty = None
+        for new_bone in new_arma.pose.bones:
+            new_bone: PoseBone
+            if new_bone.name.startswith('H_Exo_'):
+                exo_group = new_arma.pose.bone_groups.get('Exo Skel')
+                if exo_group:
+                    new_bone.bone_group = exo_group
+                    new_bone.bone.layers[16] = True
+                    new_bone.bone.layers[18] = True
 
-        if old_nuhlpb_root_empty:
-            new_nuhlpb_root_empty = copy_empty(old_nuhlpb_root_empty, output_collection)
-            new_nuhlpb_root_empty.parent = new_arma
-            
-            old_aim_entries_empty = get_from_mesh_list_with_pruned_name(old_nuhlpb_root_empty.children, 'aim_entries', None)
-            new_aim_entries_empty = copy_empty(old_aim_entries_empty, output_collection)
-            new_aim_entries_empty.parent = new_nuhlpb_root_empty
-            old_interpolation_entries_empty = get_from_mesh_list_with_pruned_name(old_nuhlpb_root_empty.children, 'interpolation_entries', None)
-            new_interpolation_entries_empty = copy_empty(old_interpolation_entries_empty, output_collection)
-            new_interpolation_entries_empty.parent = new_nuhlpb_root_empty
-        else:
-            # This case usually means the user didn't import the smash armature using a more recent version.
-            # TODO: Infer the helper bones from constraints and only use custom properties for additional fields?
-            message = 'No _NUHLPB empty detected for the Smash Armature. Original helper bones may be lost on export.'
-            message += ' Reimport the Smash Armature to include bones and helper bones.'
-            self.report({'WARNING'}, message)
-
-            new_nuhlpb_root_empty = create_new_empty('_NUHLPB', new_arma, output_collection)
-            new_nuhlpb_root_empty['major_version'] = 1
-            new_nuhlpb_root_empty['minor_version'] = 1
-            new_aim_entries_empty = create_new_empty('aim_entries', new_nuhlpb_root_empty, output_collection)
-            new_interpolation_entries_empty = create_new_empty('interpolation_entries', new_nuhlpb_root_empty, output_collection)
-
-        if old_aim_entries_empty:
-            for entry in old_aim_entries_empty.children:
-                new_aim_entry_empty = copy_empty(entry, output_collection)
-                new_aim_entry_empty.parent = new_aim_entries_empty
-        if old_interpolation_entries_empty:
-            for entry in old_interpolation_entries_empty.children:
-                new_interpolation_entry_empty = copy_empty(entry, output_collection)
-                new_interpolation_entry_empty.parent = new_interpolation_entries_empty
-
-        for index, new_bone in enumerate(new_bones):
+        for index, new_bone in enumerate(new_arma.pose.bones):
+            new_bone: PoseBone
             paired_bone_name = None
-            for entry in context.scene.bone_list:
+            for entry in ssp.bone_list:
                 if entry.bone_name_other == new_bone.name:
                     paired_bone_name = entry.bone_name_smash
             if paired_bone_name is None:
@@ -323,22 +291,26 @@ class MakeCombinedSkeleton(bpy.types.Operator):
             paired_bone = smash_bones.get(paired_bone_name, None)
             if paired_bone is None:
                 continue
-            
             if paired_bone.parent:
-                self.create_constraints(new_arma, new_bone, paired_bone)
-                new_interpolation_entry_empty = create_new_empty(f'nuHelperBoneRotateInterp{3000+index}', new_interpolation_entries_empty, output_collection)
-                new_interpolation_entry_empty['bone_name'] = paired_bone.parent.name
-                new_interpolation_entry_empty['root_bone_name'] = paired_bone.parent.name
-                new_interpolation_entry_empty['parent_bone_name'] = paired_bone.name
-                new_interpolation_entry_empty['driver_bone_name'] = new_bone.name
-                new_interpolation_entry_empty['unk_type'] = 1
-                new_interpolation_entry_empty['aoi'] = [1.0, 1.0, 1.0]
-                new_interpolation_entry_empty['quat1'] = [0.0, 0.0, 0.0, 1.0]
-                new_interpolation_entry_empty['quat2'] = [0.0, 0.0, 0.0, 1.0]
-                new_interpolation_entry_empty['range_min'] = [-180, -180, -180]
-                new_interpolation_entry_empty['range_max'] = [180, 180, 180]
+                shbd: SubHelperBoneData = new_arma.data.sub_helper_bone_data
+                new_interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
+                new_interpolation_entry.name = f'nuHelperBoneRotateInterp{3000+index}'
+                new_interpolation_entry.bone_name = paired_bone.parent.name
+                new_interpolation_entry.root_bone_name = paired_bone.parent.name
+                new_interpolation_entry.parent_bone_name = paired_bone.name
+                new_interpolation_entry.driver_bone_name = new_bone.name
+                new_interpolation_entry.unk_type = 1
+                new_interpolation_entry.aoi = [1.0, 1.0, 1.0]
+                new_interpolation_entry.quat_1 = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry.quat_2 = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry.range_min = [-180.0, -180.0, -180.0]
+                new_interpolation_entry.range_max = [180.0, 180.0, 180.0]
+
             else:
                 self.report({'ERROR'}, f'Cannot pair {new_bone.name} to {paired_bone.name}. {paired_bone.name} has no parent.')
+        
+        from .import_model import refresh_helper_bone_constraints
+        refresh_helper_bone_constraints(new_arma)
 
         return {'FINISHED'}
 
@@ -352,10 +324,10 @@ class SUB_UL_BoneList(UIList):
         layout.label(text=item.bone_name_other)
         if other_armature and smash_armature:
             # Use a custom collection property to allow for filtering out unwanted bones.
-            layout.prop_search(item, 'bone_name_smash', context.scene, 'pairable_bone_list', text='', icon='BONE_DATA')
+            layout.prop_search(item, 'bone_name_smash', context.scene.sub_scene_properties, 'pairable_bone_list', text='', icon='BONE_DATA')
 
 
-class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
+class SUB_PT_ultimate_exo_skel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Ultimate'
@@ -363,6 +335,7 @@ class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     
     def draw(self, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
         layout = self.layout
         layout.use_property_split = False
         
@@ -370,37 +343,36 @@ class VIEW3D_PT_ultimate_exo_skel(bpy.types.Panel):
         row.label(text='Select the armatures')
         
         row = layout.row(align=True)
-        row.prop(context.scene, 'smash_armature', icon='ARMATURE_DATA')
+        row.prop(ssp, 'smash_armature', icon='ARMATURE_DATA')
         
         row = layout.row(align=True)
-        row.prop(context.scene, 'other_armature', icon='ARMATURE_DATA')
+        row.prop(ssp, 'other_armature', icon='ARMATURE_DATA')
         
         row = layout.row(align=True)
-        row.prop(context.scene, 'armature_prefix')
+        row.prop(ssp, 'armature_prefix')
         
-        scene = context.scene
-        if scene.other_armature is not None:
+        if ssp.other_armature is not None:
             row = layout.row(align=True)
-            row.operator(RenameOtherBones.bl_idname)
+            row.operator(SUB_OP_rename_other_bones.bl_idname)
         
-        if not context.scene.bone_list:
+        if not ssp.bone_list:
             row = layout.row(align=True)
-            row.operator(BuildBoneList.bl_idname)
+            row.operator(SUB_OP_build_bone_list.bl_idname)
             return
         
         row = layout.row(align=True)
-        row.operator(BuildBoneList.bl_idname, text='Rebuild Bone List')
+        row.operator(SUB_OP_build_bone_list.bl_idname, text='Rebuild Bone List')
         
         row = layout.row(align=True)
-        row.operator(PopulateBoneList.bl_idname)
+        row.operator(SUB_OP_populate_bone_list.bl_idname)
 
         row = layout.row(align=True)
-        row.operator(UpdateBoneList.bl_idname)
+        row.operator(SUB_OP_update_bone_list.bl_idname)
         
         layout.separator()
         
         row = layout.row(align=True)
-        row.template_list('SUB_UL_BoneList', 'Bone List', context.scene, 'bone_list', context.scene, 'bone_list_index', rows=1, maxrows=10)
+        row.template_list('SUB_UL_BoneList', 'Bone List', ssp, 'bone_list', ssp, 'bone_list_index', rows=1, maxrows=10)
     
         row = layout.row(align=True)
-        row.operator(MakeCombinedSkeleton.bl_idname, text='Make New Combined Skeleton')
+        row.operator(SUB_OP_make_combined_skeleton.bl_idname, text='Make New Combined Skeleton')
