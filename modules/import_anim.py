@@ -97,7 +97,7 @@ class SUB_OP_import_camera_anim(Operator, ImportHelper):
 def poll_cameras(self, obj):
     return obj.type == 'CAMERA'
 
-def import_model_anim(context, filepath,
+def import_model_anim(context: bpy.types.Context, filepath,
                     include_transform_track, include_material_track,
                     include_visibility_track, first_blender_frame):
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
@@ -114,7 +114,8 @@ def import_model_anim(context, filepath,
     scene.frame_start = first_blender_frame
     scene.frame_end = scene.frame_start + frame_count - 1
     scene.frame_set(scene.frame_start)
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
+    if context.active_object is not None:
+        bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
     context.view_layer.objects.active = arma
     bpy.ops.object.mode_set(mode='EDIT', toggle=False) 
     bone_name_to_edit_bone_matrix = {bone.name:bone.matrix.copy() for bone in arma.data.edit_bones}
