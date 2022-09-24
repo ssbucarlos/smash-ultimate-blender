@@ -461,6 +461,7 @@ def create_master_shader():
     inner_links.new(texture_alpha.inputs[0], alpha_group_input.outputs['Texture0 Alpha (Col Map Layer 1)'])
     inner_links.new(texture_alpha.inputs[1], alpha_group_input.outputs['Texture5 Alpha (Emissive Map Layer 1)'])
     inner_links.new(alpha_maximum.inputs[0], texture_alpha.outputs[0])
+    inner_links.new(alpha_maximum.inputs[1], alpha_group_input.outputs['CustomVector0 X (Min Texture Alpha)'])
 
     inner_links.new(alpha_color_set1_scale.inputs[0], color_set_input_node.outputs['colorSet1 Alpha'])
 

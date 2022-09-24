@@ -225,6 +225,18 @@ def get_shader_db_file_path():
     return this_file_path.parent.parent.joinpath('shader_file').joinpath('Nufx.db').resolve()
 
 
+def get_discard_shaders():
+    global discard_shaders
+    try:
+        discard_shaders
+    except NameError:
+        this_file_path = Path(__file__)
+        discard_shaders_file = this_file_path.parent.parent.joinpath('shader_file').joinpath('shaders_discard_v13.0.1.txt').resolve()
+        with open(discard_shaders_file, 'r') as f:
+            discard_shaders = {line.strip() for line in f.readlines()}
+        print(discard_shaders)
+    return discard_shaders
+
 '''
 The following code is mostly shamelessly stolen from SMG 
 (except for the bone import)
@@ -596,7 +608,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
             setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
             label_to_material_dict[label] = blender_mat
         except Exception as e:
-            print(f'Failed to create material for {label}: {e}')
+            print(f'Failed to create material for {label}:  Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     name_index_mat_dict = { 
         (e.mesh_object_name,e.mesh_object_sub_index):label_to_material_dict[e.material_label] 
@@ -656,7 +668,7 @@ def get_vertex_attributes(node_group_node, shader_name):
         return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
 
 
-def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_data.MatlData, texture_name_to_image_dict):
+def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl: ssbh_data_py.matl_data.MatlData, texture_name_to_image_dict):
     # TODO: Handle none?
     entry = None
     for ssbh_mat_entry in ssbh_matl.entries:
@@ -664,15 +676,30 @@ def setup_blender_mat(blender_mat, material_label, ssbh_matl: ssbh_data_py.matl_
             entry = ssbh_mat_entry
 
     # Change Mat Settings
-    # Change Transparency Stuff Later
-    blender_mat.blend_method = 'CLIP'
-    blender_mat.use_backface_culling = True
-    blender_mat.show_transparent_back = False
-    # TODO: This should be based on the blend state and not the shader label.
-    alpha_blend_suffixes = ['_far', '_sort', '_near']
-    if any(suffix in entry.shader_label for suffix in alpha_blend_suffixes):
-        blender_mat.blend_method = 'BLEND'
-        
+    BlendFactor = ssbh_data_py.matl_data.BlendFactor
+    CullMode = ssbh_data_py.matl_data.CullMode
+    discard_shaders = get_discard_shaders()
+    if entry.shader_label[:len('SFX_PBS_0000000000000080')] in discard_shaders:
+        blender_mat.blend_method = 'CLIP'
+    else:
+        if len(entry.blend_states) > 0:
+            if entry.blend_states[0].data.alpha_sample_to_coverage:
+                blender_mat.blend_method = 'HASHED'
+            elif entry.blend_states[0].data.destination_color.value == BlendFactor.OneMinusSourceAlpha.value:
+                '''
+                Alpha Blending would be the correct setting if EEVEE could do per-fragment alpha sorting.
+                since it cant, alpha blending here would run into several mesh self-sorting issues so instead
+                use another blending mode
+                '''
+                #blender_mat.blend_method = 'BLEND'
+                blender_mat.blend_method = 'HASHED'
+            else:
+                blender_mat.blend_method = 'OPAQUE'
+
+    if len(entry.rasterizer_states) > 0:
+        if entry.rasterizer_states[0].data.cull_mode.value == CullMode.Back.value:
+            blender_mat.use_backface_culling = True
+    
     # Clone Master Shader
     master_shader_name = master_shader.get_master_shader_name()
     master_node_group = bpy.data.node_groups.get(master_shader_name)
