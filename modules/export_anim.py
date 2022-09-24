@@ -98,12 +98,15 @@ class SUB_OP_export_model_anim(Operator):
         arma.hide_set(False)
         arma.select_set(True)
         context.view_layer.objects.active = arma
+        initial_auto_keying_value = context.scene.tool_settings.use_keyframe_insert_auto
+        context.scene.tool_settings.use_keyframe_insert_auto = False
         bpy.ops.object.mode_set(mode='POSE', toggle=False)
         export_model_anim(context, self.filepath,
                         self.include_transform_track, self.include_material_track,
                         self.include_visibility_track, self.first_blender_frame,
                         self.last_blender_frame)
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+        context.scene.tool_settings.use_keyframe_insert_auto = initial_auto_keying_value
         return {'FINISHED'}    
 
 class SUB_OP_export_camera_anim(Operator):

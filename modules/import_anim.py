@@ -75,9 +75,12 @@ class SUB_OP_import_model_anim(Operator, ImportHelper):
         default=1,
     )
     def execute(self, context):
+        initial_auto_keying_value = context.scene.tool_settings.use_keyframe_insert_auto
+        context.scene.tool_settings.use_keyframe_insert_auto = False
         import_model_anim(context, self.filepath,
                         self.include_transform_track, self.include_material_track,
                         self.include_visibility_track, self.first_blender_frame)
+        context.scene.tool_settings.use_keyframe_insert_auto = initial_auto_keying_value
         return {'FINISHED'}
 
 class SUB_OP_import_camera_anim(Operator, ImportHelper):
