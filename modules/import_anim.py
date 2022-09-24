@@ -310,7 +310,26 @@ def setup_material_drivers(arma: bpy.types.Object):
                     cvi = 2 if row == 0 else 3 # CustomVector31.Z and .W control translation
                     target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
                     driver_handle.driver.expression = f'0 - {var.name}'
-
+        # Set up CustomVector6
+        cv6 = sap_mat_track.properties.get('CustomVector6', None)
+        if cv6:
+            nodes = {node.label:node for node in material.node_tree.nodes}
+            samplers = [nodes.get('Sampler0'), nodes.get('Sampler4'), nodes.get('Sampler6')]
+            if all(sampler is not None for sampler in samplers):
+                for sampler in samplers:
+                    input = sampler.inputs.get('UV Transform')
+                    for row in [0,1]:
+                        driver_handle = input.driver_add('default_value', row)
+                        var = driver_handle.driver.variables.new()
+                        var.name = "var"
+                        target = var.targets[0]
+                        target.id_type = 'ARMATURE'
+                        target.id = arma.data
+                        mti = sap.mat_tracks.find(sap_mat_track.name)
+                        pi = sap_mat_track.properties.find(cv6.name)
+                        cvi = 2 if row == 0 else 3 # CustomVector6 .Z and .W control translation
+                        target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
+                        driver_handle.driver.expression = f'0 - {var.name}'     
 
 def do_material_stuff(context, material_group, index, frame):
     arma = context.scene.sub_scene_properties.anim_import_arma
