@@ -234,7 +234,6 @@ def get_discard_shaders():
         discard_shaders_file = this_file_path.parent.parent.joinpath('shader_file').joinpath('shaders_discard_v13.0.1.txt').resolve()
         with open(discard_shaders_file, 'r') as f:
             discard_shaders = {line.strip() for line in f.readlines()}
-        print(discard_shaders)
     return discard_shaders
 
 '''

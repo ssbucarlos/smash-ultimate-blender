@@ -10,6 +10,10 @@ from bpy.types import Operator, Panel
 from mathutils import Matrix, Quaternion
 from .import_model import get_blender_transform
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .anim_data import SubAnimProperties
+    from bpy.types import ShaderNodeGroup, Material
 class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -279,21 +283,20 @@ def uvtransform_to_list(uvtransform) -> list[float]:
     return [scale_u, scale_v, rotation, translate_u, translate_v]
 
 def setup_material_drivers(arma: bpy.types.Object):
-    sap = arma.data.sub_anim_properties
+    sap: SubAnimProperties = arma.data.sub_anim_properties
     mesh_children = [child for child in arma.children if child.type == 'MESH']
-    materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots}
+    materials: set[Material] = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots}
     for material in materials:
-        bsn = blender_shader_node = material.node_tree.nodes.get('smash_ultimate_shader', None)
-        if bsn is None:
-            #logging.info(f'Material {material.name} did not have the smash_ultimate_shader node, will not have material animations')
+        sus: ShaderNodeGroup = material.node_tree.nodes.get('smash_ultimate_shader')
+        if not sus:
             continue
-        mat_name_input = bsn.inputs.get('Material Name')
+        mat_name_input = sus.inputs.get('Material Name')
         sap_mat_track = sap.mat_tracks.get(mat_name_input.default_value, None)
         if sap_mat_track is None:
             continue # This is very common, most fighter anims only contain material info for the eye materials for instance
-        # Set up Custom Vector 31
+        # Set up CustomVector31
         cv31 = sap_mat_track.properties.get('CustomVector31', None)
-        if cv31:
+        if cv31 is not None:
             labels_nodes_dict = {node.label:node for node in material.node_tree.nodes}
             sampler_1_node = labels_nodes_dict.get('Sampler1', None)
             if sampler_1_node is not None:
@@ -310,6 +313,44 @@ def setup_material_drivers(arma: bpy.types.Object):
                     cvi = 2 if row == 0 else 3 # CustomVector31.Z and .W control translation
                     target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
                     driver_handle.driver.expression = f'0 - {var.name}'
+
+        # Set up CustomVector6
+        cv6 = sap_mat_track.properties.get('CustomVector6', None)
+        if cv6 is not None:
+            nodes = {node.label:node for node in material.node_tree.nodes}
+            samplers = [nodes.get('Sampler0'), nodes.get('Sampler4'), nodes.get('Sampler6')]
+            if all(sampler is not None for sampler in samplers):
+                for sampler in samplers:
+                    input = sampler.inputs.get('UV Transform')
+                    for row in [0,1]:
+                        driver_handle = input.driver_add('default_value', row)
+                        var = driver_handle.driver.variables.new()
+                        var.name = "var"
+                        target = var.targets[0]
+                        target.id_type = 'ARMATURE'
+                        target.id = arma.data
+                        mti = sap.mat_tracks.find(sap_mat_track.name)
+                        pi = sap_mat_track.properties.find(cv6.name)
+                        cvi = 2 if row == 0 else 3 # CustomVector6 .Z and .W control translation
+                        target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
+                        driver_handle.driver.expression = f'0 - {var.name}'
+
+        # Set up CustomVector3
+        cv3 = sap_mat_track.properties.get('CustomVector3')
+        if cv3:
+            input = sus.inputs.get('CustomVector3 (Emission Color Multiplier)')
+            if input:
+                for index in [0,1,2,3]:
+                    driver_handle = input.driver_add('default_value', index)
+                    var = driver_handle.driver.variables.new()
+                    var.name = 'var'
+                    target = var.targets[0]
+                    target.id_type = 'ARMATURE'
+                    target.id = arma.data
+                    mti = material_track_index = sap.mat_tracks.find(sap_mat_track.name)
+                    pi = property_index = sap_mat_track.properties.find(cv3.name)
+                    target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{index}]'
+                    driver_handle.driver.expression = f'{var.name}'
 
 
 def do_material_stuff(context, material_group, index, frame):
