@@ -971,10 +971,25 @@ def bone_order(bones, name):
 
     return (10000, group) if i is None else (i, group)
     
+def get_parent_first_ordered_bones(arma: bpy.types.Object) -> list[bpy.types.EditBone]:
+    ''' Edit Bones are not guaranteed to appear in such a way where the child appears after its parent
+        This will make sure that parent bones always appear before their children
+    '''
+    edit_bones: list[EditBone] = arma.data.edit_bones
+    parent_first_ordered_bones: list[EditBone] = []
+    for bone in edit_bones:
+        # only need to do this on the root bones, of which there could be several
+        if not bone.parent:
+            parent_first_ordered_bones.append(bone)
+            parent_first_ordered_bones.extend(child for child in bone.children_recursive)
+    return parent_first_ordered_bones
+
 
 def make_skel(operator, context, mode):
-    ssp = context.scene.sub_scene_properties
-    arma = ssp.model_export_arma
+    ssp: SubSceneProperties = context.scene.sub_scene_properties
+    arma: bpy.types.Object = ssp.model_export_arma
+    arma_data: bpy.types.Armature = arma.data
+
     bpy.context.view_layer.objects.active = arma
     # The object should be selected and visible before entering edit mode.
     arma.select_set(True)
@@ -992,7 +1007,8 @@ def make_skel(operator, context, mode):
         message = 'Creating .NUSKTB without a vanilla .NUSKTB file.'
         message += ' Bone order will not be preserved and may cause animation issues in game.'
         operator.report({'WARNING'}, message)
-
+    
+    '''
     edit_bones = list(arma.data.edit_bones)
     if vanilla_skel is not None and preserve_order:
         # Sort based on the original order with added bones at the end.
@@ -1011,6 +1027,57 @@ def make_skel(operator, context, mode):
                 ssbh_bone = vanilla_skel.bones[vanilla_index]
 
         skel.bones.append(ssbh_bone)
+    '''
+    parent_first_ordered_bones = get_parent_first_ordered_bones(arma)
+
+    if mode == 'ORDER_AND_VALUES' or mode == 'ORDER_ONLY':
+        new_bones: list[EditBone] = []
+        for vanilla_bone in vanilla_skel.bones:
+            blender_bone = arma_data.edit_bones.get(vanilla_bone.name)
+            if blender_bone:
+                new_bones.append(blender_bone)
+
+        for blender_bone in parent_first_ordered_bones:
+            if blender_bone not in new_bones:
+                if blender_bone.parent:
+                    parent_index = new_bones.index(blender_bone.parent)
+                    new_bones.insert(parent_index + 1, blender_bone)
+                else:
+                    new_bones.append(blender_bone)
+
+        vanilla_skel_name_to_bone = {bone.name : bone for bone in vanilla_skel.bones}
+        for index, new_bone in enumerate(new_bones):
+            print(f'i={index}, bone={new_bone.name}')
+        for new_bone in new_bones:
+            if preserve_values:
+                if new_bone.parent:
+                    vanilla_bone = vanilla_skel_name_to_bone.get(new_bone.name)
+                    if vanilla_bone:
+                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, vanilla_bone.transform, new_bones.index(new_bone.parent))
+                    else:
+                        unreoriented_matrix = get_smash_transform(new_bone.parent.matrix.inverted() @ new_bone.matrix)
+                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, unreoriented_matrix, new_bones.index(new_bone.parent))
+                else:
+                    vanilla_bone = vanilla_skel_name_to_bone.get(new_bone.name)
+                    if vanilla_bone:
+                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, vanilla_bone.transform, None)
+                    else:
+                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, get_smash_root_transform(new_bone), None)
+            else:
+                if new_bone.parent:
+                    unreoriented_matrix = get_smash_transform(new_bone.parent.matrix.inverted() @ new_bone.matrix)
+                    ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, unreoriented_matrix, new_bones.index(new_bone.parent))
+                else:
+                    ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, get_smash_root_transform(new_bone), None)
+            skel.bones.append(ssbh_bone)
+    else:
+        for bone in parent_first_ordered_bones:
+            if bone.parent:
+                unreoriented_matrix = get_smash_transform(bone.parent.matrix.inverted() @ bone.matrix)
+                ssbh_bone = ssbh_data_py.skel_data.BoneData(bone.name, unreoriented_matrix, bone.index(bone.parent))
+            else:
+                ssbh_bone = ssbh_data_py.skel_data.BoneData(bone.name, get_smash_root_transform(bone), None)
+            skel.bones.append(ssbh_bone)
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
