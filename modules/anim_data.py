@@ -581,6 +581,12 @@ def mat_track_name_update(self, context):
         number = int(matches.groups()[1])
         self.name = f'{base_name}{number+1:003d}' 
 
+def dummy_update(self, context):
+    '''
+    This is needed to force blender to update the driver values when updating via a modal.
+    '''
+    pass
+
 class VisTrackEntry(PropertyGroup):
     name: StringProperty(
         name="Vis Name",
@@ -598,7 +604,7 @@ class MatTrackProperty(PropertyGroup):
         description='CustomVector or CustomFloat or CustomBool',
         items=mat_sub_types, 
         default='VECTOR',)
-    custom_vector: FloatVectorProperty(name='Custom Vector', size=4)
+    custom_vector: FloatVectorProperty(name='Custom Vector', size=4, update=dummy_update)
     custom_bool: BoolProperty(name='Custom Bool')
     custom_float: FloatProperty(name='Custom Float')
     pattern_index: IntProperty(name='Pattern Index', subtype='UNSIGNED')
