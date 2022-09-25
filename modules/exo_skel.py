@@ -7,8 +7,8 @@ if TYPE_CHECKING:
     from .helper_bone_data import SubHelperBoneData, InterpolationEntry
     from bpy.types import PoseBone
 
-def poll_armatures(self, obj):
-    return obj.type == 'ARMATURE'
+def poll_armatures(self, obj:bpy.types.Object):
+    return obj.type == 'ARMATURE' and obj.name in bpy.context.view_layer.objects
 
 def poll_other_armatures(self, obj):
     return obj.type == 'ARMATURE' and obj != get_smash_armature()
@@ -330,6 +330,7 @@ class SUB_UL_BoneList(UIList):
 class SUB_PT_ultimate_exo_skel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_context = "objectmode"
     bl_category = 'Ultimate'
     bl_label = 'Magic Exo Skel Maker'
     bl_options = {'DEFAULT_CLOSED'}

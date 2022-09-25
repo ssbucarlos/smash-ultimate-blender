@@ -13,34 +13,41 @@ from .import_model import get_blender_transform
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .anim_data import SubAnimProperties
+    from ..properties import SubSceneProperties
     from bpy.types import ShaderNodeGroup, Material
+
 class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_context = "objectmode"
     bl_category = 'Ultimate'
     bl_label = 'Animation Importer'
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
-        ssp = context.scene.sub_scene_properties
-        camera = ssp.anim_import_camera
-        arma = ssp.anim_import_arma
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        camera: bpy.types.Camera = ssp.anim_import_camera
+        arma: bpy.types.Object = ssp.anim_import_arma
+
         layout = self.layout
         layout.use_property_split = False
+        
         row = layout.row(align=True)
         row.label(text="Select an Armature or Camera.")
-        if arma is None and camera is None:
+        if not arma and not camera:
             row = layout.row(align=True)
             row.prop(ssp, 'anim_import_arma', icon='ARMATURE_DATA', text='')
             row = layout.row(align=True)
             row.prop(ssp, 'anim_import_camera', icon='VIEW_CAMERA', text='')
-            return
-        elif arma is not None:
+        elif arma:
             row = layout.row(align=True)
             row.prop(ssp, 'anim_import_arma', icon='ARMATURE_DATA', text='')
+            if arma.name not in context.view_layer.objects:
+                row = layout.row(align=True)
+                row.label(text='The selected armature is not in the active view layer!', icon='ERROR')
             row = layout.row(align=True)
             row.operator('sub.anim_model_importer', icon='IMPORT', text='Import a Model Animation')
-        elif camera is not None:
+        elif camera:
             row = layout.row(align=True)
             row.prop(ssp, 'anim_import_camera', icon='VIEW_CAMERA', text='')
             row = layout.row(align=True)
@@ -74,13 +81,36 @@ class SUB_OP_import_model_anim(Operator, ImportHelper):
         description='What frame to start importing the track on',
         default=1,
     )
+
+    @classmethod
+    def poll(cls, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        arma: bpy.types.Object = ssp.anim_import_arma
+        if not arma:
+            return False
+        if arma.name not in context.view_layer.objects:
+            return False
+        return True
+
     def execute(self, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        arma: bpy.types.Object = ssp.anim_import_arma
+        arma.hide_viewport = False
+        arma.hide_set(False)
+        arma.select_set(True)
+        context.view_layer.objects.active = arma
+
         initial_auto_keying_value = context.scene.tool_settings.use_keyframe_insert_auto
-        context.scene.tool_settings.use_keyframe_insert_auto = False
+        context.scene.tool_settings.use_keyframe_insert_auto = False        
+
+        bpy.ops.object.mode_set(mode='POSE', toggle=False)
         import_model_anim(context, self.filepath,
                         self.include_transform_track, self.include_material_track,
                         self.include_visibility_track, self.first_blender_frame)
+        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+        
         context.scene.tool_settings.use_keyframe_insert_auto = initial_auto_keying_value
+
         return {'FINISHED'}
 
 class SUB_OP_import_camera_anim(Operator, ImportHelper):
@@ -121,12 +151,12 @@ def import_model_anim(context: bpy.types.Context, filepath,
     scene.frame_start = first_blender_frame
     scene.frame_end = scene.frame_start + frame_count - 1
     scene.frame_set(scene.frame_start)
-    if context.active_object is not None:
-        bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
-    context.view_layer.objects.active = arma
-    bpy.ops.object.mode_set(mode='EDIT', toggle=False) 
-    bone_name_to_edit_bone_matrix = {bone.name:bone.matrix.copy() for bone in arma.data.edit_bones}
-    bpy.ops.object.mode_set(mode='POSE', toggle=False) # put our armature in pose mode
+    #if context.active_object is not None:
+    #    bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
+    #context.view_layer.objects.active = arma
+    #bpy.ops.object.mode_set(mode='EDIT', toggle=False) 
+    #bone_name_to_edit_bone_matrix = {bone.name:bone.matrix.copy() for bone in arma.data.edit_bones}
+    #bpy.ops.object.mode_set(mode='POSE', toggle=False) # put our armature in pose mode
     
     from pathlib import Path
     action_name = arma.name + ' ' + Path(filepath).name
@@ -146,7 +176,7 @@ def import_model_anim(context: bpy.types.Context, filepath,
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
         scene.frame_set(frame)
         if include_transform_track and transform_group is not None:
-            do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node, bone_name_to_edit_bone_matrix)
+            do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node)
         if include_material_track and material_group is not None:
             do_material_stuff(context, material_group, index, frame)
         if include_visibility_track and visibility_group is not None:
@@ -158,7 +188,7 @@ def import_model_anim(context: bpy.types.Context, filepath,
         setup_material_drivers(arma)
 
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
+    #bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
 
 def setup_bone_scale_drivers(pose_bones):
     for pose_bone in pose_bones:
@@ -179,7 +209,7 @@ def setup_bone_scale_drivers(pose_bones):
         driver_handle.driver.expression = f'0 if {isv.name} == 1 else 3' # 0 is 'FULL' and 3 is 'NONE'
 
 
-def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node, bone_name_to_edit_bone_matrix):
+def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node):
     arma = context.scene.sub_scene_properties.anim_import_arma
     bones = arma.pose.bones
     # Get a list of bones in 'heirarchal' order
@@ -474,10 +504,10 @@ def import_camera_anim(operator, context, filepath, first_blender_frame):
     scene.frame_end = scene.frame_start + frame_count - 1
     scene.frame_set(scene.frame_start)
 
-    try:
-        bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
-    except RuntimeError: # There may not have been any active or selected object
-        pass
+    #try:
+    #    bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
+    #except RuntimeError: # There may not have been any active or selected object
+    #    pass
     context.view_layer.objects.active = camera
 
     from pathlib import Path
