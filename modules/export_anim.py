@@ -14,37 +14,44 @@ if TYPE_CHECKING:
 class SUB_PT_export_anim(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_context = "objectmode"
     bl_category = 'Ultimate'
     bl_label = 'Animation Exporter'
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        arma: bpy.types.Object = ssp.anim_export_arma
+        camera: bpy.types.Camera = ssp.anim_export_camera
+
         layout = self.layout
         layout.use_property_split = False
 
-        row = layout.row(align=True)
+        row = layout.row()
         row.label(text="Select an Armature or Camera.")
-
-        ssp = context.scene.sub_scene_properties
-        if ssp.anim_export_arma is None and ssp.anim_export_camera is None:
-            row = layout.row(align=True)
+        if not arma and not camera:
+            row = layout.row()
             row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA', text='')
-            row = layout.row(align=True)
+            row = layout.row()
             row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA', text='')
-            return
-        elif ssp.anim_export_arma is not None:
-            row = layout.row(align=True)
+        elif arma:
+            row = layout.row()
             row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA', text='')
-            if ssp.anim_export_arma.animation_data is None:
-                row = layout.row(align=True)
-                row.label(text='The selected armature has no loaded animation!', icon='ERROR')
-            else:
-                row = layout.row(align=True)
-                row.operator('sub.anim_model_exporter', icon='EXPORT', text='Export a Model Animation')
-        elif ssp.anim_export_camera is not None:
-            row = layout.row(align=True)
+            if not arma.animation_data:
+                row = layout.row()
+                row.label(text='The selected armature has no animation data!', icon='ERROR')
+            elif not arma.animation_data.action:
+                row = layout.row()
+                row.label(text='The selected armature has no action!', icon='ERROR')
+            if arma.name not in context.view_layer.objects:
+                row = layout.row()
+                row.label(text='The selected armature is not in the active view layer!', icon='ERROR')
+            row = layout.row()
+            row.operator('sub.anim_model_exporter', icon='EXPORT', text='Export a Model Animation')
+        elif camera:
+            row = layout.row()
             row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA', text='')
-            row = layout.row(align=True)
+            row = layout.row()
             row.operator('sub.export_camera_anim', icon='EXPORT', text='Export a Camera Animation')
 
 class SUB_OP_export_model_anim(Operator):
@@ -83,6 +90,20 @@ class SUB_OP_export_model_anim(Operator):
     )
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
+    @classmethod
+    def poll(cls, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        arma: bpy.types.Object = ssp.anim_export_arma
+        if not arma:
+            return False
+        if arma.name not in context.view_layer.objects:
+            return False
+        if arma.animation_data is None:
+            return False
+        if arma.animation_data.action is None:
+            return False
+        return True
+
     def invoke(self, context, _event):
         self.first_blender_frame = context.scene.frame_start
         self.last_blender_frame = context.scene.frame_end
@@ -91,22 +112,30 @@ class SUB_OP_export_model_anim(Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        if not self.filepath.endswith('.nuanmb'):
-            self.filepath += '.nuanmb'
-        arma:bpy.types.Object = context.scene.sub_scene_properties.anim_export_arma
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        arma: bpy.types.Object = ssp.anim_export_arma
         arma.hide_viewport = False
         arma.hide_set(False)
         arma.select_set(True)
         context.view_layer.objects.active = arma
+
         initial_auto_keying_value = context.scene.tool_settings.use_keyframe_insert_auto
         context.scene.tool_settings.use_keyframe_insert_auto = False
+
+        if self.filepath == "":
+            self.filepath = f'{arma.animation_data.action.name}.nuanmb'
+        if not self.filepath.endswith('.nuanmb'):
+            self.filepath += '.nuanmb'
+
         bpy.ops.object.mode_set(mode='POSE', toggle=False)
         export_model_anim(context, self.filepath,
                         self.include_transform_track, self.include_material_track,
                         self.include_visibility_track, self.first_blender_frame,
                         self.last_blender_frame)
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+
         context.scene.tool_settings.use_keyframe_insert_auto = initial_auto_keying_value
+
         return {'FINISHED'}    
 
 class SUB_OP_export_camera_anim(Operator):

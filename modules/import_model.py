@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 class SUB_PT_import_model(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_context = "objectmode"
     bl_category = 'Ultimate'
     bl_label = 'Model Importer'
     bl_options = {'DEFAULT_CLOSED'}
