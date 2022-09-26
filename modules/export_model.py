@@ -12,8 +12,9 @@ import re
 from pathlib import Path
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
-from bpy.types import Operator, Panel
+from bpy.types import Operator, Panel, EditBone
 from .. import ssbh_data_py
+from .. import pyprc
 from mathutils import Vector, Matrix
 from ..operators import material_inputs
 from .import_model import get_ssbh_lib_json_exe_path
@@ -32,7 +33,7 @@ class SUB_PT_export_model(Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
-        ssp = context.scene.sub_scene_properties
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
         layout = self.layout
         layout.use_property_split = False
         row = layout.row(align=True)
@@ -51,6 +52,26 @@ class SUB_PT_export_model(Panel):
             row = layout.row(align=True)
             row.operator('sub.vanilla_nusktb_selector', icon='FILE', text='Select Vanilla Nusktb')
         else:
+            new_bones_made = check_if_new_bones_made(ssp.model_export_arma, ssp.vanilla_nusktb)
+            if new_bones_made:
+                if '' == ssp.vanilla_update_prc:
+                    row = layout.row()
+                    row.label(text='New Standard Bones Detected!')
+                    row = layout.row()
+                    row.label(text='An updated "update.prc" file is needed or the skeleton will glitch in game!')
+                    row = layout.row()
+                    row.label(text='The new "update.prc" file does NOT go with the rest of the model files!')
+                    row = layout.row()
+                    row.label(text='The new "update.prc" file goes in the motion folder!(e.g fighter/demon/motion/body/c00/update.prc)')
+                    row = layout.row()
+                    row.label(text='Please select the vanilla "update.prc" file to properly generate the new one.')
+                    row = layout.row()
+                    row.operator('sub.vanilla_update_prc_selector', icon='FILE', text='Select Vanilla update.prc')
+                else:
+                    row = layout.row()
+                    row.label(text=f'Selected reference update.prc: {ssp.vanilla_update_prc}')
+                    row = layout.row()
+                    row.operator('sub.vanilla_update_prc_selector', icon='FILE', text='Re-Select Vanilla update.prc')
             row = layout.row(align=True)
             row.label(text='Selected reference .nusktb: ' + ssp.vanilla_nusktb)
             row = layout.row(align=True)
@@ -59,6 +80,18 @@ class SUB_PT_export_model(Panel):
         row = layout.row(align=True)
         row.operator('sub.model_exporter', icon='EXPORT', text='Export Model Files to a Folder')
     
+class SUB_OP_vanilla_update_prc_selector(Operator, ImportHelper):
+    bl_idname = 'sub.vanilla_update_prc_selector'
+    bl_label = 'Vanilla update.prc Selector'
+
+    filter_glob: StringProperty(
+        default='*.prc',
+        options={'HIDDEN'}
+    )
+    def execute(self, context):
+        context.scene.sub_scene_properties.vanilla_update_prc = self.filepath
+        return {'FINISHED'}
+
 class SUB_OP_vanilla_nusktb_selector(Operator, ImportHelper):
     bl_idname = 'sub.vanilla_nusktb_selector'
     bl_label = 'Vanilla Nusktb Selector'
@@ -69,7 +102,7 @@ class SUB_OP_vanilla_nusktb_selector(Operator, ImportHelper):
     )
     def execute(self, context):
         context.scene.sub_scene_properties.vanilla_nusktb = self.filepath
-        return {'FINISHED'}   
+        return {'FINISHED'}      
 
 class SUB_OP_model_exporter(Operator):
     bl_idname = 'sub.model_exporter'
@@ -134,6 +167,10 @@ class SUB_OP_model_exporter(Operator):
                      self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings)
         return {'FINISHED'}
 
+def model_export_arma_update(self, context):
+    ssp: SubSceneProperties = context.scene.sub_scene_properties
+    ssp.vanilla_nusktb = ''
+    ssp.vanilla_update_prc = ''
 
 def export_model(operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     # Prepare the scene for export and find the meshes to export.
@@ -233,7 +270,7 @@ def export_model(operator, context, directory, include_numdlb, include_numshb, i
 
 def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
     try:
-        ssbh_skel_data = make_skel(operator, context, linked_nusktb_settings)
+        ssbh_skel_data, prc = make_skel(operator, context, linked_nusktb_settings)
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
         return
@@ -249,6 +286,13 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
         ssbh_skel_data.save(path)
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+
+    prc_path = str(folder.joinpath('update.prc'))
+    if prc:
+        try:
+            prc.save(prc_path)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to save {prc_path}: {e}')
 
 
 def create_and_save_meshex(operator, folder, ssbh_mesh_data):
@@ -984,12 +1028,38 @@ def get_parent_first_ordered_bones(arma: bpy.types.Object) -> list[bpy.types.Edi
             parent_first_ordered_bones.extend(child for child in bone.children_recursive)
     return parent_first_ordered_bones
 
+def check_if_new_bones_made(arma: bpy.types.Object, vanilla_nusktb: Path) -> bool:
+    vanilla_skel: ssbh_data_py.skel_data.SkelData = read_vanilla_nusktb(vanilla_nusktb, None)
+    vanilla_bone_names = [bone.name for bone in vanilla_skel.bones]
+    for blender_bone in arma.data.bones:
+        blender_bone: bpy.types.Bone
+        if blender_bone.name.startswith('H_') or blender_bone.name.startswith('S_'):
+            continue
+        if blender_bone.name not in vanilla_bone_names:
+            return True
+    return False
 
+def make_update_prc(operator: Operator, context, bones_not_in_vanilla: list[EditBone]):
+    ssp: SubSceneProperties = context.scene.sub_scene_properties
+    prc_root = pyprc.param(ssp.vanilla_update_prc) # Read the .prc into 'prc_root'
+    bones_fake_list = dict(prc_root).get(pyprc.hash('bones'))
+    if not bones_fake_list:
+        operator.report({'ERROR'}, 'No "bones" list in update.prc! (Did you load another prc instead?)')
+        return
+    bones_real_list = list(bones_fake_list)
+    for bone in bones_not_in_vanilla:
+        new_prc_struct = prc_root.struct([
+                            (pyprc.hash('name'), prc_root.hash(pyprc.hash(bone.name)))
+                        ])
+        bones_real_list.append(new_prc_struct)
+    bones_fake_list.set_list(bones_real_list)
+    return prc_root
+    
 def make_skel(operator, context, mode):
     ssp: SubSceneProperties = context.scene.sub_scene_properties
     arma: bpy.types.Object = ssp.model_export_arma
     arma_data: bpy.types.Armature = arma.data
-
+    prc = None
     bpy.context.view_layer.objects.active = arma
     # The object should be selected and visible before entering edit mode.
     arma.select_set(True)
@@ -1032,6 +1102,7 @@ def make_skel(operator, context, mode):
 
     if mode == 'ORDER_AND_VALUES' or mode == 'ORDER_ONLY':
         new_bones: list[EditBone] = []
+        bones_not_in_vanilla: list[EditBone] = []
         for vanilla_bone in vanilla_skel.bones:
             blender_bone = arma_data.edit_bones.get(vanilla_bone.name)
             if blender_bone:
@@ -1039,6 +1110,7 @@ def make_skel(operator, context, mode):
 
         for blender_bone in parent_first_ordered_bones:
             if blender_bone not in new_bones:
+                bones_not_in_vanilla.append(blender_bone)
                 if blender_bone.parent:
                     parent_index = new_bones.index(blender_bone.parent)
                     new_bones.insert(parent_index + 1, blender_bone)
@@ -1046,8 +1118,6 @@ def make_skel(operator, context, mode):
                     new_bones.append(blender_bone)
 
         vanilla_skel_name_to_bone = {bone.name : bone for bone in vanilla_skel.bones}
-        for index, new_bone in enumerate(new_bones):
-            print(f'i={index}, bone={new_bone.name}')
         for new_bone in new_bones:
             if preserve_values:
                 if new_bone.parent:
@@ -1079,10 +1149,13 @@ def make_skel(operator, context, mode):
                 ssbh_bone = ssbh_data_py.skel_data.BoneData(bone.name, get_smash_root_transform(bone), None)
             skel.bones.append(ssbh_bone)
 
+    if ssp.vanilla_update_prc != '':
+        prc = make_update_prc(operator, context, bones_not_in_vanilla)
+
     bpy.ops.object.mode_set(mode='OBJECT')
     arma.select_set(False)
     bpy.context.view_layer.objects.active = None
-    return skel
+    return skel, prc
 
 
 def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):

@@ -33,6 +33,7 @@ classes = [
     modules.export_model.SUB_PT_export_model,
     modules.export_model.SUB_OP_model_exporter,
     modules.export_model.SUB_OP_vanilla_nusktb_selector,
+    modules.export_model.SUB_OP_vanilla_update_prc_selector,
     modules.exo_skel.SUB_OP_build_bone_list,
     modules.exo_skel.SUB_OP_populate_bone_list,
     modules.exo_skel.SUB_OP_update_bone_list,
