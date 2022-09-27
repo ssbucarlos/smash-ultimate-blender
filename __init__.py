@@ -91,7 +91,8 @@ classes = [
     modules.reimport_materials.SUB_OP_mat_reimport_directory_selector,
     modules.reimport_materials.SUB_OP_mat_reimport_numatb_selector,
     modules.reimport_materials.SUB_OP_reimport_materials,
-    modules.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
+    modules.misc_panel.SUB_PT_misc,
+    operators.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
     properties.SubSceneProperties,
 ]
 

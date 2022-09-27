@@ -5,7 +5,7 @@ from bpy.types import Operator
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .anim_data import SubAnimProperties, MatTrack, MatTrackProperty
+    from ..modules.anim_data import SubAnimProperties, MatTrack, MatTrackProperty
 
 class SUB_OP_eye_material_custom_vector_31_modal(Operator):
     """Edit EyeL or EyeR CustomVector31 using mouse movement"""
@@ -16,6 +16,10 @@ class SUB_OP_eye_material_custom_vector_31_modal(Operator):
         name="Offset",
         size=3,
     )
+
+    @classmethod
+    def poll(cls, context):
+        return context.object.type == 'ARMATURE'
 
     def execute(self, context):
         v3d = context.space_data
