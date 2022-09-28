@@ -1054,7 +1054,8 @@ def make_update_prc(operator: Operator, context, bones_not_in_vanilla: list[Edit
         bones_real_list.append(new_prc_struct)
     bones_fake_list.set_list(bones_real_list)
     return prc_root
-    
+
+
 def make_skel(operator, context, mode):
     ssp: SubSceneProperties = context.scene.sub_scene_properties
     arma: bpy.types.Object = ssp.model_export_arma
@@ -1078,31 +1079,11 @@ def make_skel(operator, context, mode):
         message += ' Bone order will not be preserved and may cause animation issues in game.'
         operator.report({'WARNING'}, message)
     
-    '''
-    edit_bones = list(arma.data.edit_bones)
-    if vanilla_skel is not None and preserve_order:
-        # Sort based on the original order with added bones at the end.
-        edit_bones = sorted(edit_bones, key = lambda b: bone_order(vanilla_skel.bones, b.name))
-
-    # Flatten Blender's bone heirarchy into a list of bones with parent indices.
-    for blender_bone in edit_bones:
-        # TODO: Handle the case where a vanilla bone was deleted?
-        parent_index = edit_bones.index(blender_bone.parent) if blender_bone.parent else None
-        ssbh_bone = get_ssbh_bone(blender_bone, parent_index)
-
-        if vanilla_skel is not None and preserve_values:
-            # TODO: Will this correctly set the parent index?
-            vanilla_index = find_bone_index(vanilla_skel.bones, blender_bone.name)
-            if vanilla_index is not None:
-                ssbh_bone = vanilla_skel.bones[vanilla_index]
-
-        skel.bones.append(ssbh_bone)
-    '''
     parent_first_ordered_bones = get_parent_first_ordered_bones(arma)
 
+    new_bones: list[EditBone] = []
+    bones_not_in_vanilla: list[EditBone] = []
     if mode == 'ORDER_AND_VALUES' or mode == 'ORDER_ONLY':
-        new_bones: list[EditBone] = []
-        bones_not_in_vanilla: list[EditBone] = []
         for vanilla_bone in vanilla_skel.bones:
             blender_bone = arma_data.edit_bones.get(vanilla_bone.name)
             if blender_bone:
@@ -1119,34 +1100,17 @@ def make_skel(operator, context, mode):
 
         vanilla_skel_name_to_bone = {bone.name : bone for bone in vanilla_skel.bones}
         for new_bone in new_bones:
+            ssbh_bone = get_ssbh_bone(new_bone, new_bones.index(new_bone.parent) if new_bone.parent else None)
+
             if preserve_values:
-                if new_bone.parent:
-                    vanilla_bone = vanilla_skel_name_to_bone.get(new_bone.name)
-                    if vanilla_bone:
-                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, vanilla_bone.transform, new_bones.index(new_bone.parent))
-                    else:
-                        unreoriented_matrix = get_smash_transform(new_bone.parent.matrix.inverted() @ new_bone.matrix)
-                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, unreoriented_matrix, new_bones.index(new_bone.parent))
-                else:
-                    vanilla_bone = vanilla_skel_name_to_bone.get(new_bone.name)
-                    if vanilla_bone:
-                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, vanilla_bone.transform, None)
-                    else:
-                        ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, get_smash_root_transform(new_bone), None)
-            else:
-                if new_bone.parent:
-                    unreoriented_matrix = get_smash_transform(new_bone.parent.matrix.inverted() @ new_bone.matrix)
-                    ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, unreoriented_matrix, new_bones.index(new_bone.parent))
-                else:
-                    ssbh_bone = ssbh_data_py.skel_data.BoneData(new_bone.name, get_smash_root_transform(new_bone), None)
+                vanilla_bone = vanilla_skel_name_to_bone.get(new_bone.name)
+                if vanilla_bone:
+                    ssbh_bone.transform = vanilla_bone.transform
+
             skel.bones.append(ssbh_bone)
     else:
         for bone in parent_first_ordered_bones:
-            if bone.parent:
-                unreoriented_matrix = get_smash_transform(bone.parent.matrix.inverted() @ bone.matrix)
-                ssbh_bone = ssbh_data_py.skel_data.BoneData(bone.name, unreoriented_matrix, bone.index(bone.parent))
-            else:
-                ssbh_bone = ssbh_data_py.skel_data.BoneData(bone.name, get_smash_root_transform(bone), None)
+            ssbh_bone = get_ssbh_bone(bone, parent_first_ordered_bones.index(bone.parent) if bone.parent else None)
             skel.bones.append(ssbh_bone)
 
     if ssp.vanilla_update_prc != '':
