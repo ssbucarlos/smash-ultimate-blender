@@ -134,6 +134,21 @@ class SubSceneProperties(PropertyGroup):
         description='The selected .numatb',
         default='',
     )
+    cv31_modal_last_mode: StringProperty(
+        name='Last Eye Material CV31 Modal Operator Mode',
+        description='the last used mode for this operator',
+        default='LEFT',
+    )
+    cv31_modal_use_auto_keyframe: BoolProperty(
+        name='Use Auto Keyframe',
+        description='True if a keyframe should be automatically inserted on confirm',
+        default=True,
+    )
+    cv31_modal_reset_on_mode_switch: BoolProperty(
+        name='Reset on Mode Switch',
+        description='If true, switching modes will "undo" the changes made while in that mode',
+        default=False,
+    )
 
 
 
