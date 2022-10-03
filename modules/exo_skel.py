@@ -295,14 +295,14 @@ class SUB_OP_make_combined_skeleton(Operator):
                 shbd: SubHelperBoneData = new_arma.data.sub_helper_bone_data
                 new_interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
                 new_interpolation_entry.name = f'nuHelperBoneRotateInterp{3000+index}'
-                new_interpolation_entry.bone_name = paired_bone.parent.name
-                new_interpolation_entry.root_bone_name = paired_bone.parent.name
-                new_interpolation_entry.parent_bone_name = paired_bone.name
-                new_interpolation_entry.driver_bone_name = new_bone.name
+                new_interpolation_entry.parent_bone_name1 = paired_bone.parent.name
+                new_interpolation_entry.parent_bone_name2 = paired_bone.parent.name
+                new_interpolation_entry.source_bone_name = paired_bone.name
+                new_interpolation_entry.target_bone_name = new_bone.name
                 new_interpolation_entry.unk_type = 1
-                new_interpolation_entry.aoi = [1.0, 1.0, 1.0]
-                new_interpolation_entry.quat_1 = [0.0, 0.0, 0.0, 1.0]
-                new_interpolation_entry.quat_2 = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry.constraint_axes = [1.0, 1.0, 1.0]
+                new_interpolation_entry.quat1 = [0.0, 0.0, 0.0, 1.0]
+                new_interpolation_entry.quat2 = [0.0, 0.0, 0.0, 1.0]
                 new_interpolation_entry.range_min = [-180.0, -180.0, -180.0]
                 new_interpolation_entry.range_max = [180.0, 180.0, 180.0]
 
