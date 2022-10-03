@@ -10,6 +10,7 @@ from .. import ssbh_data_py
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
+    from bpy.types import PoseBone
 
 class SUB_PT_export_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -239,16 +240,21 @@ def export_model_anim(context, filepath,
 def make_transform_group(context, first_blender_frame, last_blender_frame):
     trans_type = ssbh_data_py.anim_data.GroupType.Transform
     trans_group = ssbh_data_py.anim_data.GroupData(trans_type)
-    ssp = context.scene.sub_scene_properties   
-    arma = ssp.anim_export_arma
-    all_bone_names = [b.name for b in arma.pose.bones]
+    ssp: SubSceneProperties = context.scene.sub_scene_properties   
+    arma: bpy.types.Object = ssp.anim_export_arma
+    all_bone_names: list[str] = [b.name for b in arma.pose.bones]
     fcurves = arma.animation_data.action.fcurves
     curve_names = {curve.data_path.split('"')[1] for curve in fcurves}
     animated_bone_names = [cn for cn in curve_names if cn in all_bone_names]
-    animated_bones = [bone for bone in arma.pose.bones if bone.name in animated_bone_names]
+    animated_bones: list[PoseBone] = [bone for bone in arma.pose.bones if bone.name in animated_bone_names]
     for bone in animated_bones:
         node = ssbh_data_py.anim_data.NodeData(bone.name)
         track = ssbh_data_py.anim_data.TrackData('Transform')
+        bone_is = bone.get('inherit_scale')
+        bone_cs = bone.get('compensate_scale')
+        track.scale_options = ssbh_data_py.anim_data.ScaleOptions(
+            bool(bone_is) if bone_is is not None else True,
+            bool(bone_cs) if bone_cs is not None else True)
         node.tracks.append(track)
         trans_group.nodes.append(node)
     name_to_node = {node.name:node for node in trans_group.nodes}
