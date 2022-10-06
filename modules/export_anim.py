@@ -1,16 +1,19 @@
 import bpy
 import mathutils
 import math
+import re
 
 from mathutils import Matrix
 from bpy.types import Operator, Panel, Context
 from bpy.props import IntProperty, StringProperty, BoolProperty
+
 from .. import ssbh_data_py
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
-    from bpy.types import PoseBone
+    from .anim_data import VisTrackEntry
+    from bpy.types import PoseBone, FCurve
 
 class SUB_PT_export_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -235,18 +238,63 @@ def export_model_anim(context, filepath,
     if include_material_track:
         mat_group = make_material_group(context, first_blender_frame, last_blender_frame)
         ssbh_anim_data.groups.append(mat_group)
+    for group in ssbh_anim_data.groups:
+        for node in group.nodes:
+            for track in node.tracks:
+                if type(track.values[0]) == ssbh_data_py.anim_data.UvTransform:
+                    if all(uv_transform_equality(value, track.values[0]) for value in track.values):
+                        track.values = [track.values[0]]
+                elif all(value == track.values[0] for value in track.values):
+                    track.values = [track.values[0]]
     ssbh_anim_data.save(filepath)
-    
+
+def uv_transform_equality(a: ssbh_data_py.anim_data.UvTransform, b: ssbh_data_py.anim_data.UvTransform) -> bool:
+    if a.rotation != b.rotation:
+        return False
+    if a.scale_u != b.scale_u:
+        return False
+    if a.scale_v != b.scale_v:
+        return False
+    if a.translate_u != b.translate_u:
+        return False
+    if a.translate_v != b.translate_v:
+        return False
+    return True
+
 def make_transform_group(context, first_blender_frame, last_blender_frame):
     trans_type = ssbh_data_py.anim_data.GroupType.Transform
     trans_group = ssbh_data_py.anim_data.GroupData(trans_type)
     ssp: SubSceneProperties = context.scene.sub_scene_properties   
     arma: bpy.types.Object = ssp.anim_export_arma
     all_bone_names: list[str] = [b.name for b in arma.pose.bones]
-    fcurves = arma.animation_data.action.fcurves
+    fcurves: list[FCurve] = arma.animation_data.action.fcurves
     curve_names = {curve.data_path.split('"')[1] for curve in fcurves}
     animated_bone_names = [cn for cn in curve_names if cn in all_bone_names]
     animated_bones: list[PoseBone] = [bone for bone in arma.pose.bones if bone.name in animated_bone_names]
+
+    '''
+    Theres extremely minor differences in the matrixes frame-to-frame, so a better way of seeing if a bone's transform
+     is 'constant' is to check the number of keyframes in the anim range.
+    '''
+    #bone_name_to_curves = {name: {fc for fc in fcurves if fc.data_path.startswith(name)} for name in animated_bone_names}
+    bone_name_to_curves: dict[str, set[FCurve]] = {}
+    for fcurve in fcurves:
+        regex = r"pose\.bones\[\"(\w*)\"\].*"
+        match = re.match(regex, fcurve.data_path)
+        if not match:
+            continue
+        if len(match.groups()) != 1:
+            continue
+        bone_name = match.groups()[0]
+        if not bone_name_to_curves.get(bone_name):
+            bone_name_to_curves[bone_name] = set()
+        bone_name_to_curves[bone_name].add(fcurve)
+
+    constant_bone_names: set[str] = set()
+    for bone_name, fcurves in bone_name_to_curves.items():
+        if all(len([keyframe for keyframe in fc.keyframe_points if keyframe.co.x >= first_blender_frame]) <= 1 for fc in fcurves ):
+            constant_bone_names.add(bone_name)
+
     for bone in animated_bones:
         node = ssbh_data_py.anim_data.NodeData(bone.name)
         track = ssbh_data_py.anim_data.TrackData('Transform')
@@ -265,6 +313,8 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
         context.scene.frame_set(frame)
 
         for bone in animated_bones:
+            if frame != first_blender_frame and bone.name in constant_bone_names:
+                continue # for constant bones only need to insert the value once
             m:mathutils.Matrix = None
             if bone.parent:
                 m = bone.parent.matrix.inverted() @ bone.matrix
@@ -297,6 +347,9 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
                 if pq.dot(cq) < 0:
                     track.values[index].rotation = [-c for c in track.values[index].rotation]
 
+    # Vanilla anims sort the nodes alphabetically. Seems to work either way however.
+    trans_group.nodes.sort(key=lambda node: node.name)
+
     return trans_group
 
 def make_visibility_group(context, first_blender_frame, last_blender_frame):
@@ -304,8 +357,8 @@ def make_visibility_group(context, first_blender_frame, last_blender_frame):
     vis_type = ssbh_data_py.anim_data.GroupType.Visibility
     vis_group = ssbh_data_py.anim_data.GroupData(vis_type)
     # Setup SSBH Node
-    ssp = context.scene.sub_scene_properties
-    entries = ssp.anim_export_arma.data.sub_anim_properties.vis_track_entries
+    ssp: SubSceneProperties = context.scene.sub_scene_properties
+    entries: list[VisTrackEntry] = ssp.anim_export_arma.data.sub_anim_properties.vis_track_entries
     for entry in entries:
         node = ssbh_data_py.anim_data.NodeData(entry.name)
         track = ssbh_data_py.anim_data.TrackData('Visibility')
