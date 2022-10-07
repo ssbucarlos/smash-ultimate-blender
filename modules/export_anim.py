@@ -231,6 +231,7 @@ def export_model_anim(context, filepath,
     ssbh_anim_data.final_frame_index = last_blender_frame - first_blender_frame
     if include_transform_track:
         trans_group = make_transform_group(context, first_blender_frame, last_blender_frame)
+        transform_group_fix_floating_point_inaccuracies(trans_group) # Pre-saving Optimization
         ssbh_anim_data.groups.append(trans_group)
     if include_visibility_track:
         vis_group = make_visibility_group(context, first_blender_frame, last_blender_frame)
@@ -238,6 +239,9 @@ def export_model_anim(context, filepath,
     if include_material_track:
         mat_group = make_material_group(context, first_blender_frame, last_blender_frame)
         ssbh_anim_data.groups.append(mat_group)
+    
+    # Pre-saving Optimization
+    # Remove duplicate keyframes
     for group in ssbh_anim_data.groups:
         for node in group.nodes:
             for track in node.tracks:
@@ -246,7 +250,39 @@ def export_model_anim(context, filepath,
                         track.values = [track.values[0]]
                 elif all(value == track.values[0] for value in track.values):
                     track.values = [track.values[0]]
+        
     ssbh_anim_data.save(filepath)
+
+def transform_group_fix_floating_point_inaccuracies(trans_group: ssbh_data_py.anim_data.GroupData):
+    from math import isclose
+    for node in trans_group.nodes:
+        track = node.tracks[0]
+        if len(track.values) <= 1:
+            continue
+        first_transform = track.values[0]
+        for index, val in enumerate(first_transform.scale):
+            if isclose(val, 1, abs_tol=.00001):
+                first_transform.scale[index] = 1
+        for current_transform_index, current_transform in enumerate(track.values[1:], start=1):
+            # To avoid quaternion math issues, have to check if every value is close and replace the entire quaternion,
+            #  not just the 'x' or 'y' or 'z' or 'w'
+            all_rot_vals_close = True
+            for i in (0,1,2,3):
+                if not isclose(current_transform.rotation[i], first_transform.rotation[i], abs_tol=.00001):
+                    all_rot_vals_close = False
+            if all_rot_vals_close is True:
+                print(f'{node.name=} {current_transform_index=} {all_rot_vals_close=}')
+                track.values[current_transform_index].rotation = first_transform.rotation
+            
+            for i in (0,1,2):
+                if isclose(current_transform.scale[i], first_transform.scale[i], abs_tol=.00001):
+                    track.values[current_transform_index].scale[i] = first_transform.scale[i]
+            
+            for i in (0,1,2):
+                if isclose(current_transform.translation[i], first_transform.translation[i], abs_tol=.00001):
+                    track.values[current_transform_index].translation[i] = first_transform.translation[i]
+
+            
 
 def uv_transform_equality(a: ssbh_data_py.anim_data.UvTransform, b: ssbh_data_py.anim_data.UvTransform) -> bool:
     if a.rotation != b.rotation:
