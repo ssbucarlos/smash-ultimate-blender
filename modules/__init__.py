@@ -9,3 +9,4 @@ from . import export_anim
 from . import anim_data
 from . import helper_bone_data
 from . import misc_panel
+from . import swing
