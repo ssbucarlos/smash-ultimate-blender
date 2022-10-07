@@ -1,10 +1,13 @@
 import bpy
-from properties import SubSceneProperties
 
 from .. import pyprc
 
 from bpy.types import Panel, Operator, PropertyGroup
 from bpy.props import CollectionProperty
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..properties import SubSceneProperties
 
 class SUB_PT_swing_io(Panel):
     bl_space_type = 'VIEW_3D'
