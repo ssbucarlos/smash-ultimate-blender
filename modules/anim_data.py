@@ -385,7 +385,81 @@ class SUB_OP_vis_drivers_remove(Operator):
 
     def execute(self, context):
         remove_visibility_drivers(context)
-        return {'FINISHED'}    
+        return {'FINISHED'}
+
+class SUB_OP_auto_fill_vis_entries(Operator):
+    bl_idname = 'sub.auto_fill_vis_entries'
+    bl_label = 'Auto Fill Vis Entries'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        arma: bpy.types.Object = context.object
+        mesh_names = {child.name for child in arma.children if child.type == 'MESH'}
+        vis_names: set[str] = set()
+        for name in mesh_names:
+            regex = r"(.*)\_VIS\_.*"
+            match = re.match(regex, name)
+            if match:
+                vis_names.add(match.groups()[0])
+        sap: SubAnimProperties = arma.data.sub_anim_properties
+        for vis_name in vis_names:
+            if vis_name not in sap.vis_track_entries:
+                new_entry: VisTrackEntry = sap.vis_track_entries.add()
+                new_entry.name = vis_name
+                new_entry.value = True
+        return {'FINISHED'}
+
+class SUB_OP_set_all_vis_entries_false(Operator):
+    bl_idname = 'sub.set_all_vis_entries_false'
+    bl_label = 'Set All Vis Entries False'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+    
+    def execute(self, context):
+        for vis_entry in context.object.data.sub_anim_properties.vis_track_entries:
+            vis_entry.value = False
+        return {'FINISHED'}
+
+class SUB_OP_set_all_vis_entries_true(Operator):
+    bl_idname = 'sub.set_all_vis_entries_true'
+    bl_label = 'Set All Vis Entries True'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+    
+    def execute(self, context):
+        for vis_entry in context.object.data.sub_anim_properties.vis_track_entries:
+            vis_entry.value = True
+        return {'FINISHED'}
+
+class SUB_OP_insert_all_vis_entry_keyframes(Operator):
+    bl_idname = 'sub.insert_all_vis_entry_keyframes'
+    bl_label = 'Insert All Vis Entry Keyframes'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+    
+    def execute(self, context):
+        arma: bpy.types.Object = context.object
+        sap: SubAnimProperties = arma.data.sub_anim_properties
+        for index, vis_entry in enumerate(sap.vis_track_entries):
+            arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{index}].value', group='Visibility', options={'INSERTKEY_NEEDED'})
+        return {'FINISHED'}
 
 def remove_visibility_drivers(context):
     arma = context.object
@@ -432,7 +506,13 @@ class SUB_MT_vis_entry_context_menu(Menu):
         layout = self.layout
         layout.operator('sub.vis_drivers_refresh', icon='FILE_REFRESH', text='Refresh Visibility Drivers')
         layout.operator('sub.vis_drivers_remove', icon='X', text='Remove Visibility Drivers')
-
+        layout.separator()
+        layout.operator('sub.auto_fill_vis_entries', icon='SHADERFX', text='Autofill Visibility Entries')
+        layout.operator('sub.insert_all_vis_entry_keyframes', icon='KEY_HLT', text='Insert Keyframes for All Entries')
+        layout.separator()
+        layout.operator('sub.set_all_vis_entries_false', icon='HIDE_ON', text='Set All Entries Off')
+        layout.operator('sub.set_all_vis_entries_true', icon='HIDE_OFF', text='Set All Entries On')
+        
 class SUB_MT_mat_entry_context_menu(Menu):
     bl_label = "Mat Entry Specials"
 
@@ -592,7 +672,7 @@ class VisTrackEntry(PropertyGroup):
         name="Vis Name",
         default="Unknown",
         update=vis_track_name_update,)
-    value: BoolProperty(name="Visible", default=False)
+    value: BoolProperty(name="Visible", default=False, update=dummy_update)
 
 class MatTrackProperty(PropertyGroup):
     name: StringProperty(
