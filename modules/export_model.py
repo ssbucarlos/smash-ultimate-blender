@@ -1048,6 +1048,8 @@ def make_update_prc(operator: Operator, context, bones_not_in_vanilla: list[Edit
         return
     bones_real_list = list(bones_fake_list)
     for bone in bones_not_in_vanilla:
+        if bone.name.startswith('H_'):
+            continue
         new_prc_struct = prc_root.struct([
                             (pyprc.hash('name'), prc_root.hash(pyprc.hash(bone.name)))
                         ])
@@ -1055,6 +1057,12 @@ def make_update_prc(operator: Operator, context, bones_not_in_vanilla: list[Edit
     bones_fake_list.set_list(bones_real_list)
     return prc_root
 
+def find_non_helper_ancestor_index(bone: EditBone, bones: list[EditBone]) -> int:
+    if bone.parent is None:
+        return None
+    if bone.parent.name.startswith('H_'):
+        return find_non_helper_ancestor_index(bone.parent, bones)
+    return bones.index(bone.parent)
 
 def make_skel(operator, context, mode):
     ssp: SubSceneProperties = context.scene.sub_scene_properties
@@ -1092,9 +1100,19 @@ def make_skel(operator, context, mode):
         for blender_bone in parent_first_ordered_bones:
             if blender_bone not in new_bones:
                 bones_not_in_vanilla.append(blender_bone)
+                if blender_bone.name.startswith('H_'): # Need to insert new helper bones at the end
+                    new_bones.append(blender_bone)
+                    continue
                 if blender_bone.parent:
-                    parent_index = new_bones.index(blender_bone.parent)
-                    new_bones.insert(parent_index + 1, blender_bone)
+                    if blender_bone.parent.name.startswith('H_'): # Makes sure the new normal bone is not at the bottom bone section
+                        non_helper_ancestor_index = find_non_helper_ancestor_index(blender_bone, new_bones)
+                        if non_helper_ancestor_index is not None:
+                            new_bones.insert(non_helper_ancestor_index + 1, blender_bone)
+                        else:
+                            new_bones.append(blender_bone)
+                    else:
+                        parent_index = new_bones.index(blender_bone.parent)
+                        new_bones.insert(parent_index + 1, blender_bone)
                 else:
                     new_bones.append(blender_bone)
 
