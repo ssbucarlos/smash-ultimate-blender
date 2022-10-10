@@ -1,8 +1,8 @@
 import bpy
 
 from .. import pyprc
-
-from bpy.types import Panel, Operator, PropertyGroup, Context, UIList
+from ..operators import create_meshes
+from bpy.types import Panel, Operator, PropertyGroup, Context, UIList, CopyTransformsConstraint, Menu
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty, FloatVectorProperty
 from math import radians
 from pathlib import Path
@@ -175,8 +175,6 @@ class SUB_PT_swing_bone_chains(Panel):
         c.prop(active_swing_bone, 'wind_affect')
         return
 
-
-
 class SUB_UL_swing_bone_chains(UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         obj = active_data
@@ -260,7 +258,78 @@ class SUB_PT_swing_data_spheres(Panel):
         return context.object.type == 'ARMATURE'
     
     def draw(self, context):
-        return
+        ssd: SubSwingData = context.object.data.sub_swing_data
+        layout = self.layout
+        row = layout.row()
+        row.template_list(
+            "SUB_UL_swing_data_spheres",
+            "",
+            ssd,
+            "spheres",
+            ssd,
+            "active_sphere_index",
+            rows=3,
+            maxrows=10,
+            )
+        col = row.column(align=True)
+        col.operator('sub.swing_data_sphere_add', icon='ADD', text="")
+        col.operator('sub.swing_data_sphere_remove', icon='REMOVE', text="")
+        col.separator()
+        col.menu("SUB_MT_swing_data_spheres_context_menu", icon='DOWNARROW_HLT', text="")
+
+        active_index = ssd.active_sphere_index
+        if active_index >= len(ssd.spheres):
+            return
+        active_sphere = ssd.spheres[active_index]
+        row = layout.row()
+        row.prop(active_sphere, 'bone_name')
+        row = layout.row()
+        row.prop(active_sphere, 'offset')
+        row = layout.row()
+        row.prop(active_sphere, 'radius')
+
+class SUB_OP_swing_data_sphere_add(Operator):
+    bl_idname = 'sub.swing_data_sphere_add'
+    bl_label = 'Add Sphere Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_OP_swing_data_sphere_remove(Operator):
+    bl_idname = 'sub.swing_data_sphere_remove'
+    bl_label = 'Remove Sphere Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+        
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_UL_swing_data_spheres(UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+class SUB_MT_swing_data_spheres_context_menu(Menu):
+    bl_label = "Sphere Collisons Menu"
+
+    def draw(self, context):
+        layout = self.layout
 
 class SUB_PT_swing_data_ovals(Panel):
     bl_label = "Ovals"
@@ -277,7 +346,82 @@ class SUB_PT_swing_data_ovals(Panel):
         return context.object.type == 'ARMATURE'
     
     def draw(self, context):
-        return
+        ssd: SubSwingData = context.object.data.sub_swing_data
+        layout = self.layout
+        row = layout.row()
+        row.template_list(
+            "SUB_UL_swing_data_ovals",
+            "",
+            ssd,
+            "ovals",
+            ssd,
+            "active_oval_index",
+            rows=3,
+            maxrows=10,
+            )
+        col = row.column(align=True)
+        col.operator('sub.swing_data_oval_add', icon='ADD', text="")
+        col.operator('sub.swing_data_oval_remove', icon='REMOVE', text="")
+        col.separator()
+        col.menu("SUB_MT_swing_data_ovals_context_menu", icon='DOWNARROW_HLT', text="")
+
+        active_index = ssd.active_oval_index
+        if active_index >= len(ssd.ovals):
+            return
+        active_oval = ssd.ovals[active_index]
+        row = layout.row()
+        row.prop(active_oval, 'start_bone_name')
+        row = layout.row()
+        row.prop(active_oval, 'end_bone_name')
+        row = layout.row()
+        row.prop(active_oval, 'radius')
+        row = layout.row()
+        row.prop(active_oval, 'start_offset')
+        row = layout.row()
+        row.prop(active_oval, 'end_offset')
+
+class SUB_OP_swing_data_oval_add(Operator):
+    bl_idname = 'sub.swing_data_oval_add'
+    bl_label = 'Add Oval Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_OP_swing_data_oval_remove(Operator):
+    bl_idname = 'sub.swing_data_oval_remove'
+    bl_label = 'Remove Oval Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+        
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_UL_swing_data_ovals(UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+class SUB_MT_swing_data_ovals_context_menu(Menu):
+    bl_label = "Oval Collisons Menu"
+
+    def draw(self, context):
+        layout = self.layout
 
 class SUB_PT_swing_data_ellipsoids(Panel):
     bl_label = "Ellipsoids"
@@ -294,7 +438,80 @@ class SUB_PT_swing_data_ellipsoids(Panel):
         return context.object.type == 'ARMATURE'
     
     def draw(self, context):
-        return
+        ssd: SubSwingData = context.object.data.sub_swing_data
+        layout = self.layout
+        row = layout.row()
+        row.template_list(
+            "SUB_UL_swing_data_ellipsoids",
+            "",
+            ssd,
+            "ellipsoids",
+            ssd,
+            "active_ellipsoid_index",
+            rows=3,
+            maxrows=10,
+            )
+        col = row.column(align=True)
+        col.operator('sub.swing_data_ellipsoid_add', icon='ADD', text="")
+        col.operator('sub.swing_data_ellipsoid_remove', icon='REMOVE', text="")
+        col.separator()
+        col.menu("SUB_MT_swing_data_ellipsoids_context_menu", icon='DOWNARROW_HLT', text="")
+
+        active_index = ssd.active_ellipsoid_index
+        if active_index >= len(ssd.ellipsoids):
+            return
+        active_ellipsoid = ssd.ellipsoids[active_index]
+        row = layout.row()
+        row.prop(active_ellipsoid, 'bone_name')
+        row = layout.row()
+        row.prop(active_ellipsoid, 'offset')
+        row = layout.row()
+        row.prop(active_ellipsoid, 'rotation')
+        row = layout.row()
+        row.prop(active_ellipsoid, 'scale')
+
+class SUB_OP_swing_data_ellipsoid_add(Operator):
+    bl_idname = 'sub.swing_data_ellipsoid_add'
+    bl_label = 'Add Ellipsoid Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_OP_swing_data_ellipsoid_remove(Operator):
+    bl_idname = 'sub.swing_data_ellipsoid_remove'
+    bl_label = 'Remove Ellipsoids Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+        
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_UL_swing_data_ellipsoids(UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+class SUB_MT_swing_data_ellipsoids_context_menu(Menu):
+    bl_label = "Ellipsoids Collisons Menu"
+
+    def draw(self, context):
+        layout = self.layout
 
 class SUB_PT_swing_data_capsules(Panel):
     bl_label = "Capsules"
@@ -311,7 +528,84 @@ class SUB_PT_swing_data_capsules(Panel):
         return context.object.type == 'ARMATURE'
     
     def draw(self, context):
-        return
+        ssd: SubSwingData = context.object.data.sub_swing_data
+        layout = self.layout
+        row = layout.row()
+        row.template_list(
+            "SUB_UL_swing_data_capsules",
+            "",
+            ssd,
+            "capsules",
+            ssd,
+            "active_capsule_index",
+            rows=3,
+            maxrows=10,
+            )
+        col = row.column(align=True)
+        col.operator('sub.swing_data_capsule_add', icon='ADD', text="")
+        col.operator('sub.swing_data_capsule_remove', icon='REMOVE', text="")
+        col.separator()
+        col.menu("SUB_MT_swing_data_capsule_context_menu", icon='DOWNARROW_HLT', text="")
+
+        active_index = ssd.active_capsule_index
+        if active_index >= len(ssd.capsules):
+            return
+        active_capsule = ssd.capsules[active_index]
+        row = layout.row()
+        row.prop(active_capsule, 'start_bone_name')
+        row = layout.row()
+        row.prop(active_capsule, 'end_bone_name')
+        row = layout.row()
+        row.prop(active_capsule, 'start_offset')
+        row = layout.row()
+        row.prop(active_capsule, 'end_offset')
+        row = layout.row()
+        row.prop(active_capsule, 'start_radius')
+        row = layout.row()
+        row.prop(active_capsule, 'end_radius')
+
+class SUB_OP_swing_data_capsule_add(Operator):
+    bl_idname = 'sub.swing_data_capsule_add'
+    bl_label = 'Add Capsule Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_OP_swing_data_capsule_remove(Operator):
+    bl_idname = 'sub.swing_data_capsule_remove'
+    bl_label = 'Remove Capsule Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+        
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_UL_swing_data_capsules(UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+class SUB_MT_swing_data_capsules_context_menu(Menu):
+    bl_label = "Capsule Collisons Menu"
+
+    def draw(self, context):
+        layout = self.layout
 
 class SUB_PT_swing_data_planes(Panel):
     bl_label = "Planes"
@@ -328,7 +622,82 @@ class SUB_PT_swing_data_planes(Panel):
         return context.object.type == 'ARMATURE'
     
     def draw(self, context):
-        return 
+        ssd: SubSwingData = context.object.data.sub_swing_data
+        layout = self.layout
+        row = layout.row()
+        row.template_list(
+            "SUB_UL_swing_data_planes",
+            "",
+            ssd,
+            "planes",
+            ssd,
+            "active_plane_index",
+            rows=3,
+            maxrows=10,
+            )
+        col = row.column(align=True)
+        col.operator('sub.swing_data_plane_add', icon='ADD', text="")
+        col.operator('sub.swing_data_plane_remove', icon='REMOVE', text="")
+        col.separator()
+        col.menu("SUB_MT_swing_data_plane_context_menu", icon='DOWNARROW_HLT', text="")
+
+        active_index = ssd.active_plane_index
+        if active_index >= len(ssd.planes):
+            return
+        active_plane = ssd.planes[active_index]
+        row = layout.row()
+        row.prop(active_plane, 'bone_name')
+        row = layout.row()
+        row.prop(active_plane, 'nx')
+        row = layout.row()
+        row.prop(active_plane, 'ny')
+        row = layout.row()
+        row.prop(active_plane, 'nz')
+        row = layout.row()
+        row.prop(active_plane, 'distance')
+
+class SUB_OP_swing_data_plane_add(Operator):
+    bl_idname = 'sub.swing_data_plane_add'
+    bl_label = 'Add Plane Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_OP_swing_data_plane_remove(Operator):
+    bl_idname = 'sub.swing_data_plane_remove'
+    bl_label = 'Remove Plane Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+        
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_UL_swing_data_planes(UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+class SUB_MT_swing_data_planes_context_menu(Menu):
+    bl_label = "Plane Collisons Menu"
+
+    def draw(self, context):
+        layout = self.layout
 
 class SUB_PT_swing_data_connections(Panel):
     bl_label = "Connections"
@@ -345,7 +714,80 @@ class SUB_PT_swing_data_connections(Panel):
         return context.object.type == 'ARMATURE'
     
     def draw(self, context):
-        return 
+        ssd: SubSwingData = context.object.data.sub_swing_data
+        layout = self.layout
+        row = layout.row()
+        row.template_list(
+            "SUB_UL_swing_data_connections",
+            "",
+            ssd,
+            "connections",
+            ssd,
+            "active_connection_index",
+            rows=3,
+            maxrows=10,
+            )
+        col = row.column(align=True)
+        col.operator('sub.swing_data_connection_add', icon='ADD', text="")
+        col.operator('sub.swing_data_connection_remove', icon='REMOVE', text="")
+        col.separator()
+        col.menu("SUB_MT_swing_data_connections_context_menu", icon='DOWNARROW_HLT', text="")
+
+        active_index = ssd.active_connection_index
+        if active_index >= len(ssd.connections):
+            return
+        active_connection = ssd.connections[active_index]
+        row = layout.row()
+        row.prop(active_connection, 'start_bone_name')
+        row = layout.row()
+        row.prop(active_connection, 'end_bone_name')
+        row = layout.row()
+        row.prop(active_connection, 'radius')
+        row = layout.row()
+        row.prop(active_connection, 'length')
+
+class SUB_OP_swing_data_connection_add(Operator):
+    bl_idname = 'sub.swing_data_connection_add'
+    bl_label = 'Add Swing Bone Connection Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_OP_swing_data_connection_remove(Operator):
+    bl_idname = 'sub.swing_data_connection_remove'
+    bl_label = 'Remove Swing Bone Connection Collision'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+        
+    def execute(self, context):
+        return {'FINISHED'}
+
+class SUB_UL_swing_data_connections(UIList):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
+        obj = active_data
+        entry = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row()
+            row.prop(entry, "name", text="", emboss=False)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+class SUB_MT_swing_data_connections_context_menu(Menu):
+    bl_label = "Swing Bone Connections Menu"
+
+    def draw(self, context):
+        layout = self.layout
 
 class SUB_OP_swing_import(Operator):
     bl_idname = 'sub.swing_import'
@@ -371,6 +813,7 @@ class SUB_OP_swing_import(Operator):
 
     def execute(self, context):
         swing_import(self, context, self.filepath)
+        setup_bone_soft_bodies(self, context)
         return {'FINISHED'}
 
 def struct_get(param_struct, input, fallback=None):
@@ -445,6 +888,137 @@ def swing_import(operator: Operator, context: Context, filepath: str):
         else:
             for index, swing_bone in enumerate(swing_bone_chain.swing_bones):
                 swing_bone.name = f'Bone {index+1}'
+    
+    try:
+        prc_spheres = list(dict(prc_root).get(pyprc.hash('spheres')))
+    except:
+        operator.report({'ERROR'}, 'No "spheres" list in the prc!')
+        return
+    
+    for prc_sphere in prc_spheres:
+        new_sphere: Sphere = ssd.spheres.add()
+        new_sphere.name = struct_get_str(prc_sphere, 'name')
+        new_sphere.bone_name = struct_get_str(prc_sphere, 'bonename')
+        new_sphere.offset[0] = struct_get_val(prc_sphere, 'cx')
+        new_sphere.offset[1] = struct_get_val(prc_sphere, 'cy')
+        new_sphere.offset[2] = struct_get_val(prc_sphere, 'cz')
+        new_sphere.radius = struct_get_val(prc_sphere, 'radius')
+    
+    try:
+        prc_ovals = list(dict(prc_root).get(pyprc.hash('ovals')))
+    except:
+        operator.report({'ERROR'}, 'No "ovals" list in the prc!')
+        return
+
+    for prc_oval in prc_ovals:
+        new_oval: Oval = ssd.ovals.add()
+        new_oval.name = struct_get_str(prc_oval, 'name')
+        new_oval.start_bone_name = struct_get_str(prc_oval, 'start_bonename')
+        new_oval.end_bone_name = struct_get_str(prc_oval, 'end_bonename')
+        new_oval.radius = struct_get_val(prc_oval, 'radius')
+        new_oval.start_offset[0] = struct_get_val(prc_oval, 'start_offset_x')
+        new_oval.start_offset[1] = struct_get_val(prc_oval, 'start_offset_y')
+        new_oval.start_offset[2] = struct_get_val(prc_oval, 'start_offset_z')
+        new_oval.end_offset[0] = struct_get_val(prc_oval, 'end_offset_x')
+        new_oval.end_offset[1] = struct_get_val(prc_oval, 'end_offset_y')
+        new_oval.end_offset[2] = struct_get_val(prc_oval, 'end_offset_z')
+
+    try:
+        prc_ellipsoids = list(dict(prc_root).get(pyprc.hash('ellipsoids')))
+    except:
+        operator.report({'ERROR'}, 'No "ellipsoids" list in the prc!')
+        return
+    
+    for prc_ellipsoid in prc_ellipsoids:
+        new_ellipsoid: Ellipsoid = ssd.ellipsoids.add()
+        new_ellipsoid.name = struct_get_str(prc_ellipsoid, 'name')
+        new_ellipsoid.bone_name = struct_get_str(prc_ellipsoid, 'bonename')
+        new_ellipsoid.offset[0] = struct_get_val(prc_ellipsoid, 'cx')
+        new_ellipsoid.offset[1] = struct_get_val(prc_ellipsoid, 'cy')
+        new_ellipsoid.offset[2] = struct_get_val(prc_ellipsoid, 'cz')
+        new_ellipsoid.rotation[0] = struct_get_val(prc_ellipsoid, 'rx')
+        new_ellipsoid.rotation[1] = struct_get_val(prc_ellipsoid, 'ry')
+        new_ellipsoid.rotation[2] = struct_get_val(prc_ellipsoid, 'rz')
+        new_ellipsoid.scale[0] = struct_get_val(prc_ellipsoid, 'sx')
+        new_ellipsoid.scale[0] = struct_get_val(prc_ellipsoid, 'sy')
+        new_ellipsoid.scale[0] = struct_get_val(prc_ellipsoid, 'sz')
+    
+    try:
+        prc_capsules = list(dict(prc_root).get(pyprc.hash('capsules')))
+    except:
+        operator.report({'ERROR'}, 'No "capsules" list in the prc!')
+        return
+    
+    for prc_capsule in prc_capsules:
+        new_capsule: Capsule = ssd.capsules.add()
+        new_capsule.name = struct_get_str(prc_capsule, 'name')
+        new_capsule.start_bone_name = struct_get_str(prc_capsule, 'start_bonename')
+        new_capsule.end_bone_name = struct_get_str(prc_capsule, 'end_bonename')
+        new_capsule.start_offset[0] = struct_get_val(prc_capsule, 'start_offset_x')
+        new_capsule.start_offset[1] = struct_get_val(prc_capsule, 'start_offset_y')
+        new_capsule.start_offset[2] = struct_get_val(prc_capsule, 'start_offset_z')
+        new_capsule.end_offset[0] = struct_get_val(prc_capsule, 'end_offset_x')
+        new_capsule.end_offset[1] = struct_get_val(prc_capsule, 'end_offset_y')
+        new_capsule.end_offset[2] = struct_get_val(prc_capsule, 'end_offset_z')
+        new_capsule.start_radius = struct_get_val(prc_capsule, 'start_radius')
+        new_capsule.end_radius = struct_get_val(prc_capsule, 'end_radius')
+
+    try:
+        prc_planes = list(dict(prc_root).get(pyprc.hash('planes')))
+    except:
+        operator.report({'ERROR'}, 'No "planes" list in the prc!')
+        return
+
+    for prc_plane in prc_planes:
+        new_plane: Plane = ssd.planes.add()
+        new_plane.name = struct_get_str(prc_plane, 'name')
+        new_plane.bone_name = struct_get_str(prc_plane, 'bonename')
+        new_plane.nx = struct_get_val(prc_plane, 'nx')
+        new_plane.ny = struct_get_val(prc_plane, 'ny')
+        new_plane.nz = struct_get_val(prc_plane, 'nz')
+        new_plane.distance = struct_get_val(prc_plane, 'distance')
+
+    try:
+        prc_connections = list(dict(prc_root).get(pyprc.hash('connections')))
+    except:
+        operator.report({'ERROR'}, 'No "connections" list in the prc!')
+        return
+
+    for prc_connection in prc_connections:
+        new_connection: Connection = ssd.connections.add()
+        new_connection.start_bone_name = struct_get_str(prc_connection, 'start_bonename')
+        new_connection.end_bone_name = struct_get_str(prc_connection, 'end_bonename')
+        new_connection.radius = struct_get_val(prc_connection, 'radius')
+        new_connection.length = struct_get_val(prc_connection, 'length')
+
+def setup_bone_soft_bodies(operator: Operator, context: Context):
+    ssd: SubSwingData = context.object.data.sub_swing_data
+    colliders_collection = bpy.data.collections.new('Swing Bone Colliders')
+    collision_shapes_collection = bpy.data.collections.new('Swing Bone Collision Shapes')
+    collection_names = ('Spheres', 'Ovals', 'Ellipsoids', 'Capsules', 'Planes', 'Connections')
+    name_to_collection: dict[str, bpy.types.Collection] = {}
+    for collection_name in collection_names:
+        new_collection = bpy.data.collections.new(collection_name)
+        collision_shapes_collection.children.link(new_collection)
+        name_to_collection[collection_name] = new_collection
+    context.collection.children.link(colliders_collection)
+    context.collection.children.link(collision_shapes_collection)
+    swing_bone_chain: SwingBoneChain
+    swing_bone: SwingBone
+    for swing_bone_chain in ssd.swing_bone_chains: # type: list[SwingBoneChain]
+        for swing_bone in swing_bone_chain.swing_bones:
+            # Set Up Swing Bone Capsules
+            blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_bone.name)
+            if blender_bone is None:
+                continue
+            cap = create_meshes.make_capsule_object(context, swing_bone.name, swing_bone.collision_size[0], swing_bone.collision_size[1], blender_bone.length)
+            ctc: CopyTransformsConstraint = cap.constraints.new('COPY_TRANSFORMS')
+            ctc.target = context.object
+            ctc.subtarget = blender_bone.name
+            colliders_collection.objects.link(cap)
+            for collision in swing_bone.collisions:
+                # Set Up Collision Shapes / Collections
+                pass
 
 class SUB_OP_swing_export(Operator):
     bl_idname = 'sub.swing_export'
@@ -556,3 +1130,9 @@ class SubSwingData(PropertyGroup):
     connections: CollectionProperty(type=Connection)
     # Below are needed properties for UI
     active_swing_bone_chain_index: IntProperty(name='Active Swing Bone Chain Index', default=0)
+    active_sphere_index: IntProperty(name='Active Sphere', default=0)
+    active_oval_index: IntProperty(name='Active Oval', default=0)
+    active_ellipsoid_index: IntProperty(name='Active Ellipsoid', default=0)
+    active_capsule_index: IntProperty(name='Active Capsule', default=0)
+    active_plane_index: IntProperty(name='Active Plane', default=0)
+    active_connection_index: IntProperty(name='Active Connection', default=0)

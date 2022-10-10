@@ -103,11 +103,35 @@ classes = [
     modules.swing.SUB_OP_swing_bone_collision_add,
     modules.swing.SUB_OP_swing_bone_collision_remove,
     modules.swing.SUB_PT_swing_data_spheres,
+    modules.swing.SUB_OP_swing_data_sphere_add,
+    modules.swing.SUB_OP_swing_data_sphere_remove,
+    modules.swing.SUB_UL_swing_data_spheres,
+    modules.swing.SUB_MT_swing_data_spheres_context_menu,
     modules.swing.SUB_PT_swing_data_ovals,
+    modules.swing.SUB_OP_swing_data_oval_add,
+    modules.swing.SUB_OP_swing_data_oval_remove,
+    modules.swing.SUB_UL_swing_data_ovals,
+    modules.swing.SUB_MT_swing_data_ovals_context_menu,
     modules.swing.SUB_PT_swing_data_ellipsoids,
+    modules.swing.SUB_OP_swing_data_ellipsoid_add,
+    modules.swing.SUB_OP_swing_data_ellipsoid_remove,
+    modules.swing.SUB_UL_swing_data_ellipsoids,
+    modules.swing.SUB_MT_swing_data_ellipsoids_context_menu,
     modules.swing.SUB_PT_swing_data_capsules,
+    modules.swing.SUB_OP_swing_data_capsule_add,
+    modules.swing.SUB_OP_swing_data_capsule_remove,
+    modules.swing.SUB_UL_swing_data_capsules,
+    modules.swing.SUB_MT_swing_data_capsules_context_menu,
     modules.swing.SUB_PT_swing_data_planes,
+    modules.swing.SUB_OP_swing_data_plane_add,
+    modules.swing.SUB_OP_swing_data_plane_remove,
+    modules.swing.SUB_UL_swing_data_planes,
+    modules.swing.SUB_MT_swing_data_planes_context_menu,
     modules.swing.SUB_PT_swing_data_connections,
+    modules.swing.SUB_OP_swing_data_connection_add,
+    modules.swing.SUB_OP_swing_data_connection_remove,
+    modules.swing.SUB_UL_swing_data_connections,
+    modules.swing.SUB_MT_swing_data_connections_context_menu,
     modules.swing.SUB_OP_swing_import,
     modules.swing.SUB_OP_swing_export,
     modules.swing.SwingBoneCollision,
@@ -130,8 +154,12 @@ def register():
 
     check_unsupported_blender_versions()
 
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    for index, cls in enumerate(classes):
+        try:
+            bpy.utils.register_class(cls)
+        except Exception as e:
+            print(f'Error registering class{cls=}, {index=}. Re-raising exception')
+            raise e
 
     properties.register()
     shaders.custom_sampler_node.register()
