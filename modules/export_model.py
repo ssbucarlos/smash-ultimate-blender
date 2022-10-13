@@ -1048,10 +1048,10 @@ def make_update_prc(operator: Operator, context, bones_not_in_vanilla: list[Edit
         return
     bones_real_list = list(bones_fake_list)
     for bone in bones_not_in_vanilla:
-        if bone.name.startswith('H_'):
+        if bone.name.startswith('H_') or bone.name.startswith('S_'):
             continue
         new_prc_struct = prc_root.struct([
-                            (pyprc.hash('name'), prc_root.hash(pyprc.hash(bone.name)))
+                            (pyprc.hash('name'), prc_root.hash(pyprc.hash(bone.name.lower())))
                         ])
         bones_real_list.append(new_prc_struct)
     bones_fake_list.set_list(bones_real_list)
@@ -1100,7 +1100,7 @@ def make_skel(operator, context, mode):
         for blender_bone in parent_first_ordered_bones:
             if blender_bone not in new_bones:
                 bones_not_in_vanilla.append(blender_bone)
-                if blender_bone.name.startswith('H_'): # Need to insert new helper bones at the end
+                if blender_bone.name.startswith('H_') or blender_bone.name.startswith('S_'): # Need to insert new helper or swing bones at the end
                     new_bones.append(blender_bone)
                     continue
                 if blender_bone.parent:
