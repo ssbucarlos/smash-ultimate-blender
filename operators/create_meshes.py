@@ -2,7 +2,7 @@ import bpy
 import bmesh
 import math
 import numpy
-from math import sqrt, cos, sin, pi
+from math import sqrt, cos, sin, pi, radians
 from bpy.types import Context, Operator
 from bpy.props import FloatProperty, StringProperty
 
@@ -39,6 +39,46 @@ def make_capsule_object(context, name, start_radius, end_radius, length):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
     make_capsule(obj, start_radius, end_radius, length)
+    return obj
+
+def make_sphere(object:bpy.types.Object, radius, offset):
+    start_theta = radians(270)
+    theta_step = pi / 16
+    verts = [(0, -radius, 0)] # Bottom Pole
+    for iteration in range(1,16): # Dont make the top or bottom or sphere
+        theta = start_theta + theta_step * iteration
+        circle_radius = radius * cos(theta)
+        circle_y_offset = radius * sin(theta)
+        verts += verts_from_circle(circle_radius, 32, circle_y_offset)
+    verts += [(0, radius, 0)] # Top Pole
+    for index, v in enumerate(verts):
+        x,y,z = v
+        x += offset[0]
+        y += offset[1]
+        z += offset[2]
+        verts[index] = (x,y,z)
+    edges = []
+    for circle_index in range (0,15):
+        edges+= [(1 + (circle_index*32) + vi, 1 + (circle_index*32) + vi + 1) for vi in range(0,31)]
+        edges+= [(1 + (circle_index*32), 1 + (circle_index*32) + 31)]
+    faces = []
+    for circle_index in range (0,14):
+        faces+= [(1 + (circle_index*32) + vi, 1 + (circle_index*32) + vi + 32,
+                  1 + (circle_index*32) + vi + 33, 1 + (circle_index*32) + vi + 1)
+                  for vi in range(0,31)]
+        faces+= [(1 + (circle_index*32) + 0, 1 + (circle_index*32) + 31, 
+                  1 + (circle_index*32) + 32 + 31, 1 + (circle_index*32) + 32, )]
+    faces += [(0, 1 + vi, 1 + vi + 1) for vi in range (0,31)] # Faces for bottom fan
+    faces += [(0, 32, 1)]
+    final = len(verts) - 1
+    faces += [(final, final - 32 + vi + 1, final - 32 + vi) for vi in range(0,31)] # Faces for top fan
+    faces += [(final, final - 32, final - 1)]    
+    object.data.from_pydata(verts, edges, faces)
+
+def make_sphere_object(name, radius, offset=[0,0,0]):
+    mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
+    obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
+    make_sphere(obj, radius, offset)
     return obj
 
 class SUB_OP_make_capsule(Operator):

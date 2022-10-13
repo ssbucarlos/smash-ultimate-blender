@@ -2,7 +2,7 @@ import bpy
 
 from .. import pyprc
 from ..operators import create_meshes
-from bpy.types import Panel, Operator, PropertyGroup, Context, UIList, CopyTransformsConstraint, Menu
+from bpy.types import Panel, Operator, PropertyGroup, Context, UIList, CopyTransformsConstraint, Menu, CopyLocationConstraint, CopyRotationConstraint, TrackToConstraint
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty, FloatVectorProperty
 from math import radians
 from pathlib import Path
@@ -192,7 +192,8 @@ class SUB_UL_swing_bones(UIList):
         entry = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row()
-            row.prop(entry, "name", text="", emboss=False)
+            #row.prop(entry, "name", text="", emboss=False)
+            row.label(text=f'{entry.name}', icon='BONE_DATA')
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
@@ -282,7 +283,7 @@ class SUB_PT_swing_data_spheres(Panel):
             return
         active_sphere = ssd.spheres[active_index]
         row = layout.row()
-        row.prop(active_sphere, 'bone_name')
+        row.prop_search(active_sphere, 'bone', context.object.data, 'bones', text='Bone')
         row = layout.row()
         row.prop(active_sphere, 'offset')
         row = layout.row()
@@ -872,6 +873,8 @@ def swing_import(operator: Operator, context: Context, filepath: str):
             new_swing_bone.ground_hit           = struct_get_val(prc_swing_bone_parameters, 'groundhit')
             new_swing_bone.wind_affect          = struct_get_val(prc_swing_bone_parameters, 'windaffect')
             for prc_swing_bone_collision in list(struct_get(prc_swing_bone_parameters, 'collisions')):
+                if str(prc_swing_bone_collision.value) == '':
+                    continue
                 new_swing_bone_collision: SwingBoneCollision   = new_swing_bone.collisions.add()
                 new_swing_bone_collision.target_collision_name = str(prc_swing_bone_collision.value)
     hash_to_blender_bone = {str(pyprc.hash(bone.name.lower())) : bone for bone in arma_data.bones}
@@ -894,15 +897,20 @@ def swing_import(operator: Operator, context: Context, filepath: str):
     except:
         operator.report({'ERROR'}, 'No "spheres" list in the prc!')
         return
-    
+    raw_hash_to_blender_bone = {pyprc.hash(bone.name.lower()) : bone for bone in arma_data.bones}
     for prc_sphere in prc_spheres:
+        matched_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(prc_sphere, 'bonename').value)
+        if matched_bone is None:
+            operator.report({'WARNING'}, f"Could not match bone for a sphere. {struct_get_str(prc_sphere, 'name')}, {struct_get_str(prc_sphere, 'bonename')}")
+            continue
         new_sphere: Sphere = ssd.spheres.add()
         new_sphere.name = struct_get_str(prc_sphere, 'name')
-        new_sphere.bone_name = struct_get_str(prc_sphere, 'bonename')
-        new_sphere.offset[0] = struct_get_val(prc_sphere, 'cx')
-        new_sphere.offset[1] = struct_get_val(prc_sphere, 'cy')
+        new_sphere.bone = matched_bone.name
+        new_sphere.offset[0] = -(struct_get_val(prc_sphere, 'cy'))
+        new_sphere.offset[1] = struct_get_val(prc_sphere, 'cx')
         new_sphere.offset[2] = struct_get_val(prc_sphere, 'cz')
         new_sphere.radius = struct_get_val(prc_sphere, 'radius')
+
     
     try:
         prc_ovals = list(dict(prc_root).get(pyprc.hash('ovals')))
@@ -911,16 +919,23 @@ def swing_import(operator: Operator, context: Context, filepath: str):
         return
 
     for prc_oval in prc_ovals:
+        matched_start_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(prc_oval, 'start_bonename').value)
+        matched_end_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(prc_oval, 'end_bonename').value)
+        if matched_start_bone is None or matched_end_bone is None:
+            start_bone_hash = struct_get_str(prc_oval, 'start_bonename')
+            end_bone_hash = struct_get_str(prc_oval, 'end_bonename')
+            operator.report({'WARNING'}, f'Could not match bones for a oval. {start_bone_hash=}, {end_bone_hash=}')
+            continue
         new_oval: Oval = ssd.ovals.add()
         new_oval.name = struct_get_str(prc_oval, 'name')
-        new_oval.start_bone_name = struct_get_str(prc_oval, 'start_bonename')
-        new_oval.end_bone_name = struct_get_str(prc_oval, 'end_bonename')
+        new_oval.start_bone_name = matched_start_bone.name
+        new_oval.end_bone_name = matched_end_bone.name
         new_oval.radius = struct_get_val(prc_oval, 'radius')
-        new_oval.start_offset[0] = struct_get_val(prc_oval, 'start_offset_x')
-        new_oval.start_offset[1] = struct_get_val(prc_oval, 'start_offset_y')
+        new_oval.start_offset[0] = -(struct_get_val(prc_oval, 'start_offset_y'))
+        new_oval.start_offset[1] = struct_get_val(prc_oval, 'start_offset_x')
         new_oval.start_offset[2] = struct_get_val(prc_oval, 'start_offset_z')
-        new_oval.end_offset[0] = struct_get_val(prc_oval, 'end_offset_x')
-        new_oval.end_offset[1] = struct_get_val(prc_oval, 'end_offset_y')
+        new_oval.end_offset[0] = -(struct_get_val(prc_oval, 'end_offset_y'))
+        new_oval.end_offset[1] = struct_get_val(prc_oval, 'end_offset_x') 
         new_oval.end_offset[2] = struct_get_val(prc_oval, 'end_offset_z')
 
     try:
@@ -993,32 +1008,103 @@ def swing_import(operator: Operator, context: Context, filepath: str):
 
 def setup_bone_soft_bodies(operator: Operator, context: Context):
     ssd: SubSwingData = context.object.data.sub_swing_data
-    colliders_collection = bpy.data.collections.new('Swing Bone Colliders')
-    collision_shapes_collection = bpy.data.collections.new('Swing Bone Collision Shapes')
-    collection_names = ('Spheres', 'Ovals', 'Ellipsoids', 'Capsules', 'Planes', 'Connections')
-    name_to_collection: dict[str, bpy.types.Collection] = {}
-    for collection_name in collection_names:
-        new_collection = bpy.data.collections.new(collection_name)
-        collision_shapes_collection.children.link(new_collection)
-        name_to_collection[collection_name] = new_collection
-    context.collection.children.link(colliders_collection)
-    context.collection.children.link(collision_shapes_collection)
+    swing_master_collection = bpy.data.collections.new(f'{context.object.name} Swing Objects')
+    swing_chains_collection = bpy.data.collections.new('Swing Bone Chains')
+    collision_shapes_collection = bpy.data.collections.new('Collision Shapes')
+    shape_collection_names = ('Spheres', 'Ovals', 'Ellipsoids', 'Capsules', 'Planes', 'Connections')
+    shape_name_to_collection: dict[str, bpy.types.Collection] = {}
+    for shape_collection_name in shape_collection_names:
+        shape_collection = bpy.data.collections.new(shape_collection_name)
+        collision_shapes_collection.children.link(shape_collection)
+        shape_name_to_collection[shape_collection_name] = shape_collection
+    context.collection.children.link(swing_master_collection)
+    swing_master_collection.children.link(swing_chains_collection)
+    swing_master_collection.children.link(collision_shapes_collection)
+    
+    
+    swing_sphere: Sphere
+    for swing_sphere in ssd.spheres:
+        blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_sphere.bone)
+        if blender_bone is None:
+                continue
+        
+        sphere_obj = create_meshes.make_sphere_object(swing_sphere.name, swing_sphere.radius, swing_sphere.offset)
+        swing_sphere.blender_sphere = sphere_obj
+        ctc: CopyTransformsConstraint = sphere_obj.constraints.new('COPY_TRANSFORMS')
+        ctc.target = context.object
+        ctc.subtarget = blender_bone.name
+        spheres_collection = shape_name_to_collection['Spheres']
+        spheres_collection.objects.link(sphere_obj)
+
+    swing_oval: Oval
+    for swing_oval in ssd.ovals:
+        blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_oval.start_bone_name)
+        if blender_bone is None:
+            continue
+        start_bone: bpy.types.Bone = context.object.data.bones.get(swing_oval.start_bone_name)
+        end_bone: bpy.types.Bone = context.object.data.bones.get(swing_oval.end_bone_name)
+        length = (start_bone.head_local - end_bone.head_local).length
+        oval_obj = create_meshes.make_capsule_object(context, swing_oval.name, swing_oval.radius, swing_oval.radius, length)
+        swing_oval.blender_oval = oval_obj
+
+        clc: CopyLocationConstraint = oval_obj.constraints.new('COPY_LOCATION')
+        clc.target = context.object
+        clc.subtarget = start_bone.name
+
+        ttc: TrackToConstraint = oval_obj.constraints.new('TRACK_TO')
+        ttc.target = context.object
+        ttc.subtarget = end_bone.name
+        ttc.track_axis = 'TRACK_Y'
+        ttc.up_axis = 'UP_Z'
+
+        driver_handle = oval_obj.driver_add('scale', 1)
+        driver: bpy.types.Driver = driver_handle.driver
+        var = driver.variables.new()
+        var.type = 'LOC_DIFF'
+        target_1 = var.targets[0]
+        target_1.id = context.object
+        target_1.bone_target = start_bone.name
+        target_2 = var.targets[1]
+        target_2.id = context.object
+        target_2.bone_target = end_bone.name
+        driver.expression = f' {var.name} / {length} '
+
+        ovals_collection = shape_name_to_collection['Ovals']
+        ovals_collection.objects.link(oval_obj)
+
     swing_bone_chain: SwingBoneChain
     swing_bone: SwingBone
+    swing_bone_collision: SwingBoneCollision
+    ssd_sphere: Sphere
     for swing_bone_chain in ssd.swing_bone_chains: # type: list[SwingBoneChain]
+        chain_collection = bpy.data.collections.new(swing_bone_chain.name)
+        chain_swing_bones_collection = bpy.data.collections.new(f'{swing_bone_chain.name} swing bones')
+        chain_collision_collection = bpy.data.collections.new(f'{swing_bone_chain.name} collisions')
+        swing_chains_collection.children.link(chain_collection)
+        chain_collection.children.link(chain_swing_bones_collection)
+        chain_collection.children.link(chain_collision_collection)
         for swing_bone in swing_bone_chain.swing_bones:
             # Set Up Swing Bone Capsules
             blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_bone.name)
             if blender_bone is None:
                 continue
+
             cap = create_meshes.make_capsule_object(context, swing_bone.name, swing_bone.collision_size[0], swing_bone.collision_size[1], blender_bone.length)
             ctc: CopyTransformsConstraint = cap.constraints.new('COPY_TRANSFORMS')
             ctc.target = context.object
             ctc.subtarget = blender_bone.name
-            colliders_collection.objects.link(cap)
-            for collision in swing_bone.collisions:
-                # Set Up Collision Shapes / Collections
-                pass
+            chain_swing_bones_collection.objects.link(cap)
+            swing_bone_collision_collection = bpy.data.collections.new(f'{swing_bone_chain.name} {swing_bone.name} collisions')
+            chain_collision_collection.children.link(swing_bone_collision_collection)
+            for swing_bone_collision in swing_bone.collisions:
+                # Set Up A Collection for this bone's collisions, 'link' collision objects to it.
+                ssd_sphere = ssd.spheres.get(swing_bone_collision.target_collision_name)
+                if ssd_sphere:
+                    sphere_obj = ssd_sphere.blender_sphere
+                    if sphere_obj:
+                        swing_bone_collision_collection.objects.link(sphere_obj)
+
+
 
 class SUB_OP_swing_export(Operator):
     bl_idname = 'sub.swing_export'
@@ -1078,9 +1164,18 @@ class SwingBoneChain(PropertyGroup):
 
 class Sphere(PropertyGroup):
     name: StringProperty(name='Sphere Name Hash40')
-    bone_name: StringProperty(name='Bone Name Hash40')
+    #bone_name: StringProperty(name='Bone Name Hash40')
+    bone: StringProperty(
+        name='Bone',
+        description='The bone this sphere is attached to',
+    )
     offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3)
     radius: FloatProperty(name='Radius')
+    # Below is a pointer property to the sphere object. 
+    blender_sphere: PointerProperty(
+        type=bpy.types.Object,
+        name='Sphere Object',
+    )
 
 class Oval(PropertyGroup):
     name: StringProperty(name='Oval Name Hash40')
@@ -1089,6 +1184,11 @@ class Oval(PropertyGroup):
     radius: FloatProperty(name='Radius')
     start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3)
     end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3)
+    # Below is a pointer property to the sphere object. 
+    blender_oval: PointerProperty(
+        type=bpy.types.Object,
+        name='Oval Object',
+    )
 
 class Ellipsoid(PropertyGroup):
     name: StringProperty(name='Ellipoid Name Hash40')
