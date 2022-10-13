@@ -38,8 +38,7 @@ class SUB_PT_swing_io(Panel):
         row = layout.row(align=True)
         row.operator('sub.swing_export', icon='EXPORT')
 
-class SUB_PT_swing_data_master(Panel):
-    bl_label = "Ultimate Swing Data"
+class SwingPropertyPanel: # Mix-in for the swing info property panel classes
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "data"
@@ -50,24 +49,17 @@ class SUB_PT_swing_data_master(Panel):
         if not context.object:
             return False
         return context.object.type == 'ARMATURE'
+
+class SUB_PT_swing_data_master(Panel, SwingPropertyPanel):
+    bl_label = "Ultimate Swing Data"
 
     def draw(self, context):
         layout = self.layout
         arma = context.object
 
-class SUB_PT_swing_bone_chains(Panel):
+class SUB_PT_swing_bone_chains(Panel, SwingPropertyPanel):
     bl_label = "Swing Bone Chains"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "SUB_PT_swing_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
     
     def draw(self, context):
         layout = self.layout
@@ -104,7 +96,6 @@ class SUB_PT_swing_bone_chains(Panel):
             )        
         else:
             c.enabled = False
-        
         split = split.split()
         c = split.column()
         c.enabled = False
@@ -157,7 +148,9 @@ class SUB_PT_swing_bone_chains(Panel):
         c.prop(active_swing_bone_chain, 'is_skirt')
         c.prop(active_swing_bone_chain, 'rotate_order')
         c.prop(active_swing_bone_chain, 'curve_rotate_x')
-        c.prop(active_swing_bone_chain, 'unk_8')
+        c.prop(active_swing_bone_chain, 'has_unk_8')
+        if active_swing_bone_chain.has_unk_8:
+            c.prop(active_swing_bone_chain, 'unk_8')
         split = split.split()
         c = split.column()
         c.label(text='Bone Info')
@@ -244,19 +237,9 @@ class SUB_OP_swing_bone_collision_remove(Operator):
     def execute(self, context):
         return {'FINISHED'}    
 
-class SUB_PT_swing_data_spheres(Panel):
+class SUB_PT_swing_data_spheres(Panel, SwingPropertyPanel):
     bl_label = "Spheres"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "SUB_PT_swing_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
     
     def draw(self, context):
         ssd: SubSwingData = context.object.data.sub_swing_data
@@ -332,19 +315,9 @@ class SUB_MT_swing_data_spheres_context_menu(Menu):
     def draw(self, context):
         layout = self.layout
 
-class SUB_PT_swing_data_ovals(Panel):
+class SUB_PT_swing_data_ovals(Panel, SwingPropertyPanel):
     bl_label = "Ovals"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "SUB_PT_swing_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
     
     def draw(self, context):
         ssd: SubSwingData = context.object.data.sub_swing_data
@@ -424,19 +397,9 @@ class SUB_MT_swing_data_ovals_context_menu(Menu):
     def draw(self, context):
         layout = self.layout
 
-class SUB_PT_swing_data_ellipsoids(Panel):
+class SUB_PT_swing_data_ellipsoids(Panel, SwingPropertyPanel):
     bl_label = "Ellipsoids"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "SUB_PT_swing_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
     
     def draw(self, context):
         ssd: SubSwingData = context.object.data.sub_swing_data
@@ -514,19 +477,9 @@ class SUB_MT_swing_data_ellipsoids_context_menu(Menu):
     def draw(self, context):
         layout = self.layout
 
-class SUB_PT_swing_data_capsules(Panel):
+class SUB_PT_swing_data_capsules(Panel, SwingPropertyPanel):
     bl_label = "Capsules"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "SUB_PT_swing_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
     
     def draw(self, context):
         ssd: SubSwingData = context.object.data.sub_swing_data
@@ -608,19 +561,9 @@ class SUB_MT_swing_data_capsules_context_menu(Menu):
     def draw(self, context):
         layout = self.layout
 
-class SUB_PT_swing_data_planes(Panel):
+class SUB_PT_swing_data_planes(Panel, SwingPropertyPanel):
     bl_label = "Planes"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "SUB_PT_swing_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
     
     def draw(self, context):
         ssd: SubSwingData = context.object.data.sub_swing_data
@@ -700,19 +643,9 @@ class SUB_MT_swing_data_planes_context_menu(Menu):
     def draw(self, context):
         layout = self.layout
 
-class SUB_PT_swing_data_connections(Panel):
+class SUB_PT_swing_data_connections(Panel, SwingPropertyPanel):
     bl_label = "Connections"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "SUB_PT_swing_data_master"
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
     
     def draw(self, context):
         ssd: SubSwingData = context.object.data.sub_swing_data
@@ -840,15 +773,27 @@ def swing_import(operator: Operator, context: Context, filepath: str):
         operator.report({'ERROR'}, 'No "swingbones" list in the prc!')
         return
     
+    raw_hash_to_blender_bone = {pyprc.hash(bone.name.lower()) : bone for bone in arma_data.bones}
     for chain in prc_swing_bone_chains:
+        matched_start_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(chain, 'start_bonename').value)
+        matched_end_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(chain, 'end_bonename').value)
+        if matched_start_bone is None or matched_end_bone is None:
+            start_bone_hash = struct_get_str(chain, 'start_bonename')
+            end_bone_hash = struct_get_str(chain, 'end_bonename')
+            operator.report({'WARNING'}, f'Could not match bones for a bone chain, skipping. {start_bone_hash=}, {end_bone_hash=}')
+            continue
         new_chain: SwingBoneChain = ssd.swing_bone_chains.add()
         new_chain.name            = struct_get_str(chain, 'name')
-        new_chain.start_bone_name = struct_get_str(chain, 'start_bonename')
-        new_chain.end_bone_name   = struct_get_str(chain, 'end_bonename')
+        new_chain.start_bone_name = matched_start_bone.name
+        new_chain.end_bone_name   = matched_end_bone.name
         new_chain.is_skirt        = struct_get_val(chain, 'isskirt')
         new_chain.rotate_order    = struct_get_val(chain, 'rotateorder')
         new_chain.curve_rotate_x  = struct_get_val(chain, 'curverotatex')
-        new_chain.unk_8           = struct_get_val(chain, 0x0f7316a113)
+        unk_8 = struct_get_val(chain, 0x0f7316a113)
+        if unk_8 is not None:
+            new_chain.has_unk_8 = True
+            new_chain.unk_8 = unk_8
+        
         for prc_swing_bone_parameters in list(struct_get(chain, 'params')):
             new_swing_bone: SwingBone           = new_chain.swing_bones.add()
             new_swing_bone.air_resistance       = struct_get_val(prc_swing_bone_parameters, 'airresistance')
@@ -877,27 +822,23 @@ def swing_import(operator: Operator, context: Context, filepath: str):
                     continue
                 new_swing_bone_collision: SwingBoneCollision   = new_swing_bone.collisions.add()
                 new_swing_bone_collision.target_collision_name = str(prc_swing_bone_collision.value)
-    hash_to_blender_bone = {str(pyprc.hash(bone.name.lower())) : bone for bone in arma_data.bones}
-    swing_bone_chains: list[SwingBoneChain] = ssd.swing_bone_chains
-    for swing_bone_chain in swing_bone_chains:
-        starting_blender_bone = arma_data.bones.get(swing_bone_chain.start_bone_name, None) 
-        if starting_blender_bone is None:
-            starting_blender_bone = hash_to_blender_bone.get(str(pyprc.hash(swing_bone_chain.start_bone_name)))
-        if starting_blender_bone is not None:
-            current_blender_bone = starting_blender_bone
-            for swing_bone in swing_bone_chain.swing_bones:
-                swing_bone.name = current_blender_bone.name
-                current_blender_bone = current_blender_bone.children[0]
-        else:
-            for index, swing_bone in enumerate(swing_bone_chain.swing_bones):
-                swing_bone.name = f'Bone {index+1}'
-    
+            # UI Optimization unrelated to import of data
+            new_swing_bone.parent_swing_bone_chain_name = new_chain.name
+    swing_bone_chain: SwingBoneChain
+    swing_bone: SwingBone
+    for swing_bone_chain in ssd.swing_bone_chains:
+        starting_blender_bone = arma_data.bones.get(swing_bone_chain.start_bone_name) 
+        current_blender_bone = starting_blender_bone
+        for swing_bone in swing_bone_chain.swing_bones:
+            swing_bone.name = current_blender_bone.name
+            current_blender_bone = current_blender_bone.children[0]
+
     try:
         prc_spheres = list(dict(prc_root).get(pyprc.hash('spheres')))
     except:
         operator.report({'ERROR'}, 'No "spheres" list in the prc!')
         return
-    raw_hash_to_blender_bone = {pyprc.hash(bone.name.lower()) : bone for bone in arma_data.bones}
+
     for prc_sphere in prc_spheres:
         matched_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(prc_sphere, 'bonename').value)
         if matched_bone is None:
@@ -1020,7 +961,6 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
     context.collection.children.link(swing_master_collection)
     swing_master_collection.children.link(swing_chains_collection)
     swing_master_collection.children.link(collision_shapes_collection)
-    
     
     swing_sphere: Sphere
     for swing_sphere in ssd.spheres:
@@ -1149,6 +1089,7 @@ class SwingBone(PropertyGroup):
     # Properties Below are for UI Only
     name: StringProperty(name='Swing Bone Name') # The swing.prc doesn't track individual bone names
     active_collision_index: IntProperty(name='Active Collision Index', default=0) 
+    parent_swing_bone_chain_name: StringProperty(name='Parent Swing Bone Chain') # Save the name of the parent for faster lookup in the UI later.
 
 class SwingBoneChain(PropertyGroup):
     name: StringProperty(name='SwingBoneChain Name Hash40')
@@ -1157,7 +1098,8 @@ class SwingBoneChain(PropertyGroup):
     is_skirt: BoolProperty(name='Is Skirt')
     rotate_order: IntProperty(name='Rotate Order')
     curve_rotate_x: BoolProperty(name='Curve Rotate X')
-    unk_8: IntProperty(name='0x0f7316a113')
+    has_unk_8: BoolProperty(name='Has Unk 8', default=False)
+    unk_8: IntProperty(name='0x0f7316a113', default=0)
     swing_bones: CollectionProperty(type=SwingBone)
     # Properties below are for UI Only
     active_swing_bone_index: IntProperty(name='Active Bone Index', default=0)
