@@ -698,6 +698,8 @@ def make_mesh_data(operator, context, export_mesh_groups):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
+            # TODO: Tangents won't be calculated properly if there are splits?
+            # TODO: Is it better to use Blender's mikktspace tangents?
             if split_duplicate_uvs(mesh_object_copy, mesh):
                 message = f'Mesh {mesh.name} has more than one UV coord per vertex.'
                 message += ' Splitting duplicate UV edges on temporary mesh for export.'
@@ -852,25 +854,25 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
         ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
     # Calculate tangents now that the necessary attributes are initialized.
+    # Use Blender's implementation since it uses mikktspace.
+    # Mikktspace is necessary to properly bake normal maps in Blender or external programs.
+    # This addresses a number of consistency issues with how normals are encoded/decoded.
+    # This will be similar to the in game tangents apart from different smoothing.
+    # The vanilla tangents can still cause seams, so they aren't worth preserving.
+    mesh.data.calc_tangents()
+
     tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
 
-    # Assume tangents always use the first UV map since normal maps always use map1 in game.
-    if len(ssbh_mesh_object.texture_coordinates) == 0:
-        message = f'Mesh {mesh_name} has no UV maps. Cannot calculate tangents.'
-        message += ' Add a UV map named "map1" in Object Data Properties > UV Maps.'
-        raise RuntimeError(message)
+    loop_tangents = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
+    mesh.data.loops.foreach_get("tangent", loop_tangents)
 
-    try:
-        # No axis correction is needed here since we're using the transformed positions and normals.
-        tangent0.data = ssbh_data_py.mesh_data.calculate_tangents_vec4(ssbh_mesh_object.positions[0].data, 
-                    ssbh_mesh_object.normals[0].data, 
-                    ssbh_mesh_object.texture_coordinates[0].data,
-                    ssbh_mesh_object.vertex_indices)
-    except Exception as e:
-        # TODO (SMG): Only catch ssbh_data_py.MeshDataError once ssbh_data_py is updated.
-        message = f'Failed to calculate tangents for mesh {mesh_name}: {e}.'
-        raise RuntimeError(message)
-    
+    loop_bitangent_signs = np.zeros(len(mesh.data.loops), dtype=np.float32)
+    mesh.data.loops.foreach_get("bitangent_sign", loop_bitangent_signs)
+
+    tangents = per_loop_to_per_vertex(loop_tangents, vertex_indices, (len(mesh.data.vertices), 3))
+    bitangent_signs = per_loop_to_per_vertex(loop_bitangent_signs, vertex_indices, (len(mesh.data.vertices), 1))
+    tangent0.data = np.append(tangents @ axis_correction, bitangent_signs * -1.0, axis=1)
+
     ssbh_mesh_object.tangents = [tangent0]
             
     return ssbh_mesh_object
