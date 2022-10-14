@@ -38,6 +38,65 @@ class SUB_PT_swing_io(Panel):
         row = layout.row(align=True)
         row.operator('sub.swing_export', icon='EXPORT')
 
+class SUB_PT_active_bone_swing_info(Panel):
+    bl_label = 'Ultimate Swing Data'
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'bone'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_bone
+
+    def draw(self, context):
+        active_bone: bpy.types.Bone = context.active_object.data.bones.get(context.active_bone.name) 
+        sub_swing_data: SubSwingData = context.object.data.sub_swing_data
+        sub_swing_blender_bone_data: SubSwingBlenderBoneData = active_bone.sub_swing_blender_bone_data
+        layout = self.layout
+        col = layout.column()
+        chain_index = sub_swing_blender_bone_data.swing_bone_chain_index
+        if not active_bone.name.startswith('S_'):
+            col.label(text='This bone does not start with "S_",')
+            col.label(text='so it cannot be part of a swing bone chain')
+            return
+        if active_bone.name.endswith('_null'):
+            col.label(text='This is a "null" swing bone,') 
+            col.label(text='so it contains no swing info,')
+            col.label(text='but it is needed for the swing chain to properly function.')
+            return
+        if chain_index == -1:
+            col.label(text='This swing bone is not part of a swing bone chain')
+            return
+        swing_bone_chain: SwingBoneChain = sub_swing_data.swing_bone_chains[chain_index]
+        col.label(text=f'Swing Bone Chain Name: {swing_bone_chain.name}')
+        swing_bone: SwingBone = swing_bone_chain.swing_bones[sub_swing_blender_bone_data.swing_bone_index]
+        col.label(text=f'Swing Bone Collisions')
+        col.template_list(
+                        'SUB_UL_swing_bone_collisions',
+                        '',
+                        swing_bone,
+                        'collisions',
+                        swing_bone,
+                        'active_collision_index',
+                        rows=5,
+                        maxrows=5,
+                    )
+        col.label(text='Swing Bone Props:')
+        col.prop(swing_bone, 'air_resistance')
+        col.prop(swing_bone, 'water_resistance')
+        col.prop(swing_bone, 'angle_z')
+        col.prop(swing_bone, 'angle_y')
+        col.prop(swing_bone, 'collision_size')
+        col.prop(swing_bone, 'friction_rate')
+        col.prop(swing_bone, 'goal_strength')
+        col.prop(swing_bone, 'unk_11')
+        col.prop(swing_bone, 'local_gravity')
+        col.prop(swing_bone, 'fall_speed_scale')
+        col.prop(swing_bone, 'ground_hit')
+        col.prop(swing_bone, 'wind_affect')
+
+
 class SwingPropertyPanel: # Mix-in for the swing info property panel classes
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -822,16 +881,17 @@ def swing_import(operator: Operator, context: Context, filepath: str):
                     continue
                 new_swing_bone_collision: SwingBoneCollision   = new_swing_bone.collisions.add()
                 new_swing_bone_collision.target_collision_name = str(prc_swing_bone_collision.value)
-            # UI Optimization unrelated to import of data
-            new_swing_bone.parent_swing_bone_chain_name = new_chain.name
     swing_bone_chain: SwingBoneChain
     swing_bone: SwingBone
-    for swing_bone_chain in ssd.swing_bone_chains:
+    for chain_index, swing_bone_chain in enumerate(ssd.swing_bone_chains):
         starting_blender_bone = arma_data.bones.get(swing_bone_chain.start_bone_name) 
         current_blender_bone = starting_blender_bone
-        for swing_bone in swing_bone_chain.swing_bones:
+        for bone_index, swing_bone in enumerate(swing_bone_chain.swing_bones):
             swing_bone.name = current_blender_bone.name
+            current_blender_bone.sub_swing_blender_bone_data.swing_bone_chain_index = chain_index
+            current_blender_bone.sub_swing_blender_bone_data.swing_bone_index = bone_index
             current_blender_bone = current_blender_bone.children[0]
+            
 
     try:
         prc_spheres = list(dict(prc_root).get(pyprc.hash('spheres')))
@@ -1089,7 +1149,6 @@ class SwingBone(PropertyGroup):
     # Properties Below are for UI Only
     name: StringProperty(name='Swing Bone Name') # The swing.prc doesn't track individual bone names
     active_collision_index: IntProperty(name='Active Collision Index', default=0) 
-    parent_swing_bone_chain_name: StringProperty(name='Parent Swing Bone Chain') # Save the name of the parent for faster lookup in the UI later.
 
 class SwingBoneChain(PropertyGroup):
     name: StringProperty(name='SwingBoneChain Name Hash40')
@@ -1178,3 +1237,14 @@ class SubSwingData(PropertyGroup):
     active_capsule_index: IntProperty(name='Active Capsule', default=0)
     active_plane_index: IntProperty(name='Active Plane', default=0)
     active_connection_index: IntProperty(name='Active Connection', default=0)
+
+# This is for UI only
+class SubSwingBlenderBoneData(PropertyGroup):
+    swing_bone_chain_index: IntProperty(
+        name='Index of swing bone chain this bone belongs to',
+        default= -1,
+    )
+    swing_bone_index: IntProperty(
+        name='Index of the swing bone data of this bone',
+        default= -1,
+    )
