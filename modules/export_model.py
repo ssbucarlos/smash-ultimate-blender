@@ -671,6 +671,9 @@ def make_mesh_data(operator, context, export_mesh_groups):
             mesh_object_copy = mesh.copy()
             mesh_object_copy.data = mesh.data.copy()
 
+            # Auto smooth also enables custom vertex normals.
+            mesh_object_copy.data.use_auto_smooth = True
+
             # Apply any transforms before exporting to preserve vertex positions.
             # Assume the meshes have no children that would inherit their transforms.
             mesh_object_copy.data.transform(mesh_object_copy.matrix_basis)
