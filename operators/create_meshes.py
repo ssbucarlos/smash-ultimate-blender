@@ -3,6 +3,7 @@ import bmesh
 import math
 import numpy
 from math import sqrt, cos, sin, pi, radians
+from mathutils import Vector, Matrix
 from bpy.types import Context, Operator
 from bpy.props import FloatProperty, StringProperty
 
@@ -17,7 +18,8 @@ def verts_from_circle(radius, samples, y):
         verts.append((x,y,z))
     return verts
     
-def make_capsule(object:bpy.types.Object, start_radius, end_radius, length):
+def make_capsule(object:bpy.types.Object, start_radius, end_radius, length, start_offset=Vector([0.0,0.0,0.0]), end_offset=Vector([0.0,0.0,0.0])):
+    # TODO: Figure out offset
     start_verts = verts_from_circle(start_radius, 32, 0.0)
     end_verts = verts_from_circle(end_radius, 32, length)
 
@@ -35,10 +37,10 @@ def make_capsule(object:bpy.types.Object, start_radius, end_radius, length):
     
     object.data.from_pydata(verts, edges, faces)
 
-def make_capsule_object(context, name, start_radius, end_radius, length):
+def make_capsule_object(context, name, start_radius, end_radius, length, start_offset=Vector([0.0,0.0,0.0]), end_offset=Vector([0.0,0.0,0.0])):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
-    make_capsule(obj, start_radius, end_radius, length)
+    make_capsule(obj, start_radius, end_radius, length, start_offset=start_offset, end_offset=end_offset)
     return obj
 
 def make_sphere(object:bpy.types.Object, radius, offset):
@@ -80,6 +82,43 @@ def make_sphere_object(name, radius, offset=[0,0,0]):
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
     make_sphere(obj, radius, offset)
     return obj
+
+def make_ellipsoid_object(name, radius=1.0, offset=Vector([0.0,0.0,0.0]), rotation=Vector([0.0,0.0,0.0]), scale=Vector([1.0,1.0,1.0])):
+    mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
+    obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
+    make_sphere(obj, radius, Vector([0.0, 0.0, 0.0]))
+    obj_data: bpy.types.Mesh = obj.data
+    vert: bpy.types.MeshVertex
+    for vert in obj_data.vertices:
+        co: Vector = vert.co.copy()
+        vert.co = ((co.x*scale.x , co.y*scale.y, co.z*scale.z))
+    rmx = Matrix.Rotation(radians(rotation.x), 3, 'X')
+    rmy = Matrix.Rotation(radians(rotation.y), 3, 'Y')
+    rmz = Matrix.Rotation(radians(rotation.z), 3, 'Z')
+    # TODO Is this the right order?
+    rm  = rmy @ rmx @ rmz  # Assuming that smash uses 'XYZ' rotation order, that corresponds to blender 'YXZ' order
+    for vert in obj_data.vertices:
+        co: Vector = vert.co.copy()
+        vert.co = rm @ co
+    for vert in obj_data.vertices:
+        co: Vector = vert.co.copy()
+        vert.co = ((co.x+offset.x, co.y+offset.y, co.z+offset.z))
+    return obj
+
+def make_plane_object(name, nx:float, ny:float , nz:float, d:float):
+    mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
+    obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
+
+    # nx*x + ny*y + nz*z = d
+    # Need to account for edge cases where any of nx ny nz could be 0
+    if [nx,ny,nz].count(0.0) == 1: # Only crosses 2 Axis Plane
+        pass
+    elif [nx,ny,nz].count(0.0) == 2: # Only crosses 1 axis Plane
+        pass
+    else:
+        pass
+
+    
 
 class SUB_OP_make_capsule(Operator):
     bl_idname = 'sub.make_capsule'
