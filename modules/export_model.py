@@ -895,14 +895,14 @@ def get_duplicate_uv_edges(bm, uv_layer):
     return edges_to_split
 
 
-def split_duplicate_uvs(mesh, original_mesh):
+def split_duplicate_uvs(mesh: bpy.types.Object, original_mesh):
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.mode_set(mode = 'EDIT')
 
-    me = mesh.data
+    me: bpy.types.Mesh = mesh.data
     bm = bmesh.from_edit_mesh(me)
 
-    edges_to_split = []
+    edges_to_split: list[bmesh.types.BMEdge] = []
 
     for layer_name in bm.loops.layers.uv.keys():
         uv_layer = bm.loops.layers.uv.get(layer_name)
@@ -911,8 +911,14 @@ def split_duplicate_uvs(mesh, original_mesh):
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
     if len(edges_to_split) > 0:
-        # Remove duplicates to avoid exceptions when splitting.
-        edges_to_split = list(set(edges_to_split))
+        # Before splitting, add the split verts to a vertex group, 
+        #  so that the data transfer modifier can only target these verts.
+        new_vg = mesh.vertex_groups.new(name='_smush_blender_export_seam')
+        layer_deform = bm.verts.layers.deform.active
+        bm.verts.ensure_lookup_table()
+        for edge in edges_to_split:
+            for vert in edge.verts:
+                vert[layer_deform][new_vg.index] = 1.0
         bmesh.ops.split_edges(bm, edges=edges_to_split)
         bmesh.update_edit_mesh(me)
 
@@ -924,9 +930,10 @@ def split_duplicate_uvs(mesh, original_mesh):
         # Copy the original normals to preserve smooth shading.
         # TODO: Investigate preserving smooth tangents as well.
         bpy.context.view_layer.objects.active = mesh
-        modifier = mesh.modifiers.new(name='Transfer Normals', type='DATA_TRANSFER')
+        modifier: bpy.types.DataTransferModifier = mesh.modifiers.new(name='Transfer Normals', type='DATA_TRANSFER')
         modifier.object = original_mesh
         modifier.data_types_loops = {'CUSTOM_NORMAL'}
+        modifier.vertex_group = new_vg.name
         bpy.ops.object.modifier_apply(modifier=modifier.name)
 
     bpy.context.view_layer.objects.active = None
