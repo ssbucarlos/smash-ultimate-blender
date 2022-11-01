@@ -38,7 +38,7 @@ class MeshData:
 
 class MeshObjectData:
     name: str
-    sub_index: int
+    subindex: int
     parent_bone_name: str
     disable_depth_test: bool
     disable_depth_write: bool
@@ -55,7 +55,7 @@ class MeshObjectData:
     def __init__(
         self,
         name: str,
-        sub_index: int,
+        subindex: int,
         parent_bone_name: str = '',
         disable_depth_test: bool = False,
         disable_depth_write: bool = False,

@@ -32,10 +32,31 @@ class BoneData:
     name: str
     transform: list[list[float]]
     parent_index: Optional[int]
+    billboard_type: BillboardType
 
     def __init__(
         self,
         name: str,
         transform: list[list[float]],
-        parent_index: Optional[int]
+        parent_index: Optional[int] = None,
+        billboard_type: BillboardType = BillboardType.Disabled
     ) -> None: ...
+
+
+class BillboardType:
+    name: str
+    value: int
+
+    Disabled: ClassVar[BillboardType]
+    XAxisViewPointAligned: ClassVar[BillboardType]
+    YAxisViewPointAligned: ClassVar[BillboardType]
+    Unk3: ClassVar[BillboardType]
+    XYAxisViewPointAligned: ClassVar[BillboardType]
+    YAxisViewPlaneAligned: ClassVar[BillboardType]
+    XYAxisViewPlaneAligned: ClassVar[BillboardType]
+
+    @staticmethod
+    def from_value(value: int) -> Optional[BillboardType]: ...
+
+    @staticmethod
+    def from_str(value: str) -> Optional[BillboardType]: ...

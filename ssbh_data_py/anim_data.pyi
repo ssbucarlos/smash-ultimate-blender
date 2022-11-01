@@ -64,13 +64,15 @@ class TrackData:
     values: Union[list[UvTransform], list[Transform],
                   list[float], list[bool], list[int], list[list[float]]]
     scale_options: ScaleOptions
+    transform_flags: TransformFlags
 
     def __init__(
         self,
         name: str,
         values: Union[list[UvTransform], list[Transform],
                   list[float], list[bool], list[int], list[list[float]]] = [],
-        scale_options: ScaleOptions = ScaleOptions()
+        scale_options: ScaleOptions = ScaleOptions(),
+        transform_flags: TransformFlags = TransformFlags()
     ) -> None: ...
 
 
