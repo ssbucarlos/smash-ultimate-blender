@@ -8,6 +8,7 @@ import bmesh
 import json
 import subprocess
 import re
+import traceback
 
 from pathlib import Path
 from bpy_extras.io_utils import ImportHelper
@@ -272,7 +273,7 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
     try:
         ssbh_skel_data, prc = make_skel(operator, context, linked_nusktb_settings)
     except RuntimeError as e:
-        operator.report({'ERROR'}, str(e))
+        operator.report({'ERROR'},  f'Failed to make skel for export, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
         return
 
     # The uniform buffer for bone transformations in the skinning shader has a fixed size.
@@ -285,14 +286,14 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
     try:
         ssbh_skel_data.save(path)
     except Exception as e:
-        operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+        operator.report({'ERROR'}, f'Failed to save .nusktb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     prc_path = str(folder.joinpath('update.prc'))
     if prc:
         try:
             prc.save(prc_path)
         except Exception as e:
-            operator.report({'ERROR'}, f'Failed to save {prc_path}: {e}')
+            operator.report({'ERROR'}, f'Failed to save update.prc, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
 
 def create_and_save_meshex(operator, folder, ssbh_mesh_data):
@@ -329,14 +330,14 @@ def create_and_save_matl(operator, folder, export_meshes):
         materials = get_mesh_materials(operator, export_meshes)
         ssbh_matl = make_matl(operator, materials)
     except RuntimeError as e:
-        operator.report({'ERROR'}, str(e))
+        operator.report({'ERROR'}, f'Failed to prepare .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
         return
 
     path = str(folder.joinpath('model.numatb'))
     try:
         ssbh_matl.save(path)
     except Exception as e:
-        operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+        operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
         
 def get_material_label_from_mesh(operator, mesh):
@@ -1007,9 +1008,13 @@ def read_vanilla_nusktb(path, mode):
 def get_ssbh_bone(blender_bone: bpy.types.EditBone, parent_index):
     if blender_bone.parent:
         unreoriented_matrix = get_smash_transform(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
-        return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
+        m = list(list(r) for r in unreoriented_matrix)
+        #return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, m, parent_index)
     else:
-        return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_smash_root_transform(blender_bone), None)
+        m = list(list(r) for r in get_smash_root_transform(blender_bone))
+        #return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_smash_root_transform(blender_bone), None)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, m, None)
 
 
 def bone_order(bones, name):

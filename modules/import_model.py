@@ -573,10 +573,10 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     # Users can still choose to not export the matl.
     # TODO: Report errors to the user?
     try:
-        material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.sub_index)]
+        material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.subindex)]
         blender_mesh.materials.append(material)
     except Exception as e:
-        print(f'Failed to assign material for {ssbh_mesh_object.name}{ssbh_mesh_object.sub_index}: {e}')
+        print(f'Failed to assign material for {ssbh_mesh_object.name}{ssbh_mesh_object.subindex}: {e}')
 
 
     return blender_mesh
@@ -611,7 +611,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
             print(f'Failed to create material for {label}:  Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     name_index_mat_dict = { 
-        (e.mesh_object_name,e.mesh_object_sub_index):label_to_material_dict[e.material_label] 
+        (e.mesh_object_name,e.mesh_object_subindex):label_to_material_dict[e.material_label] 
         for e in ssbh_model.entries if e.material_label in label_to_material_dict
     }
 
