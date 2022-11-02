@@ -4,7 +4,7 @@ from bpy.props import CollectionProperty, PointerProperty, StringProperty, IntPr
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
-    from .helper_bone_data import SubHelperBoneData, InterpolationEntry
+    from .helper_bone_data import SubHelperBoneData, OrientConstraint
     from bpy.types import PoseBone
 
 def poll_armatures(self, obj:bpy.types.Object):
@@ -293,7 +293,7 @@ class SUB_OP_make_combined_skeleton(Operator):
                 continue
             if paired_bone.parent:
                 shbd: SubHelperBoneData = new_arma.data.sub_helper_bone_data
-                new_interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
+                new_interpolation_entry: OrientConstraint = shbd.orient_constraints.add()
                 new_interpolation_entry.name = f'nuHelperBoneRotateInterp{3000+index}'
                 new_interpolation_entry.parent_bone_name1 = paired_bone.parent.name
                 new_interpolation_entry.parent_bone_name2 = paired_bone.parent.name

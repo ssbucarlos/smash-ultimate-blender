@@ -20,7 +20,7 @@ from mathutils import Matrix
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
-    from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
+    from .helper_bone_data import SubHelperBoneData, AimConstraint, OrientConstraint
     from bpy.types import PoseBone, EditBone, CopyRotationConstraint, DampedTrackConstraint
 
 class SUB_PT_import_model(Panel):
@@ -170,7 +170,7 @@ class SUB_OP_import_model(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def import_model(self, context):
+def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
     ssp:SubSceneProperties = context.scene.sub_scene_properties
     dir = Path(ssp.model_import_folder_path)
     numdlb_name = dir.joinpath(ssp.model_import_numdlb_file_name)
@@ -193,13 +193,13 @@ def import_model(self, context):
     try:
         armature = create_armature(ssbh_skel, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+        operator.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     try:
         create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
     except Exception as e:
-        self.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-
+        operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+    '''
     try:
         nuhlpb_json = read_nuhlpb_json(str(nuhlpb_name)) if nuhlpb_name != '' else None
     except Exception as e:
@@ -208,7 +208,16 @@ def import_model(self, context):
     if nuhlpb_json is not None:
         import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
         setup_helper_bone_constraints(armature)
-
+    '''
+    if nuhlpb_name != '':
+        try:
+            read_nuhlpb_data(nuhlpb_name, armature)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to import NUHLPB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+        else:
+            setup_helper_bone_constraints(armature)
+        
+        
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
 
@@ -933,12 +942,56 @@ def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.type
         specified_collection.objects.link(copy)
     return copy
 
+def read_nuhlpb_data(nuhlpb_path: Path, armature: bpy.types.Armature):
+    ssbh_hlpb = ssbh_data_py.hlpb_data.read_hlpb(str(nuhlpb_path))
+    shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
+    shbd.major_version = ssbh_hlpb.major_version
+    shbd.minor_version = ssbh_hlpb.minor_version
+    for ssbh_aim_constraint in ssbh_hlpb.aim_constraints:
+        new_aim_constraint: AimConstraint    = shbd.aim_constraints.add()
+        new_aim_constraint.name              = ssbh_aim_constraint.name
+        new_aim_constraint.aim_bone_name1    = ssbh_aim_constraint.aim_bone_name1
+        new_aim_constraint.aim_bone_name2    = ssbh_aim_constraint.aim_bone_name2
+        new_aim_constraint.aim_type1         = ssbh_aim_constraint.aim_type1
+        new_aim_constraint.aim_type2         = ssbh_aim_constraint.aim_type2
+        new_aim_constraint.target_bone_name1 = ssbh_aim_constraint.target_bone_name1
+        new_aim_constraint.target_bone_name2 = ssbh_aim_constraint.target_bone_name2
+        new_aim_constraint.aim               = ssbh_aim_constraint.aim
+        new_aim_constraint.up                = ssbh_aim_constraint.up
+        new_aim_constraint.quat1             = [ssbh_aim_constraint.quat1[3], #Smash is XYZW but blender is WXYZ 
+                                                ssbh_aim_constraint.quat1[0],
+                                                ssbh_aim_constraint.quat1[1],
+                                                ssbh_aim_constraint.quat1[2],]
+        new_aim_constraint.quat2             = [ssbh_aim_constraint.quat2[3], #Smash is XYZW but blender is WXYZ 
+                                                ssbh_aim_constraint.quat2[0],
+                                                ssbh_aim_constraint.quat2[1],
+                                                ssbh_aim_constraint.quat2[2],]
+    for ssbh_orient_constraint in ssbh_hlpb.orient_constraints:
+        new_orient_constraint: OrientConstraint = shbd.orient_constraints.add()
+        new_orient_constraint.name              = ssbh_orient_constraint.name
+        new_orient_constraint.parent_bone_name1 = ssbh_orient_constraint.parent_bone_name1
+        new_orient_constraint.parent_bone_name2 = ssbh_orient_constraint.parent_bone_name2
+        new_orient_constraint.source_bone_name  = ssbh_orient_constraint.source_bone_name
+        new_orient_constraint.target_bone_name  = ssbh_orient_constraint.target_bone_name
+        new_orient_constraint.unk_type          = ssbh_orient_constraint.unk_type
+        new_orient_constraint.constraint_axes   = ssbh_orient_constraint.constraint_axes
+        new_orient_constraint.quat1             = [ssbh_orient_constraint.quat1[3], #Smash is XYZW but blender is WXYZ 
+                                                   ssbh_orient_constraint.quat1[0],
+                                                   ssbh_orient_constraint.quat1[1],
+                                                   ssbh_orient_constraint.quat1[2],]
+        new_orient_constraint.quat2             = [ssbh_orient_constraint.quat2[3], #Smash is XYZW but blender is WXYZ 
+                                                   ssbh_orient_constraint.quat2[0],
+                                                   ssbh_orient_constraint.quat2[1],
+                                                   ssbh_orient_constraint.quat2[2],]
+        new_orient_constraint.range_min         = ssbh_orient_constraint.range_min
+        new_orient_constraint.range_max         = ssbh_orient_constraint.range_max
+"""
 def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context):
     shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
     shbd.major_version = nuhlpb_json['data']['Hlpb']['major_version']
     shbd.minor_version = nuhlpb_json['data']['Hlpb']['minor_version']
     for json_aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
-        aim_entry: AimEntry             = shbd.aim_entries.add()
+        aim_entry: AimConstraint             = shbd.aim_constraints.add()
         aim_entry.name                  = json_aim_entry['name']
         aim_entry.aim_bone_name1       = json_aim_entry['aim_bone_name1']
         aim_entry.aim_bone_name2       = json_aim_entry['aim_bone_name2'] 
@@ -972,7 +1025,7 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context
         json_range_min  = json_interpolation_entry['range_min']
         json_range_max  = json_interpolation_entry['range_max']
 
-        interpolation_entry: InterpolationEntry = shbd.interpolation_entries.add()
+        interpolation_entry: OrientConstraint = shbd.orient_constraints.add()
         interpolation_entry.name                = json_interpolation_entry['name']
         interpolation_entry.parent_bone_name1   = json_interpolation_entry['bone_name']
         interpolation_entry.parent_bone_name2   = json_interpolation_entry['root_bone_name']
@@ -987,7 +1040,7 @@ def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context
     '''
     list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
     '''
-
+"""
 def create_aim_type_helper_bone_constraints(constraint_name: str, arma: bpy.types.Object,
                                             owner_bone_name: str, target_bone_name: str):
     owner_bone = arma.pose.bones.get(owner_bone_name, None)
@@ -1020,11 +1073,11 @@ def create_interpolation_type_helper_bone_constraints(constraint_name: str, arma
 def setup_helper_bone_constraints(arma: bpy.types.Object):
     bpy.ops.object.mode_set(mode='POSE', toggle=False)
     shbd: SubHelperBoneData = arma.data.sub_helper_bone_data
-    for aim_entry in shbd.aim_entries:
-        aim_entry: AimEntry
+    for aim_entry in shbd.aim_constraints:
+        aim_entry: AimConstraint
         create_aim_type_helper_bone_constraints(aim_entry.name, arma, aim_entry.target_bone_name1, aim_entry.aim_bone_name1)
-    for interpolation_entry in shbd.interpolation_entries:
-        interpolation_entry: InterpolationEntry
+    for interpolation_entry in shbd.orient_constraints:
+        interpolation_entry: OrientConstraint
         constraint_axes: mathutils.Vector = interpolation_entry.constraint_axes
         create_interpolation_type_helper_bone_constraints(
             interpolation_entry.name,

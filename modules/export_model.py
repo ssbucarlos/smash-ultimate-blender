@@ -22,7 +22,7 @@ from .import_model import get_ssbh_lib_json_exe_path
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from bpy.types import EditBone, Mesh, MeshVertex
-    from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
+    from .helper_bone_data import SubHelperBoneData, AimConstraint, OrientConstraint
     from ..properties import SubSceneProperties
 
 class SUB_PT_export_model(Panel):
@@ -173,9 +173,9 @@ def model_export_arma_update(self, context):
     ssp.vanilla_nusktb = ''
     ssp.vanilla_update_prc = ''
 
-def export_model(operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
+def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     # Prepare the scene for export and find the meshes to export.
-    arma = context.scene.sub_scene_properties.model_export_arma
+    arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
     try:
         context.view_layer.objects.active = arma
     except:
@@ -260,7 +260,10 @@ def export_model(operator, context, directory, include_numdlb, include_numshb, i
         create_and_save_meshex(operator, folder, ssbh_mesh_data)
 
     if include_nuhlpb:
-        create_and_save_nuhlpb(folder, arma)
+        try:
+            create_and_save_nuhlpb(folder.joinpath('model.nuhlpb'), arma)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to create .nuhlpb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     end = time.time()
     print(f'Create and save export files in {end - start} seconds')
@@ -1156,7 +1159,7 @@ def make_skel(operator, context, mode):
     bpy.context.view_layer.objects.active = None
     return skel, prc
 
-
+"""
 def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
     ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
     with open(dumped_json_path, 'w') as f:
@@ -1164,8 +1167,43 @@ def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
     subprocess.run([ssbh_lib_json_exe_path, dumped_json_path, output_file_path])
     os.remove(dumped_json_path)
     return
+"""
+
+def create_and_save_nuhlpb(path: Path, arma: bpy.types.Object):
+    shbd: SubHelperBoneData = arma.data.sub_helper_bone_data
+    ssbh_hlpb = ssbh_data_py.hlpb_data.HlpbData()
+    ssbh_hlpb.major_version = shbd.major_version
+    ssbh_hlpb.minor_version = shbd.minor_version
+    ssbh_hlpb.aim_constraints = [ssbh_data_py.hlpb_data.AimConstraintData(
+                                    name=ac.name,
+                                    aim_bone_name1=ac.aim_bone_name1,
+                                    aim_bone_name2=ac.aim_bone_name2,
+                                    aim_type1=ac.aim_type1,
+                                    aim_type2=ac.aim_type2,
+                                    target_bone_name1=ac.target_bone_name1,
+                                    target_bone_name2=ac.target_bone_name2,
+                                    aim=ac.aim,
+                                    up=ac.up,
+                                    quat1=[ac.quat1[1], ac.quat1[2], ac.quat1[3], ac.quat1[0]],
+                                    quat2=[ac.quat2[1], ac.quat2[2], ac.quat2[3], ac.quat2[0]],
+                                    ) for ac in shbd.aim_constraints]
+    ssbh_hlpb.orient_constraints = [ssbh_data_py.hlpb_data.OrientConstraintData(
+                                        name              = oc.name,
+                                        parent_bone_name1 = oc.parent_bone_name1,
+                                        parent_bone_name2 = oc.parent_bone_name2,
+                                        source_bone_name  = oc.source_bone_name,
+                                        target_bone_name  = oc.target_bone_name,
+                                        unk_type          = oc.unk_type,
+                                        constraint_axes   = oc.constraint_axes,
+                                        quat1             =[oc.quat1[1], oc.quat1[2], oc.quat1[3], oc.quat1[0]],
+                                        quat2             =[oc.quat2[1], oc.quat2[2], oc.quat2[3], oc.quat2[0]],
+                                    ) for oc in shbd.orient_constraints]
+    ssbh_hlpb.save(str(path))
+     
 
 
+
+"""
 def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
     shbd:SubHelperBoneData = arma.data.sub_helper_bone_data
 
@@ -1180,8 +1218,8 @@ def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
     nuhlpb_json['data']['Hlpb']['list1'] = []
     nuhlpb_json['data']['Hlpb']['list2'] = []
 
-    for index, arma_aim_entry in enumerate(shbd.aim_entries):
-        arma_aim_entry: AimEntry
+    for index, arma_aim_entry in enumerate(shbd.aim_constraints):
+        arma_aim_entry: AimConstraint
         json_aim_entry = {}
         json_aim_entry['name'] = arma_aim_entry.name
         json_aim_entry['aim_bone_name1'] = arma_aim_entry.aim_bone_name1
@@ -1216,8 +1254,8 @@ def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
         nuhlpb_json['data']['Hlpb']['list1'].append(index)
         nuhlpb_json['data']['Hlpb']['list2'].append(0)
 
-    for index, arma_interpolation_entry in enumerate(shbd.interpolation_entries):
-        arma_interpolation_entry: InterpolationEntry
+    for index, arma_interpolation_entry in enumerate(shbd.orient_constraints):
+        arma_interpolation_entry: OrientConstraint
         arma_interpolation_entry_aoi: Vector = arma_interpolation_entry.constraint_axes
         arma_interpolation_entry_quat1: Vector = arma_interpolation_entry.quat1
         arma_interpolation_entry_quat2: Vector = arma_interpolation_entry.quat2
@@ -1258,3 +1296,4 @@ def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
 
     save_ssbh_json(nuhlpb_json, str(folder.joinpath('model.nuhlpb.tmp.json')), str(folder.joinpath('model.nuhlpb')))
 
+"""
