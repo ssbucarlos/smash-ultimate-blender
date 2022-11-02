@@ -1170,23 +1170,22 @@ def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
 """
 
 def create_and_save_nuhlpb(path: Path, arma: bpy.types.Object):
-    shbd: SubHelperBoneData = arma.data.sub_helper_bone_data
-    ssbh_hlpb = ssbh_data_py.hlpb_data.HlpbData()
-    ssbh_hlpb.major_version = shbd.major_version
-    ssbh_hlpb.minor_version = shbd.minor_version
-    ssbh_hlpb.aim_constraints = [ssbh_data_py.hlpb_data.AimConstraintData(
-                                    name=ac.name,
-                                    aim_bone_name1=ac.aim_bone_name1,
-                                    aim_bone_name2=ac.aim_bone_name2,
-                                    aim_type1=ac.aim_type1,
-                                    aim_type2=ac.aim_type2,
-                                    target_bone_name1=ac.target_bone_name1,
-                                    target_bone_name2=ac.target_bone_name2,
-                                    aim=ac.aim,
-                                    up=ac.up,
-                                    quat1=[ac.quat1[1], ac.quat1[2], ac.quat1[3], ac.quat1[0]],
-                                    quat2=[ac.quat2[1], ac.quat2[2], ac.quat2[3], ac.quat2[0]],
-                                    ) for ac in shbd.aim_constraints]
+    ssbh_hlpb                    = ssbh_data_py.hlpb_data.HlpbData()
+    ssbh_hlpb.major_version      = arma.data.sub_helper_bone_data.major_version
+    ssbh_hlpb.minor_version      = arma.data.sub_helper_bone_data.minor_version
+    ssbh_hlpb.aim_constraints    = [ssbh_data_py.hlpb_data.AimConstraintData(
+                                        name              = ac.name,
+                                        aim_bone_name1    = ac.aim_bone_name1,
+                                        aim_bone_name2    = ac.aim_bone_name2,
+                                        aim_type1         = ac.aim_type1,
+                                        aim_type2         = ac.aim_type2,
+                                        target_bone_name1 = ac.target_bone_name1,
+                                        target_bone_name2 = ac.target_bone_name2,
+                                        aim               = list(ac.aim),
+                                        up                = list(ac.up),
+                                        quat1             = [ac.quat1[1], ac.quat1[2], ac.quat1[3], ac.quat1[0]],
+                                        quat2             = [ac.quat2[1], ac.quat2[2], ac.quat2[3], ac.quat2[0]],
+                                    ) for ac in arma.data.sub_helper_bone_data.aim_constraints]
     ssbh_hlpb.orient_constraints = [ssbh_data_py.hlpb_data.OrientConstraintData(
                                         name              = oc.name,
                                         parent_bone_name1 = oc.parent_bone_name1,
@@ -1194,10 +1193,10 @@ def create_and_save_nuhlpb(path: Path, arma: bpy.types.Object):
                                         source_bone_name  = oc.source_bone_name,
                                         target_bone_name  = oc.target_bone_name,
                                         unk_type          = oc.unk_type,
-                                        constraint_axes   = oc.constraint_axes,
-                                        quat1             =[oc.quat1[1], oc.quat1[2], oc.quat1[3], oc.quat1[0]],
-                                        quat2             =[oc.quat2[1], oc.quat2[2], oc.quat2[3], oc.quat2[0]],
-                                    ) for oc in shbd.orient_constraints]
+                                        constraint_axes   = list(oc.constraint_axes),
+                                        quat1             = [oc.quat1[1], oc.quat1[2], oc.quat1[3], oc.quat1[0]],
+                                        quat2             = [oc.quat2[1], oc.quat2[2], oc.quat2[3], oc.quat2[0]],
+                                    ) for oc in arma.data.sub_helper_bone_data.orient_constraints]
     ssbh_hlpb.save(str(path))
      
 
