@@ -509,13 +509,13 @@ def make_matl(operator, materials):
     return matl
 
 
-def create_material_entry_from_node_group(operator, node):
+def create_material_entry_from_node_group(operator, node: bpy.types.Node):
     material_label = node.inputs['Material Name'].default_value
     entry = ssbh_data_py.matl_data.MatlEntryData(material_label, node.inputs['Shader Label'].default_value)
 
     # The ultimate node group has inputs for each material parameter.
     # Hidden inputs aren't used by the in game shader and should be skipped.
-    inputs = [input for input in node.inputs if input.hide == False]
+    inputs: list[bpy.types.NodeSocket] = [input for input in node.inputs if input.hide == False]
 
     # Multiple inputs may correspond to a single parameter.
     # Avoid exporting the same parameter more than once.
@@ -553,7 +553,7 @@ def create_material_entry_from_node_group(operator, node):
                     
                 # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
                 if len(inputs) == 1:
-                    attribute.data = inputs[0].default_value
+                    attribute.data = list(inputs[0].default_value)
                 elif len(inputs) == 2:
                     # Discard the 4th RGB component and use the explicit alpha instead.
                     attribute.data[:3] = list(inputs[0].default_value)[:3]
@@ -627,7 +627,7 @@ def create_texture_sampler(operator, input, material_label, param_name):
         sampler_data.wrapr = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_r)
         sampler_data.min_filter = ssbh_data_py.matl_data.MinFilter.from_str(sampler_node.min_filter)
         sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
-        sampler_data.border_color = sampler_node.border_color
+        sampler_data.border_color = list(sampler_node.border_color)
         sampler_data.lod_bias = sampler_node.lod_bias
         sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
     except:

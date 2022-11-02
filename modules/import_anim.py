@@ -144,7 +144,7 @@ def import_model_anim(context: bpy.types.Context, filepath,
     material_group = name_group_dict.get('Material', None)
 
     # Find max frame count
-    frame_count = ssbh_anim_data.final_frame_index + 1
+    frame_count = int(ssbh_anim_data.final_frame_index + 1)
 
     scene = context.scene
     arma = scene.sub_scene_properties.anim_import_arma
@@ -491,14 +491,14 @@ Group: 'Camera'
         Track: 'FieldOfView'
         Track: 'NearClip'
 '''
-def import_camera_anim(operator, context, filepath, first_blender_frame):
+def import_camera_anim(operator, context:bpy.types.Context, filepath, first_blender_frame):
     camera = context.scene.sub_scene_properties.anim_import_camera
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
     name_group_dict = {group.group_type.name : group for group in ssbh_anim_data.groups}
     transform_group = name_group_dict.get('Transform')
     camera_group = name_group_dict.get('Camera')
 
-    frame_count = ssbh_anim_data.final_frame_index + 1
+    frame_count = int(ssbh_anim_data.final_frame_index + 1)
     scene = context.scene
     scene.frame_start = first_blender_frame
     scene.frame_end = scene.frame_start + frame_count - 1
