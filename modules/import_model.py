@@ -1,4 +1,3 @@
-import json
 import os
 import os.path
 import bpy
@@ -199,16 +198,7 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
         create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-    '''
-    try:
-        nuhlpb_json = read_nuhlpb_json(str(nuhlpb_name)) if nuhlpb_name != '' else None
-    except Exception as e:
-        self.report({'ERROR'}, f'Failed to import {nuhlpb_name}: Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
-    if nuhlpb_json is not None:
-        import_nuhlpb_data_from_json(nuhlpb_json, armature, context)
-        setup_helper_bone_constraints(armature)
-    '''
     if nuhlpb_name != '':
         try:
             read_nuhlpb_data(nuhlpb_name, armature)
@@ -220,13 +210,6 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
         
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
     return
-
-
-def get_ssbh_lib_json_exe_path():
-    # Use the Path class to handle path differences between Windows, Linux, and MacOS.
-    this_file_path = Path(__file__)
-    return this_file_path.parent.parent.joinpath('ssbh_lib_json').joinpath('ssbh_lib_json.exe').resolve()
-
 
 def get_shader_db_file_path():
     # This file was generated with duplicates removed to optimize space.
@@ -904,43 +887,11 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
     if 'colorSet5' in required_attributes:
         create_and_enable_color_set('colorSet5', 1)
 
-def read_nuhlpb_json(nuhlpb_path) -> str:
-    import subprocess, os
-    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
-    output_json_path = nuhlpb_path + '.json'
-    subprocess.run([ssbh_lib_json_exe_path, nuhlpb_path, output_json_path], capture_output=True, check=True)
-    
-    with open(output_json_path) as f:
-        nuhlpb_json = json.load(f)
-    
-    os.remove(output_json_path)
-
-    return nuhlpb_json
-
-def create_new_empty(name, parent, specified_collection=None) -> bpy.types.Object:
-    empty = bpy.data.objects.new('empty', None)
-    empty.name = name
-
-    if specified_collection is None:
-        bpy.context.collection.objects.link(empty)
-    else:
-        specified_collection.objects.link(empty)
-    empty.parent = parent
-    return empty
-
 def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=None) -> bpy.types.Object:
     for mesh in meshes:
         if mesh.name.startswith(pruned_name):
             return mesh
     return fallback
-
-def copy_empty(original:bpy.types.Object, specified_collection=None) -> bpy.types.Object:
-    copy = original.copy()
-    if specified_collection is None:
-        bpy.context.collection.objects.link(copy)
-    else:
-        specified_collection.objects.link(copy)
-    return copy
 
 def read_nuhlpb_data(nuhlpb_path: Path, armature: bpy.types.Armature):
     ssbh_hlpb = ssbh_data_py.hlpb_data.read_hlpb(str(nuhlpb_path))
@@ -985,62 +936,7 @@ def read_nuhlpb_data(nuhlpb_path: Path, armature: bpy.types.Armature):
                                                    ssbh_orient_constraint.quat2[2],]
         new_orient_constraint.range_min         = ssbh_orient_constraint.range_min
         new_orient_constraint.range_max         = ssbh_orient_constraint.range_max
-"""
-def import_nuhlpb_data_from_json(nuhlpb_json, armature:bpy.types.Object, context):
-    shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
-    shbd.major_version = nuhlpb_json['data']['Hlpb']['major_version']
-    shbd.minor_version = nuhlpb_json['data']['Hlpb']['minor_version']
-    for json_aim_entry in nuhlpb_json['data']['Hlpb']['aim_entries']:
-        aim_entry: AimConstraint             = shbd.aim_constraints.add()
-        aim_entry.name                  = json_aim_entry['name']
-        aim_entry.aim_bone_name1       = json_aim_entry['aim_bone_name1']
-        aim_entry.aim_bone_name2       = json_aim_entry['aim_bone_name2'] 
-        aim_entry.aim_type1            = json_aim_entry['aim_type1']
-        aim_entry.aim_type2            = json_aim_entry['aim_type2']
-        aim_entry.target_bone_name1    = json_aim_entry['target_bone_name1'] 
-        aim_entry.target_bone_name2    = json_aim_entry['target_bone_name2']
-        aim_entry.unk1                 = json_aim_entry['unk1']
-        aim_entry.unk2                 = json_aim_entry['unk2']
-        aim_entry.aim                  = [json_aim_entry['unk3'], json_aim_entry['unk4'], json_aim_entry['unk5']]
-        aim_entry.up                   = [json_aim_entry['unk6'], json_aim_entry['unk7'], json_aim_entry['unk8']]
-        aim_entry.quat1                = [json_aim_entry['unk12'], #Smash is XYZW but blender is WXYZ 
-                                          json_aim_entry['unk9'], 
-                                          json_aim_entry['unk10'], 
-                                          json_aim_entry['unk11']]  
-        aim_entry.quat2                = [json_aim_entry['unk16'], #Smash is XYZW but blender is WXYZ 
-                                          json_aim_entry['unk13'], 
-                                          json_aim_entry['unk14'], 
-                                          json_aim_entry['unk15']]    
-        aim_entry.unk17                = json_aim_entry['unk17']   
-        aim_entry.unk18                = json_aim_entry['unk18']   
-        aim_entry.unk19                = json_aim_entry['unk19']   
-        aim_entry.unk20                = json_aim_entry['unk20']   
-        aim_entry.unk21                = json_aim_entry['unk21']   
-        aim_entry.unk22                = json_aim_entry['unk22']
 
-    for json_interpolation_entry in nuhlpb_json['data']['Hlpb']['interpolation_entries']:
-        json_aoi        = json_interpolation_entry['aoi']
-        json_quat1      = json_interpolation_entry['quat1']
-        json_quat2      = json_interpolation_entry['quat2']
-        json_range_min  = json_interpolation_entry['range_min']
-        json_range_max  = json_interpolation_entry['range_max']
-
-        interpolation_entry: OrientConstraint = shbd.orient_constraints.add()
-        interpolation_entry.name                = json_interpolation_entry['name']
-        interpolation_entry.parent_bone_name1   = json_interpolation_entry['bone_name']
-        interpolation_entry.parent_bone_name2   = json_interpolation_entry['root_bone_name']
-        interpolation_entry.source_bone_name    = json_interpolation_entry['parent_bone_name']
-        interpolation_entry.target_bone_name    = json_interpolation_entry['driver_bone_name']
-        interpolation_entry.unk_type            = json_interpolation_entry['unk_type']
-        interpolation_entry.constraint_axes     = [json_aoi['x'], json_aoi['y'], json_aoi['z']]
-        interpolation_entry.quat1               = [json_quat1['w'], json_quat1['x'], json_quat1['y'], json_quat1['z']]
-        interpolation_entry.quat2               = [json_quat2['w'], json_quat2['x'], json_quat2['y'], json_quat2['z']]
-        interpolation_entry.range_min           = [json_range_min['x'], json_range_min['y'], json_range_min['z']]
-        interpolation_entry.range_max           = [json_range_max['x'], json_range_max['y'], json_range_max['z']]        
-    '''
-    list_one and list_two can be inferred from the aim and interpolation entries, so no need to track
-    '''
-"""
 def create_aim_type_helper_bone_constraints(constraint_name: str, arma: bpy.types.Object,
                                             owner_bone_name: str, target_bone_name: str):
     owner_bone = arma.pose.bones.get(owner_bone_name, None)

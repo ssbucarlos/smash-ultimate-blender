@@ -1,4 +1,5 @@
-import bpy, json, math
+import bpy 
+import math
 from bpy.types import Object, PropertyGroup, UIList, Operator, Panel
 from bpy.props import CollectionProperty, PointerProperty, StringProperty, IntProperty
 from typing import TYPE_CHECKING
