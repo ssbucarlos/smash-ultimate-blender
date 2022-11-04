@@ -264,11 +264,9 @@ def get_index_from_name(name, bones):
 
 def get_blender_transform(m, transpose=True) -> Matrix:
     m = Matrix(m)
-
     # TODO(SMG): Transposing won't be necessary in the next ssbh_data_py update.
     if transpose:
         m.transpose()
-
     # In Ultimate, the bone's x-axis points from parent to child.
     # In Blender, the bone's y-axis points from parent to child.
     # https://en.wikipedia.org/wiki/Matrix_similarity
@@ -450,7 +448,7 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
                 bone.bone_group = system_group
                 bone.bone.layers[16] = False
                 bone.bone.layers[17] = False
-                bone.bone.use_deform = False
+                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to '_null' or '_eff' or '_offset' bones
 
     bpy.ops.object.mode_set(mode='OBJECT')
     end = time.time()
