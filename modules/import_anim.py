@@ -319,7 +319,7 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
     transform_group = name_to_group_dict.get('Transform') if include_transform_track else None
     if transform_group:
         bones: list[bpy.types.PoseBone] = arma.pose.bones
-        bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
+        bone_to_node = {bones[n.name]:n for n in transform_group.nodes if n.name in bones}
         reordered: list[bpy.types.PoseBone] = get_heirarchy_order(list(bones)) # Do this to gaurantee we never process a child before its parent
         bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves) for b in bone_to_node.keys()} # only create fcurves for animated bones
         bone_to_rel_matrix_local = {b:b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local for b in bones if b.parent}
@@ -337,10 +337,11 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
                         bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
                     continue 
                 t = translation = node.tracks[0].values[index].translation
+                #if node.tracks[0].transform_flags.override_translation is True:
+                #    from .export_model import get_smash_transform
+                #    t = list(get_smash_transform(bone_to_rel_matrix_local[bone]).to_translation())
                 r = rotation = node.tracks[0].values[index].rotation
                 s = scale = node.tracks[0].values[index].scale
-                compensate_scale = node.tracks[0].scale_options.compensate_scale
-                inherit_scale = node.tracks[0].scale_options.inherit_scale
                 tm = translation_matrix = Matrix.Translation(t)
                 qr = quaternion_rotation = Quaternion([r[3], r[0], r[1], r[2]])
                 rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
@@ -357,6 +358,17 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
                     parent_matrix = bone_to_matrix[bone.parent]
                     pose_matrix = parent_matrix @ fixed_child_matrix
                     matrix_basis: Matrix = bone_to_rel_matrix_local[bone].inverted() @ parent_matrix.inverted() @ pose_matrix
+                    mbtv, mbrq, mbsv = matrix_basis.decompose()
+                    if node.tracks[0].transform_flags.override_translation is True:
+                        mbtv = [0.0, 0.0, 0.0]
+                    mbtm = Matrix.Translation(mbtv)
+                    if node.tracks[0].transform_flags.override_rotation is True:
+                        mbrq = Quaternion([1,0,0,0])
+                    mbrm = Matrix.Rotation(mbrq.angle, 4, mbrq.axis)
+                    if node.tracks[0].transform_flags.override_scale is True:
+                        mbsv = [1.0, 1.0, 1.0]
+                    mbsm = Matrix.Diagonal((mbsv[0], mbsv[1], mbsv[2], 1.0))
+                    matrix_basis = (mbtm @ mbrm @ mbsm)
                     bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
                     bone_fcurves.stash_keyframe_set_from_matrix(frame, matrix_basis)
         for bone, bone_fcurves in bone_to_fcurves.items():
