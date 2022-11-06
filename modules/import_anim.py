@@ -4,6 +4,7 @@ import mathutils
 import re
 import collections
 import time
+import numpy as np
 
 from .. import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
@@ -90,6 +91,12 @@ class SUB_OP_import_model_anim(Operator, ImportHelper):
         description='Imports directly to keyframes without updating scene',
         default=True,
     )
+
+    use_debug_timer: BoolProperty(
+        name='Debug timing stats',
+        description='Print advance import timing info to the console',
+        default=True,
+    )
     @classmethod
     def poll(cls, context):
         ssp: SubSceneProperties = context.scene.sub_scene_properties
@@ -116,17 +123,25 @@ class SUB_OP_import_model_anim(Operator, ImportHelper):
         import pstats
         if self.use_fast_import is True:
             print('Starting Fast Import...')
-            start = time.perf_counter()
-            with cProfile.Profile() as pr:
+            if self.use_debug_timer is True:
+                start = time.perf_counter()
+                with cProfile.Profile() as pr:
+                    import_model_anim_fast(context, self.filepath,
+                                    self.include_transform_track, self.include_material_track,
+                                    self.include_visibility_track, self.first_blender_frame)
+                stats = pstats.Stats(pr)
+                stats.sort_stats(pstats.SortKey.TIME)
+                end = time.perf_counter()
+                print(f'Fast import finished in {end-start} seconds!')
+                print(f'Fast Stats Below')
+                stats.print_stats()
+            else:
+                start = time.perf_counter()
                 import_model_anim_fast(context, self.filepath,
-                                self.include_transform_track, self.include_material_track,
-                                self.include_visibility_track, self.first_blender_frame)
-            stats = pstats.Stats(pr)
-            stats.sort_stats(pstats.SortKey.TIME)
-            end = time.perf_counter()
-            print(f'Fast import finished in {end-start} seconds!')
-            print(f'Fast Stats Below')
-            stats.print_stats()
+                                    self.include_transform_track, self.include_material_track,
+                                    self.include_visibility_track, self.first_blender_frame)
+                end = time.perf_counter()
+                print(f'Fast import finished in {end-start} seconds!')
         else:
             print('Starting Slow Import...')
             start = time.perf_counter()
@@ -177,14 +192,14 @@ def get_heirarchy_order(bone_list: list[bpy.types.PoseBone]) -> list[bpy.types.P
     return [root_bone] + [c for c in root_bone.children_recursive if c in bone_list]
 
 class BoneTranslationFCurves():
-    def __init__(self, fcurves, bone_name):
+    def __init__(self, fcurves, bone_name, values_length):
         self.data_path = f'pose.bones["{bone_name}"].location'
         self.x: bpy.types.FCurve = fcurves.new(self.data_path , index=0, action_group=f'{bone_name}')
         self.y: bpy.types.FCurve = fcurves.new(self.data_path , index=1, action_group=f'{bone_name}')
         self.z: bpy.types.FCurve = fcurves.new(self.data_path , index=2, action_group=f'{bone_name}')
-        self.x_stashed_values: list[(int, float)] = []
-        self.y_stashed_values: list[(int, float)] = []
-        self.z_stashed_values: list[(int, float)] = []
+        self.x_stashed_values = [[0.0, 0.0]] * values_length
+        self.y_stashed_values = [[0.0, 0.0]] * values_length
+        self.z_stashed_values = [[0.0, 0.0]] * values_length
     def get_translation_matrix(self, index: int):
         if index < len(self.x.keyframe_points):
             x = self.x_stashed_values[index][1]
@@ -195,10 +210,11 @@ class BoneTranslationFCurves():
             y = self.y_stashed_values[0][1]
             z = self.z_stashed_values[0][1]
         return Matrix.Translation([x,y,z])
-    def stash_keyframe_set_from_vector(self, frame, scale_vector: Vector):
-        self.x_stashed_values.append((frame, scale_vector.x))
-        self.y_stashed_values.append((frame, scale_vector.y))
-        self.z_stashed_values.append((frame, scale_vector.z))
+    def stash_keyframe_set_from_vector(self, index, frame, translation_vector: Vector):
+        x, y, z = translation_vector
+        self.x_stashed_values[index] = [frame, x]
+        self.y_stashed_values[index] = [frame, y]
+        self.z_stashed_values[index] = [frame, z]
     def set_keyframe_values_from_stash(self):
         self.x.keyframe_points.add(count=len(self.x_stashed_values))
         self.y.keyframe_points.add(count=len(self.y_stashed_values))
@@ -208,6 +224,7 @@ class BoneTranslationFCurves():
         self.z.keyframe_points.foreach_set('co', [x for tup in self.z_stashed_values for x in tup])
 
 class BoneRotationFCurves():
+    '''
     def __init__(self, fcurves, base_data_path, bone_name):
         self.w: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=0, action_group=f'{bone_name}')
         self.x: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=1, action_group=f'{bone_name}')
@@ -217,6 +234,16 @@ class BoneRotationFCurves():
         self.x_stashed_values: list[(int,float)] = []
         self.y_stashed_values: list[(int,float)] = []
         self.z_stashed_values: list[(int,float)] = []
+    '''
+    def __init__(self, fcurves, base_data_path, bone_name, values_length):
+        self.w: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=0, action_group=f'{bone_name}')
+        self.x: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=1, action_group=f'{bone_name}')
+        self.y: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=2, action_group=f'{bone_name}')
+        self.z: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=3, action_group=f'{bone_name}')
+        self.w_stashed_values = [[0.0, 0.0]] * values_length
+        self.x_stashed_values = [[0.0, 0.0]] * values_length
+        self.y_stashed_values = [[0.0, 0.0]] * values_length
+        self.z_stashed_values = [[0.0, 0.0]] * values_length
     def get_rotation_matrix(self, index: int):
         if index < len(self.w.keyframe_points):
             w = self.w_stashed_values[index][1]
@@ -230,11 +257,19 @@ class BoneRotationFCurves():
             z = self.z_stashed_values[0][1]           
         q = Quaternion([w,x,y,z])
         return Matrix.Rotation(q.angle, 4, q.axis)
-    def stash_keyframe_values_from_quaternion(self, frame, quaternion: Quaternion):
+    '''
+    def stash_keyframe_values_from_quaternion(self, index, frame, quaternion: Quaternion):
         self.w_stashed_values.append((frame, quaternion.w))
         self.x_stashed_values.append((frame, quaternion.x))
         self.y_stashed_values.append((frame, quaternion.y))
         self.z_stashed_values.append((frame, quaternion.z))
+    '''
+    def stash_keyframe_values_from_quaternion(self, index, frame, quaternion: Quaternion):
+        w,x,y,z = quaternion
+        self.w_stashed_values[index] = [frame, w]
+        self.x_stashed_values[index] = [frame, x]
+        self.y_stashed_values[index] = [frame, y]
+        self.z_stashed_values[index] = [frame, z]
     def set_keyframe_values_from_stash(self):
         self.w.keyframe_points.add(count=len(self.w_stashed_values))
         self.x.keyframe_points.add(count=len(self.x_stashed_values))
@@ -246,13 +281,13 @@ class BoneRotationFCurves():
         self.z.keyframe_points.foreach_set('co', [x for tup in self.z_stashed_values for x in tup])
 
 class BoneScaleFCurves():
-    def __init__(self, fcurves, base_data_path, bone_name):
+    def __init__(self, fcurves, base_data_path, bone_name, values_length):
         self.x: bpy.types.FCurve = fcurves.new(f'{base_data_path}.scale', index=0, action_group=f'{bone_name}')
         self.y: bpy.types.FCurve = fcurves.new(f'{base_data_path}.scale', index=1, action_group=f'{bone_name}')
         self.z: bpy.types.FCurve = fcurves.new(f'{base_data_path}.scale', index=2, action_group=f'{bone_name}')
-        self.x_stashed_values: list[(int, float)] = []
-        self.y_stashed_values: list[(int, float)] = []
-        self.z_stashed_values: list[(int, float)] = []
+        self.x_stashed_values = [[0.0, 0.0]] * values_length
+        self.y_stashed_values = [[0.0, 0.0]] * values_length
+        self.z_stashed_values = [[0.0, 0.0]] * values_length
     def get_scale_matrix(self, index: int):
         if index < len(self.x.keyframe_points):
             x = self.x_stashed_values[index][1]
@@ -263,10 +298,11 @@ class BoneScaleFCurves():
             y = self.y_stashed_values[0][1]
             z = self.z_stashed_values[0][1]
         return Matrix.Diagonal([x,y,z,1.0])
-    def stash_keyframe_set_from_vector(self, frame, scale_vector: Vector):
-        self.x_stashed_values.append((frame, scale_vector.x))
-        self.y_stashed_values.append((frame, scale_vector.y))
-        self.z_stashed_values.append((frame, scale_vector.z))
+    def stash_keyframe_set_from_vector(self, index, frame, scale_vector: Vector):
+        x, y, z = scale_vector
+        self.x_stashed_values[index] = [frame, x]
+        self.y_stashed_values[index] = [frame, y]
+        self.z_stashed_values[index] = [frame, z]
     def set_keyframe_values_from_stash(self):
         self.x.keyframe_points.add(count=len(self.x_stashed_values))
         self.y.keyframe_points.add(count=len(self.y_stashed_values))
@@ -276,22 +312,37 @@ class BoneScaleFCurves():
         self.z.keyframe_points.foreach_set('co', [x for tup in self.z_stashed_values for x in tup])
 
 class BoneFCurves():
+    '''
     def __init__(self, bone_name, fcurves):
         self.bone_name: str = bone_name
         self.base_data_path: str = f'pose.bones["{bone_name}"]'
         self.translation = BoneTranslationFCurves(fcurves, bone_name)
         self.rotation = BoneRotationFCurves(fcurves, self.base_data_path, bone_name)
         self.scale = BoneScaleFCurves(fcurves, self.base_data_path, bone_name)
+    '''
+    def __init__(self, bone_name, fcurves, values_length):
+        self.bone_name: str = bone_name
+        self.base_data_path: str = f'pose.bones["{bone_name}"]'
+        self.translation = BoneTranslationFCurves(fcurves, bone_name, values_length)
+        self.rotation = BoneRotationFCurves(fcurves, self.base_data_path, bone_name, values_length)
+        self.scale = BoneScaleFCurves(fcurves, self.base_data_path, bone_name, values_length)
     def get_matrix_basis(self, index):
         tm = self.translation.get_translation_matrix(index)
         rm = self.rotation.get_rotation_matrix(index)
         sm = self.scale.get_scale_matrix(index)
         return Matrix(tm @ rm @ sm)
+    '''
     def stash_keyframe_set_from_matrix(self, frame, matrix: Matrix):
         t, r, s = matrix.decompose()
         self.translation.stash_keyframe_set_from_vector(frame, t)
         self.rotation.stash_keyframe_values_from_quaternion(frame, r)
         self.scale.stash_keyframe_set_from_vector(frame, s)
+    '''
+    def stash_keyframe_set_from_matrix(self, index, frame, matrix: Matrix):
+        t, r, s = matrix.decompose()
+        self.translation.stash_keyframe_set_from_vector(index, frame, t)
+        self.rotation.stash_keyframe_values_from_quaternion(index, frame, r)
+        self.scale.stash_keyframe_set_from_vector(index, frame, s)
     def set_keyframe_values_from_stash(self):
         self.translation.set_keyframe_values_from_stash()
         self.rotation.set_keyframe_values_from_stash()
@@ -305,9 +356,12 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
     # Blender Action setup
     arma: bpy.types.Object = context.scene.sub_scene_properties.anim_import_arma
-    if arma.animation_data is None:
+    if arma.animation_data is None: # For the bones
         arma.animation_data_create()
     arma.animation_data.action = bpy.data.actions.new(arma.name + ' ' + Path(filepath).name)
+    if arma.data.animation_data is None: # For vis and mat tracks
+        arma.data.animation_data_create()
+    arma.data.animation_data.action = bpy.data.actions.new(arma.name + ' ' + Path(filepath).name + ' SAP Data')
     # Blender frame range setup
     scene = context.scene
     frame_count = int(ssbh_anim_data.final_frame_index + 1)
@@ -321,7 +375,8 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
         bones: list[bpy.types.PoseBone] = arma.pose.bones
         bone_to_node = {bones[n.name]:n for n in transform_group.nodes if n.name in bones}
         reordered: list[bpy.types.PoseBone] = get_heirarchy_order(list(bones)) # Do this to gaurantee we never process a child before its parent
-        bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves) for b in bone_to_node.keys()} # only create fcurves for animated bones
+        #bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves) for b in bone_to_node.keys()} # only create fcurves for animated bones
+        bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves, len(n.tracks[0].values)) for b,n in bone_to_node.items()} # only create fcurves for animated bones
         bone_to_rel_matrix_local = {b:b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local for b in bones if b.parent}
         bone_to_matrix: dict[bpy.types.PoseBone, Matrix] = {}
         for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
@@ -337,9 +392,6 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
                         bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
                     continue 
                 t = translation = node.tracks[0].values[index].translation
-                #if node.tracks[0].transform_flags.override_translation is True:
-                #    from .export_model import get_smash_transform
-                #    t = list(get_smash_transform(bone_to_rel_matrix_local[bone]).to_translation())
                 r = rotation = node.tracks[0].values[index].rotation
                 s = scale = node.tracks[0].values[index].scale
                 tm = translation_matrix = Matrix.Translation(t)
@@ -347,11 +399,18 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
                 rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
                 # Blender doesn't have this built in for some reason.
                 scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
+                '''
+                if node.tracks[0].scale_options.compensate_scale is True:
+                    parent_scale_vector: Vector = parent_matrix.to_scale()
+                    sc = Vector([1.0/x for x in parent_scale_vector])
+                    scale_compensation_mat = Matrix.Diagonal((sc[0], sc[1], sc[2], 1.0))
+                    raw_matrix = mathutils.Matrix(tm @ scale_compensation_mat @ rm @ scale_matrix)
+                '''
                 raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)
                 bone_fcurves = bone_to_fcurves[bone]
                 if bone.parent is None: # The root bone
                     fixed_matrix = get_blender_transform(raw_matrix, transpose=False)
-                    bone_fcurves.stash_keyframe_set_from_matrix(frame, fixed_matrix)
+                    bone_fcurves.stash_keyframe_set_from_matrix(index, frame, fixed_matrix)
                     bone_to_matrix[bone] = fixed_matrix
                 else:
                     fixed_child_matrix = get_blender_transform(raw_matrix, transpose=False)
@@ -368,14 +427,34 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
                     if node.tracks[0].transform_flags.override_scale is True:
                         mbsv = [1.0, 1.0, 1.0]
                     mbsm = Matrix.Diagonal((mbsv[0], mbsv[1], mbsv[2], 1.0))
+
                     matrix_basis = (mbtm @ mbrm @ mbsm)
                     bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
-                    bone_fcurves.stash_keyframe_set_from_matrix(frame, matrix_basis)
+                    bone_fcurves.stash_keyframe_set_from_matrix(index, frame, matrix_basis)
         for bone, bone_fcurves in bone_to_fcurves.items():
             bone_fcurves.set_keyframe_values_from_stash()
-
-
     # Visibility group import stuff
+    visibility_group = name_to_group_dict.get('Visibility') if include_visibility_track else None
+    if visibility_group:
+        sap: SubAnimProperties = arma.data.sub_anim_properties
+        for node in visibility_group.nodes:
+            # Setup vis_tracks in sub_anim_properties incase they haven't already been setup
+            sub_vis_track_entry = sap.vis_track_entries.get(node.name)
+            if sub_vis_track_entry is None:
+                sub_vis_track_entry = sap.vis_track_entries.add()
+                sub_vis_track_entry.name = node.name
+            # Setup FCurve
+            sub_vis_track_entry_index = sap.vis_track_entries.find(sub_vis_track_entry.name)
+            data_path = f'sub_anim_properties.vis_track_entries[{sub_vis_track_entry_index}].value'
+            fcurve = arma.data.animation_data.action.fcurves.new(data_path, action_group='Visibility')
+            # Now create and set the keyframe points
+            fcurve.keyframe_points.add(count=len(node.tracks[0].values))
+            frame_and_value_flattened = []
+            for index, value in enumerate(node.tracks[0].values):
+                frame_and_value_flattened.extend([scene.frame_start + index, value])
+            fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+        setup_visibility_drivers(arma)
+            
 
     # Material group import stuff
 
