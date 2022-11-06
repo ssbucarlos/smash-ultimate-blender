@@ -896,44 +896,36 @@ def read_nuhlpb_data(nuhlpb_path: Path, armature: bpy.types.Armature):
     shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
     shbd.major_version = ssbh_hlpb.major_version
     shbd.minor_version = ssbh_hlpb.minor_version
-    for ssbh_aim_constraint in ssbh_hlpb.aim_constraints:
-        new_aim_constraint: AimConstraint    = shbd.aim_constraints.add()
-        new_aim_constraint.name              = ssbh_aim_constraint.name
-        new_aim_constraint.aim_bone_name1    = ssbh_aim_constraint.aim_bone_name1
-        new_aim_constraint.aim_bone_name2    = ssbh_aim_constraint.aim_bone_name2
-        new_aim_constraint.aim_type1         = ssbh_aim_constraint.aim_type1
-        new_aim_constraint.aim_type2         = ssbh_aim_constraint.aim_type2
-        new_aim_constraint.target_bone_name1 = ssbh_aim_constraint.target_bone_name1
-        new_aim_constraint.target_bone_name2 = ssbh_aim_constraint.target_bone_name2
-        new_aim_constraint.aim               = ssbh_aim_constraint.aim
-        new_aim_constraint.up                = ssbh_aim_constraint.up
-        new_aim_constraint.quat1             = [ssbh_aim_constraint.quat1[3], #Smash is XYZW but blender is WXYZ 
-                                                ssbh_aim_constraint.quat1[0],
-                                                ssbh_aim_constraint.quat1[1],
-                                                ssbh_aim_constraint.quat1[2],]
-        new_aim_constraint.quat2             = [ssbh_aim_constraint.quat2[3], #Smash is XYZW but blender is WXYZ 
-                                                ssbh_aim_constraint.quat2[0],
-                                                ssbh_aim_constraint.quat2[1],
-                                                ssbh_aim_constraint.quat2[2],]
-    for ssbh_orient_constraint in ssbh_hlpb.orient_constraints:
-        new_orient_constraint: OrientConstraint = shbd.orient_constraints.add()
-        new_orient_constraint.name              = ssbh_orient_constraint.name
-        new_orient_constraint.parent_bone_name1 = ssbh_orient_constraint.parent_bone_name1
-        new_orient_constraint.parent_bone_name2 = ssbh_orient_constraint.parent_bone_name2
-        new_orient_constraint.source_bone_name  = ssbh_orient_constraint.source_bone_name
-        new_orient_constraint.target_bone_name  = ssbh_orient_constraint.target_bone_name
-        new_orient_constraint.unk_type          = ssbh_orient_constraint.unk_type
-        new_orient_constraint.constraint_axes   = ssbh_orient_constraint.constraint_axes
-        new_orient_constraint.quat1             = [ssbh_orient_constraint.quat1[3], #Smash is XYZW but blender is WXYZ 
-                                                   ssbh_orient_constraint.quat1[0],
-                                                   ssbh_orient_constraint.quat1[1],
-                                                   ssbh_orient_constraint.quat1[2],]
-        new_orient_constraint.quat2             = [ssbh_orient_constraint.quat2[3], #Smash is XYZW but blender is WXYZ 
-                                                   ssbh_orient_constraint.quat2[0],
-                                                   ssbh_orient_constraint.quat2[1],
-                                                   ssbh_orient_constraint.quat2[2],]
-        new_orient_constraint.range_min         = ssbh_orient_constraint.range_min
-        new_orient_constraint.range_max         = ssbh_orient_constraint.range_max
+    for a in ssbh_hlpb.aim_constraints:
+        constraint: AimConstraint = shbd.aim_constraints.add()
+        constraint.name = a.name
+        constraint.aim_bone_name1 = a.aim_bone_name1
+        constraint.aim_bone_name2 = a.aim_bone_name2
+        constraint.aim_type1 = a.aim_type1
+        constraint.aim_type2 = a.aim_type2
+        constraint.target_bone_name1 = a.target_bone_name1
+        constraint.target_bone_name2 = a.target_bone_name2
+        constraint.aim = a.aim
+        constraint.up = a.up
+        # Smash is XYZW but blender is WXYZ
+        constraint.quat1 = [a.quat1[3],  a.quat1[0], a.quat1[1], a.quat1[2]]
+        # Smash is XYZW but blender is WXYZ
+        constraint.quat2 = [a.quat2[3],  a.quat2[0], a.quat2[1], a.quat2[2]]
+    for o in ssbh_hlpb.orient_constraints:
+        constraint: OrientConstraint = shbd.orient_constraints.add()
+        constraint.name = o.name
+        constraint.parent_bone_name1 = o.parent_bone_name1
+        constraint.parent_bone_name2 = o.parent_bone_name2
+        constraint.source_bone_name = o.source_bone_name
+        constraint.target_bone_name = o.target_bone_name
+        constraint.unk_type = o.unk_type
+        constraint.constraint_axes = o.constraint_axes
+        # Smash is XYZW but blender is WXYZ
+        constraint.quat1 = [o.quat1[3], o.quat1[0], o.quat1[1], o.quat1[2]]
+        # Smash is XYZW but blender is WXYZ
+        constraint.quat2 = [o.quat2[3], o.quat2[0], o.quat2[1], o.quat2[2]]
+        constraint.range_min = o.range_min
+        constraint.range_max = o.range_max
 
 def create_aim_type_helper_bone_constraints(constraint_name: str, arma: bpy.types.Object,
                                             owner_bone_name: str, target_bone_name: str):
