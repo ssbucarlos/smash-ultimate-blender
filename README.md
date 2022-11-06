@@ -3,8 +3,6 @@
 
 Blender Plugin that contains utilities for Smash Ultimate models and animations.
 
-**Blender 3.1 support is planned for a future update but not supported at this time. You can download Blender 3.0 from https://download.blender.org/release/Blender3.0/**
-
 ## Installation
 Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for tutorials and usage instructions. 
 1. Click the green Code button and select Download ZIP. Don't unzip the file.
@@ -14,8 +12,8 @@ Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for 
 ![image](https://user-images.githubusercontent.com/77519735/131579719-3bf859ac-40ad-4661-8b4c-0d0d0e34da8a.png)
 
 ## System Requirements
-The plugin supports 64-bit versions of Blender 2.93 or 3.0 for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
-If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues). **The nuhlpb import/export and the exo skel feature require a Windows machine. This will be fixed in a future update.**
+The plugin supports 64-bit versions of Blender 3.3 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
+If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues).
 
 ## Uninstalling / Updating (Please Read!)
 TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then you can install the newest version.
