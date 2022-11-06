@@ -16,7 +16,7 @@ from pathlib import Path
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .anim_data import SubAnimProperties
+    from .anim_data import SubAnimProperties, MatTrack, MatTrackProperty
     from ..properties import SubSceneProperties
     from bpy.types import ShaderNodeGroup, Material
 
@@ -453,10 +453,100 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
             for index, value in enumerate(node.tracks[0].values):
                 frame_and_value_flattened.extend([scene.frame_start + index, value])
             fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
-        setup_visibility_drivers(arma)
-            
-
     # Material group import stuff
+    material_group = name_to_group_dict.get('Material') if include_material_track else None
+    if material_group:
+        sap: SubAnimProperties = arma.data.sub_anim_properties
+        # Initial Setup
+        for node in material_group.nodes:
+            mat_track: MatTrack = sap.mat_tracks.get(node.name)
+            if mat_track is None:
+                mat_track = sap.mat_tracks.add()
+                mat_track.name = node.name
+            for track in node.tracks:
+                prop: MatTrackProperty = mat_track.properties.get(track.name)
+                if prop is None:
+                    prop = mat_track.properties.add()
+                    prop.name = track.name
+                prop.name = track.name
+                if 'CustomBoolean' in track.name:
+                    prop.sub_type = 'BOOL'
+                elif 'CustomFloat' in track.name:
+                    prop.sub_type = 'FLOAT'
+                elif 'CustomVector' in track.name:
+                    prop.sub_type = 'VECTOR'
+                elif 'PatternIndex' in track.name:
+                    prop.sub_type = 'PATTERN'
+                elif 'Texture' in track.name:
+                    prop.sub_type = 'TEXTURE'
+                else:
+                    raise TypeError(f'Unsupported track name {track.name}')
+        # Now import the values
+        for node in material_group.nodes:
+            mat_track: MatTrack = sap.mat_tracks.get(node.name)
+            mat_track_index = sap.mat_tracks.find(mat_track.name)
+            for track in node.tracks:
+                prop = mat_track.properties.get(track.name)
+                prop_index = mat_track.properties.find(prop.name)
+                if prop.sub_type == 'VECTOR':
+                    data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector'
+                    for index in (0,1,2,3):
+                        vector_index_values = [vector[index] for vector in track.values]
+                        fcurve = arma.data.animation_data.action.fcurves.new(data_path, index=index, action_group=f'Material ({mat_track.name})')
+                        fcurve.keyframe_points.add(count=len(vector_index_values))
+                        frame_and_value_flattened = []
+                        for index, value in enumerate(vector_index_values):
+                            frame_and_value_flattened.extend([scene.frame_start + index, value])
+                        fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+                elif prop.sub_type == 'FLOAT':
+                    data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_float'
+                    fcurve = arma.data.animation_data.action.fcurves.new(data_path, action_group=f'Material ({mat_track.name})')
+                    fcurve.keyframe_points.add(count=len(track.values))
+                    frame_and_value_flattened = []
+                    for index, value in enumerate(track.values):
+                        frame_and_value_flattened.extend([scene.frame_start + index, value])
+                    fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+                elif prop.sub_type == 'BOOL':
+                    data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_bool'
+                    fcurve = arma.data.animation_data.action.fcurves.new(data_path, action_group=f'Material ({mat_track.name})')
+                    fcurve.keyframe_points.add(count=len(track.values))
+                    frame_and_value_flattened = []
+                    for index, value in enumerate(track.values):
+                        frame_and_value_flattened.extend([scene.frame_start + index, value])
+                    fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+                elif prop.sub_type == 'PATTERN':
+                    data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].pattern_index'
+                    fcurve = arma.data.animation_data.action.fcurves.new(data_path, action_group=f'Material ({mat_track.name})')
+                    fcurve.keyframe_points.add(count=len(track.values))
+                    frame_and_value_flattened = []
+                    for index, value in enumerate(track.values):
+                        frame_and_value_flattened.extend([scene.frame_start + index, value])
+                    fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+                elif prop.sub_type == 'TEXTURE':
+                    data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].texture_transform'
+                    for index in (0,1,2,3,4):
+                        if index == 0:
+                            vector_index_values = [uv_transform.scale_u for uv_transform in track.values]
+                        elif index == 1:
+                            vector_index_values = [uv_transform.scale_v for uv_transform in track.values]
+                        elif index == 2:
+                            vector_index_values = [uv_transform.rotation for uv_transform in track.values]
+                        elif index == 3:
+                            vector_index_values = [uv_transform.translate_u for uv_transform in track.values]
+                        elif index == 4:
+                            vector_index_values = [uv_transform.translate_v for uv_transform in track.values]
+                        fcurve = arma.data.animation_data.action.fcurves.new(data_path, index=index, action_group=f'Material ({mat_track.name})')
+                        fcurve.keyframe_points.add(count=len(vector_index_values))
+                        frame_and_value_flattened = []
+                        for index, value in enumerate(vector_index_values):
+                            frame_and_value_flattened.extend([scene.frame_start + index, value])
+                        fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+    
+    if visibility_group:
+        setup_visibility_drivers(arma)
+    if material_group:
+        setup_material_drivers(arma)
+                    
 
 def import_model_anim(context: bpy.types.Context, filepath,
                     include_transform_track, include_material_track,
