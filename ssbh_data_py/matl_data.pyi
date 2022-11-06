@@ -554,7 +554,7 @@ class CullMode:
 
     Back: ClassVar[CullMode]
     Front: ClassVar[CullMode]
-    None: ClassVar[CullMode]
+    Disabled: ClassVar[CullMode]
 
     @staticmethod
     def from_value(value: int) -> Optional[CullMode]: ...

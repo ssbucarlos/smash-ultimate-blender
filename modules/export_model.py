@@ -5,9 +5,8 @@ import os.path
 import numpy as np
 import math
 import bmesh
-import json
-import subprocess
 import re
+import traceback
 
 from pathlib import Path
 from bpy_extras.io_utils import ImportHelper
@@ -17,11 +16,11 @@ from .. import ssbh_data_py
 from .. import pyprc
 from mathutils import Vector, Matrix
 from ..operators import material_inputs
-from .import_model import get_ssbh_lib_json_exe_path
+
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from bpy.types import EditBone, Mesh, MeshVertex
-    from .helper_bone_data import SubHelperBoneData, AimEntry, InterpolationEntry
+    from .helper_bone_data import SubHelperBoneData, AimConstraint, OrientConstraint
     from ..properties import SubSceneProperties
 
 class SUB_PT_export_model(Panel):
@@ -172,9 +171,9 @@ def model_export_arma_update(self, context):
     ssp.vanilla_nusktb = ''
     ssp.vanilla_update_prc = ''
 
-def export_model(operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
+def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     # Prepare the scene for export and find the meshes to export.
-    arma = context.scene.sub_scene_properties.model_export_arma
+    arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
     try:
         context.view_layer.objects.active = arma
     except:
@@ -259,7 +258,10 @@ def export_model(operator, context, directory, include_numdlb, include_numshb, i
         create_and_save_meshex(operator, folder, ssbh_mesh_data)
 
     if include_nuhlpb:
-        create_and_save_nuhlpb(folder, arma)
+        try:
+            create_and_save_nuhlpb(folder.joinpath('model.nuhlpb'), arma)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to create .nuhlpb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     end = time.time()
     print(f'Create and save export files in {end - start} seconds')
@@ -272,7 +274,7 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
     try:
         ssbh_skel_data, prc = make_skel(operator, context, linked_nusktb_settings)
     except RuntimeError as e:
-        operator.report({'ERROR'}, str(e))
+        operator.report({'ERROR'},  f'Failed to make skel for export, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
         return
 
     # The uniform buffer for bone transformations in the skinning shader has a fixed size.
@@ -285,14 +287,14 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
     try:
         ssbh_skel_data.save(path)
     except Exception as e:
-        operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+        operator.report({'ERROR'}, f'Failed to save .nusktb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     prc_path = str(folder.joinpath('update.prc'))
     if prc:
         try:
             prc.save(prc_path)
         except Exception as e:
-            operator.report({'ERROR'}, f'Failed to save {prc_path}: {e}')
+            operator.report({'ERROR'}, f'Failed to save update.prc, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
 
 def create_and_save_meshex(operator, folder, ssbh_mesh_data):
@@ -329,14 +331,14 @@ def create_and_save_matl(operator, folder, export_meshes):
         materials = get_mesh_materials(operator, export_meshes)
         ssbh_matl = make_matl(operator, materials)
     except RuntimeError as e:
-        operator.report({'ERROR'}, str(e))
+        operator.report({'ERROR'}, f'Failed to prepare .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
         return
 
     path = str(folder.joinpath('model.numatb'))
     try:
         ssbh_matl.save(path)
     except Exception as e:
-        operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+        operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
         
 def get_material_label_from_mesh(operator, mesh):
@@ -508,13 +510,13 @@ def make_matl(operator, materials):
     return matl
 
 
-def create_material_entry_from_node_group(operator, node):
+def create_material_entry_from_node_group(operator, node: bpy.types.Node):
     material_label = node.inputs['Material Name'].default_value
     entry = ssbh_data_py.matl_data.MatlEntryData(material_label, node.inputs['Shader Label'].default_value)
 
     # The ultimate node group has inputs for each material parameter.
     # Hidden inputs aren't used by the in game shader and should be skipped.
-    inputs = [input for input in node.inputs if input.hide == False]
+    inputs: list[bpy.types.NodeSocket] = [input for input in node.inputs if input.hide == False]
 
     # Multiple inputs may correspond to a single parameter.
     # Avoid exporting the same parameter more than once.
@@ -552,7 +554,7 @@ def create_material_entry_from_node_group(operator, node):
                     
                 # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
                 if len(inputs) == 1:
-                    attribute.data = inputs[0].default_value
+                    attribute.data = list(inputs[0].default_value)
                 elif len(inputs) == 2:
                     # Discard the 4th RGB component and use the explicit alpha instead.
                     attribute.data[:3] = list(inputs[0].default_value)[:3]
@@ -626,7 +628,7 @@ def create_texture_sampler(operator, input, material_label, param_name):
         sampler_data.wrapr = ssbh_data_py.matl_data.WrapMode.from_str(sampler_node.wrap_r)
         sampler_data.min_filter = ssbh_data_py.matl_data.MinFilter.from_str(sampler_node.min_filter)
         sampler_data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str(sampler_node.mag_filter)
-        sampler_data.border_color = sampler_node.border_color
+        sampler_data.border_color = list(sampler_node.border_color)
         sampler_data.lod_bias = sampler_node.lod_bias
         sampler_data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sampler_node.max_anisotropy) if sampler_node.anisotropic_filtering else None
     except:
@@ -1007,9 +1009,13 @@ def read_vanilla_nusktb(path, mode):
 def get_ssbh_bone(blender_bone: bpy.types.EditBone, parent_index):
     if blender_bone.parent:
         unreoriented_matrix = get_smash_transform(blender_bone.parent.matrix.inverted() @ blender_bone.matrix)
-        return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
+        m = list(list(r) for r in unreoriented_matrix)
+        #return ssbh_data_py.skel_data.BoneData(blender_bone.name, unreoriented_matrix, parent_index)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, m, parent_index)
     else:
-        return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_smash_root_transform(blender_bone), None)
+        m = list(list(r) for r in get_smash_root_transform(blender_bone))
+        #return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_smash_root_transform(blender_bone), None)
+        return ssbh_data_py.skel_data.BoneData(blender_bone.name, m, None)
 
 
 def bone_order(bones, name):
@@ -1151,105 +1157,33 @@ def make_skel(operator, context, mode):
     bpy.context.view_layer.objects.active = None
     return skel, prc
 
-
-def save_ssbh_json(ssbh_json, dumped_json_path, output_file_path):
-    ssbh_lib_json_exe_path = get_ssbh_lib_json_exe_path()
-    with open(dumped_json_path, 'w') as f:
-        json.dump(ssbh_json, f, indent=2)
-    subprocess.run([ssbh_lib_json_exe_path, dumped_json_path, output_file_path])
-    os.remove(dumped_json_path)
-    return
-
-
-def create_and_save_nuhlpb(folder, arma:bpy.types.Object):
-    shbd:SubHelperBoneData = arma.data.sub_helper_bone_data
-
-    nuhlpb_json = {}
-    nuhlpb_json['data'] = {}
-    nuhlpb_json['data']['Hlpb'] = {}
-    nuhlpb_json['data']['Hlpb']['major_version'] = shbd.major_version
-    nuhlpb_json['data']['Hlpb']['minor_version'] = shbd.minor_version
-    
-    nuhlpb_json['data']['Hlpb']['aim_entries'] = []
-    nuhlpb_json['data']['Hlpb']['interpolation_entries'] = []
-    nuhlpb_json['data']['Hlpb']['list1'] = []
-    nuhlpb_json['data']['Hlpb']['list2'] = []
-
-    for index, arma_aim_entry in enumerate(shbd.aim_entries):
-        arma_aim_entry: AimEntry
-        json_aim_entry = {}
-        json_aim_entry['name'] = arma_aim_entry.name
-        json_aim_entry['aim_bone_name1'] = arma_aim_entry.aim_bone_name1
-        json_aim_entry['aim_bone_name2'] = arma_aim_entry.aim_bone_name2
-        json_aim_entry['aim_type1'] = arma_aim_entry.aim_type1
-        json_aim_entry['aim_type2'] = arma_aim_entry.aim_type2
-        json_aim_entry['target_bone_name1'] = arma_aim_entry.target_bone_name1
-        json_aim_entry['target_bone_name2'] = arma_aim_entry.target_bone_name2
-        json_aim_entry['unk1'] = arma_aim_entry.unk1
-        json_aim_entry['unk2'] = arma_aim_entry.unk2
-        json_aim_entry['unk3'] = arma_aim_entry.aim.x
-        json_aim_entry['unk4'] = arma_aim_entry.aim.y
-        json_aim_entry['unk5'] = arma_aim_entry.aim.z
-        json_aim_entry['unk6'] = arma_aim_entry.up.x
-        json_aim_entry['unk7'] = arma_aim_entry.up.y
-        json_aim_entry['unk8'] = arma_aim_entry.up.z
-        json_aim_entry['unk9'] = arma_aim_entry.quat1.x
-        json_aim_entry['unk10'] = arma_aim_entry.quat1.y
-        json_aim_entry['unk11'] = arma_aim_entry.quat1.z
-        json_aim_entry['unk12'] = arma_aim_entry.quat1.w
-        json_aim_entry['unk13'] = arma_aim_entry.quat2.x
-        json_aim_entry['unk14'] = arma_aim_entry.quat2.y
-        json_aim_entry['unk15'] = arma_aim_entry.quat2.z
-        json_aim_entry['unk16'] = arma_aim_entry.quat2.w
-        json_aim_entry['unk17'] = arma_aim_entry.unk17
-        json_aim_entry['unk18'] = arma_aim_entry.unk18
-        json_aim_entry['unk19'] = arma_aim_entry.unk19
-        json_aim_entry['unk20'] = arma_aim_entry.unk20
-        json_aim_entry['unk21'] = arma_aim_entry.unk21
-        json_aim_entry['unk22'] = arma_aim_entry.unk22
-        nuhlpb_json['data']['Hlpb']['aim_entries'].append(json_aim_entry)
-        nuhlpb_json['data']['Hlpb']['list1'].append(index)
-        nuhlpb_json['data']['Hlpb']['list2'].append(0)
-
-    for index, arma_interpolation_entry in enumerate(shbd.interpolation_entries):
-        arma_interpolation_entry: InterpolationEntry
-        arma_interpolation_entry_aoi: Vector = arma_interpolation_entry.constraint_axes
-        arma_interpolation_entry_quat1: Vector = arma_interpolation_entry.quat1
-        arma_interpolation_entry_quat2: Vector = arma_interpolation_entry.quat2
-        arma_interpolation_entry_range_min: Vector = arma_interpolation_entry.range_min
-        arma_interpolation_entry_range_max: Vector = arma_interpolation_entry.range_max
-        json_interpolation_entry = {}
-        json_interpolation_entry['name'] = arma_interpolation_entry.name
-        json_interpolation_entry['bone_name'] = arma_interpolation_entry.parent_bone_name1
-        json_interpolation_entry['root_bone_name'] = arma_interpolation_entry.parent_bone_name2
-        json_interpolation_entry['parent_bone_name'] = arma_interpolation_entry.source_bone_name
-        json_interpolation_entry['driver_bone_name'] = arma_interpolation_entry.target_bone_name
-        json_interpolation_entry['unk_type'] = arma_interpolation_entry.unk_type
-        json_interpolation_entry['aoi'] = {}
-        json_interpolation_entry['aoi']['x'] = arma_interpolation_entry_aoi.x
-        json_interpolation_entry['aoi']['y'] = arma_interpolation_entry_aoi.y
-        json_interpolation_entry['aoi']['z'] = arma_interpolation_entry_aoi.z
-        json_interpolation_entry['quat1'] = {}
-        json_interpolation_entry['quat1']['x'] = arma_interpolation_entry_quat1.x
-        json_interpolation_entry['quat1']['y'] = arma_interpolation_entry_quat1.y
-        json_interpolation_entry['quat1']['z'] = arma_interpolation_entry_quat1.z
-        json_interpolation_entry['quat1']['w'] = arma_interpolation_entry_quat1.w
-        json_interpolation_entry['quat2'] = {}
-        json_interpolation_entry['quat2']['x'] = arma_interpolation_entry_quat2.x
-        json_interpolation_entry['quat2']['y'] = arma_interpolation_entry_quat2.y
-        json_interpolation_entry['quat2']['z'] = arma_interpolation_entry_quat2.z
-        json_interpolation_entry['quat2']['w'] = arma_interpolation_entry_quat2.w
-        json_interpolation_entry['range_min'] = {}
-        json_interpolation_entry['range_min']['x'] = arma_interpolation_entry_range_min.x
-        json_interpolation_entry['range_min']['y'] = arma_interpolation_entry_range_min.y
-        json_interpolation_entry['range_min']['z'] = arma_interpolation_entry_range_min.z
-        json_interpolation_entry['range_max'] = {}
-        json_interpolation_entry['range_max']['x'] = arma_interpolation_entry_range_max.x
-        json_interpolation_entry['range_max']['y'] = arma_interpolation_entry_range_max.y
-        json_interpolation_entry['range_max']['z'] = arma_interpolation_entry_range_max.z
-        nuhlpb_json['data']['Hlpb']['interpolation_entries'].append(json_interpolation_entry)
-        nuhlpb_json['data']['Hlpb']['list1'].append(index)
-        nuhlpb_json['data']['Hlpb']['list2'].append(1)
-
-    save_ssbh_json(nuhlpb_json, str(folder.joinpath('model.nuhlpb.tmp.json')), str(folder.joinpath('model.nuhlpb')))
-
+def create_and_save_nuhlpb(path: Path, arma: bpy.types.Object):
+    ssbh_hlpb                    = ssbh_data_py.hlpb_data.HlpbData()
+    ssbh_hlpb.major_version      = arma.data.sub_helper_bone_data.major_version
+    ssbh_hlpb.minor_version      = arma.data.sub_helper_bone_data.minor_version
+    ssbh_hlpb.aim_constraints    = [ssbh_data_py.hlpb_data.AimConstraintData(
+                                        name              = ac.name,
+                                        aim_bone_name1    = ac.aim_bone_name1,
+                                        aim_bone_name2    = ac.aim_bone_name2,
+                                        aim_type1         = ac.aim_type1,
+                                        aim_type2         = ac.aim_type2,
+                                        target_bone_name1 = ac.target_bone_name1,
+                                        target_bone_name2 = ac.target_bone_name2,
+                                        aim               = list(ac.aim),
+                                        up                = list(ac.up),
+                                        quat1             = [ac.quat1[1], ac.quat1[2], ac.quat1[3], ac.quat1[0]],
+                                        quat2             = [ac.quat2[1], ac.quat2[2], ac.quat2[3], ac.quat2[0]],
+                                    ) for ac in arma.data.sub_helper_bone_data.aim_constraints]
+    ssbh_hlpb.orient_constraints = [ssbh_data_py.hlpb_data.OrientConstraintData(
+                                        name              = oc.name,
+                                        parent_bone_name1 = oc.parent_bone_name1,
+                                        parent_bone_name2 = oc.parent_bone_name2,
+                                        source_bone_name  = oc.source_bone_name,
+                                        target_bone_name  = oc.target_bone_name,
+                                        unk_type          = oc.unk_type,
+                                        constraint_axes   = list(oc.constraint_axes),
+                                        quat1             = [oc.quat1[1], oc.quat1[2], oc.quat1[3], oc.quat1[0]],
+                                        quat2             = [oc.quat2[1], oc.quat2[2], oc.quat2[3], oc.quat2[0]],
+                                    ) for oc in arma.data.sub_helper_bone_data.orient_constraints]
+    ssbh_hlpb.save(str(path))
+     

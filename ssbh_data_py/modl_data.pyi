@@ -27,12 +27,12 @@ class ModlData:
 
 class ModlEntryData:
     mesh_object_name: str
-    mesh_object_sub_index: int
+    mesh_object_subindex: int
     material_label: str
 
     def __init__(
         self,
         mesh_object_name: str,
-        mesh_object_sub_index: int,
+        mesh_object_subindex: int,
         material_label: str
     ) -> None: ...

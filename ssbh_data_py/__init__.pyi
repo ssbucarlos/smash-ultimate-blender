@@ -5,3 +5,4 @@ from .anim_data import *
 from .adj_data import *
 from .matl_data import *
 from .meshex_data import *
+from .hlpb_data import *
