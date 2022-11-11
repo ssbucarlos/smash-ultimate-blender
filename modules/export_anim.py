@@ -250,7 +250,14 @@ def export_model_anim(context, filepath,
                         track.values = [track.values[0]]
                 elif all(value == track.values[0] for value in track.values):
                     track.values = [track.values[0]]
-        
+    
+    # fix for the error `ssbh_data_py.AnimDataError: Scale options of ScaleOptions { inherit_scale: false, compensate_scale: false } cannot be preserved for a uncompressed track.`
+    for group in ssbh_anim_data.groups:
+        for node in group.nodes:
+            for track in node.tracks:
+                if len(track.values) == 1:
+                    track.scale_options = ssbh_data_py.anim_data.ScaleOptions(True, False)
+                    
     ssbh_anim_data.save(filepath)
 
 def transform_group_fix_floating_point_inaccuracies(trans_group: ssbh_data_py.anim_data.GroupData):
@@ -334,11 +341,7 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
     for bone in animated_bones:
         node = ssbh_data_py.anim_data.NodeData(bone.name)
         track = ssbh_data_py.anim_data.TrackData('Transform')
-        bone_is = bone.get('inherit_scale')
-        bone_cs = bone.get('compensate_scale')
-        track.scale_options = ssbh_data_py.anim_data.ScaleOptions(
-            bool(bone_is) if bone_is is not None else True,
-            bool(bone_cs) if bone_cs is not None else True)
+        track.scale_options = ssbh_data_py.anim_data.ScaleOptions(False, False)
         node.tracks.append(track)
         trans_group.nodes.append(node)
     name_to_node = {node.name:node for node in trans_group.nodes}
