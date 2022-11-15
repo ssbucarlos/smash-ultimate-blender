@@ -384,7 +384,8 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
             for bone in reordered:
                 node = bone_to_node.get(bone)
                 if node is None: # Some bones may not be animated, but their children may be
-                    bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone]
+                    if bone.parent:
+                        bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone]
                     continue
                 if index >= len(node.tracks[0].values): # Bones either have a value on the first frame, or every frame
                     if bone.parent:
