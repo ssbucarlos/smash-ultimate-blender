@@ -15,13 +15,7 @@ bl_info = {
 import bpy
 import sys
 import traceback
-'''
-from . import modules
-from . import operators
-from . import properties
-from . import shaders
-from . import properties
-'''
+
 def check_unsupported_blender_versions():
     if bpy.app.version < (3, 1):
         #sys.tracebacklimit = 0 # TODO: research what this does
