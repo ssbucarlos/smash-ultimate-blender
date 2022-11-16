@@ -311,7 +311,7 @@ def make_transform_group(context, first_blender_frame, last_blender_frame):
     arma: bpy.types.Object = ssp.anim_export_arma
     all_bone_names: list[str] = [b.name for b in arma.pose.bones]
     fcurves: list[FCurve] = arma.animation_data.action.fcurves
-    curve_names = {curve.data_path.split('"')[1] for curve in fcurves}
+    curve_names = {curve.data_path.split('"')[1] for curve in fcurves if '"' in curve.data_path}
     animated_bone_names = [cn for cn in curve_names if cn in all_bone_names]
     animated_bones: list[PoseBone] = [bone for bone in arma.pose.bones if bone.name in animated_bone_names]
 
