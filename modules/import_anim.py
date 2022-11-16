@@ -377,7 +377,13 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
         reordered: list[bpy.types.PoseBone] = get_heirarchy_order(list(bones)) # Do this to gaurantee we never process a child before its parent
         #bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves) for b in bone_to_node.keys()} # only create fcurves for animated bones
         bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves, len(n.tracks[0].values)) for b,n in bone_to_node.items()} # only create fcurves for animated bones
-        bone_to_rel_matrix_local = {b:b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local for b in bones if b.parent}
+        #bone_to_rel_matrix_local = {b:b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local for b in bones if b.parent} # non-root bones
+        bone_to_rel_matrix_local = {}
+        for bone in bones:
+            if bone.parent: # non-root bones
+                bone_to_rel_matrix_local[bone] = bone.parent.bone.matrix_local.inverted() @ bone.bone.matrix_local
+            else: # root bones
+                bone_to_rel_matrix_local[bone] = bone.bone.matrix_local
         bone_to_matrix: dict[bpy.types.PoseBone, Matrix] = {}
         for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
             #context.scene.frame_set(frame)
@@ -386,11 +392,16 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
                 if node is None: # Some bones may not be animated, but their children may be
                     if bone.parent:
                         bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone]
+                    else:
+                        bone_to_matrix[bone] = bone_to_rel_matrix_local[bone]
                     continue
                 if index >= len(node.tracks[0].values): # Bones either have a value on the first frame, or every frame
                     if bone.parent:
                         matrix_basis = bone_to_fcurves[bone].get_matrix_basis(0)
                         bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
+                    else: # TODO: This is probably unecessary
+                        matrix_basis = bone_to_fcurves[bone].get_matrix_basis(0)
+                        bone_to_matrix[bone] = bone_to_rel_matrix_local[bone] @ matrix_basis
                     continue 
                 t = translation = node.tracks[0].values[index].translation
                 r = rotation = node.tracks[0].values[index].rotation
