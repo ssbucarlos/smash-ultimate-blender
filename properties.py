@@ -17,30 +17,6 @@ def register():
     )
 
 class SubSceneProperties(PropertyGroup):
-    anim_import_arma: PointerProperty(
-        name='Armature',
-        description='Select the Armature',
-        type=Object,
-        poll=exo_skel.poll_armatures,  
-    )
-    anim_export_arma: PointerProperty(
-        name='Armature',
-        description='Select the Armature',
-        type=Object,
-        poll=exo_skel.poll_armatures,   
-    )
-    anim_import_camera: PointerProperty(
-        name='Camera',
-        description='Select the Camera',
-        type=Object,
-        poll=import_anim.poll_cameras,
-    )
-    anim_export_camera: PointerProperty(
-        name='Camera',
-        description='Select the Camera',
-        type=Object,
-        poll=import_anim.poll_cameras,
-    )
     model_export_arma: PointerProperty(
         name='Armature',
         description='Select the Armature',

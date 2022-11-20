@@ -5,6 +5,8 @@ import re
 import collections
 import time
 import numpy as np
+import cProfile
+import pstats
 
 from .. import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
@@ -17,48 +19,37 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .anim_data import SubAnimProperties, MatTrack, MatTrackProperty
-    from ..properties import SubSceneProperties
     from bpy.types import ShaderNodeGroup, Material
 
 class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_context = "objectmode"
     bl_category = 'Ultimate'
     bl_label = 'Animation Importer'
     bl_options = {'DEFAULT_CLOSED'}
 
+    @classmethod
+    def poll(cls, context):
+        if context.mode == "POSE" or context.mode == "OBJECT":
+            return True
+        return False
+    
     def draw(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        camera: bpy.types.Camera = ssp.anim_import_camera
-        arma: bpy.types.Object = ssp.anim_import_arma
-
         layout = self.layout
         layout.use_property_split = False
-        
-        row = layout.row(align=True)
-        row.label(text="Select an Armature or Camera.")
-        if not arma and not camera:
-            row = layout.row(align=True)
-            row.prop(ssp, 'anim_import_arma', icon='ARMATURE_DATA', text='')
-            row = layout.row(align=True)
-            row.prop(ssp, 'anim_import_camera', icon='VIEW_CAMERA', text='')
-        elif arma:
-            row = layout.row(align=True)
-            row.prop(ssp, 'anim_import_arma', icon='ARMATURE_DATA', text='')
-            if arma.name not in context.view_layer.objects:
-                row = layout.row(align=True)
-                row.label(text='The selected armature is not in the active view layer!', icon='ERROR')
-            row = layout.row(align=True)
-            row.operator('sub.anim_model_importer', icon='IMPORT', text='Import a Model Animation')
-        elif camera:
-            row = layout.row(align=True)
-            row.prop(ssp, 'anim_import_camera', icon='VIEW_CAMERA', text='')
-            row = layout.row(align=True)
-            row.operator('sub.anim_camera_importer', icon='IMPORT', text='Import a Camera Animation')
+        obj: bpy.types.Object = context.active_object
+        row = layout.row()
+        if obj is None:
+            row.label(text="Click on an Armature or Camera.")
+        elif obj.select_get() is False:
+            row.label(text="Click on an Armature or Camera.")
+        elif obj.type == 'ARMATURE' or obj.type == 'CAMERA':
+            row.operator(SUB_OP_import_anim.bl_idname, icon='IMPORT', text='Import .NUANMB')
+        else:
+            row.label(text=f'The selected {obj.type.lower()} is not an armature or a camera.')
 
-class SUB_OP_import_model_anim(Operator, ImportHelper):
-    bl_idname = 'sub.anim_model_importer'
+class SUB_OP_import_anim(Operator, ImportHelper):
+    bl_idname = 'sub.import_anim'
     bl_label = 'Import Anim'
 
     filter_glob: StringProperty(
@@ -85,95 +76,41 @@ class SUB_OP_import_model_anim(Operator, ImportHelper):
         description='What frame to start importing the track on',
         default=1,
     )
-
-    use_fast_import: BoolProperty(
-        name='Fast Import',
-        description='Imports directly to keyframes without updating scene',
-        default=True,
-    )
-
     use_debug_timer: BoolProperty(
         name='Debug timing stats',
         description='Print advance import timing info to the console',
         default=False,
     )
+
     @classmethod
     def poll(cls, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        arma: bpy.types.Object = ssp.anim_import_arma
-        if not arma:
+        obj: bpy.types.Object = context.object
+        if obj is None:
             return False
-        if arma.name not in context.view_layer.objects:
+        elif obj.type != 'ARMATURE' and obj.type != 'CAMERA':
             return False
         return True
-
-    def execute(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        arma: bpy.types.Object = ssp.anim_import_arma
-        arma.hide_viewport = False
-        arma.hide_set(False)
-        arma.select_set(True)
-        context.view_layer.objects.active = arma
-
-        initial_auto_keying_value = context.scene.tool_settings.use_keyframe_insert_auto
-        context.scene.tool_settings.use_keyframe_insert_auto = False        
-
-        bpy.ops.object.mode_set(mode='POSE', toggle=False)
-        import cProfile
-        import pstats
-        if self.use_fast_import is True:
-            print('Starting Fast Import...')
-            if self.use_debug_timer is True:
-                start = time.perf_counter()
-                with cProfile.Profile() as pr:
-                    import_model_anim_fast(context, self.filepath,
-                                    self.include_transform_track, self.include_material_track,
-                                    self.include_visibility_track, self.first_blender_frame)
-                stats = pstats.Stats(pr)
-                stats.sort_stats(pstats.SortKey.TIME)
-                end = time.perf_counter()
-                print(f'Fast import finished in {end-start} seconds!')
-                print(f'Fast Stats Below')
-                stats.print_stats()
-            else:
-                start = time.perf_counter()
-                import_model_anim_fast(context, self.filepath,
-                                    self.include_transform_track, self.include_material_track,
-                                    self.include_visibility_track, self.first_blender_frame)
-                end = time.perf_counter()
-                print(f'Fast import finished in {end-start} seconds!')
-        else:
-            print('Starting Slow Import...')
-            start = time.perf_counter()
-            import_model_anim(context, self.filepath,
-                            self.include_transform_track, self.include_material_track,
-                            self.include_visibility_track, self.first_blender_frame)
-            end = time.perf_counter()
-            print(f'Slow import finished in {end-start} seconds!')
-        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-        
-        context.scene.tool_settings.use_keyframe_insert_auto = initial_auto_keying_value
-
-        return {'FINISHED'}
-
-class SUB_OP_import_camera_anim(Operator, ImportHelper):
-    bl_idname = 'sub.anim_camera_importer'
-    bl_label = 'Import Camera Anim'
-
-    filter_glob: StringProperty(
-        default='*.nuanmb',
-        options={'HIDDEN'}
-    )
-
-    first_blender_frame: IntProperty(
-        name='Start Frame',
-        description='What frame to start importing the track on',
-        default=1,
-    )
-    def execute(self, context):
-        import_camera_anim(self, context, self.filepath, self.first_blender_frame)
-        return {'FINISHED'}
     
+    def execute(self, context):
+        print('Starting anim import...')
+        start = time.perf_counter()
+        obj: bpy.types.Object = context.object
+        
+        with cProfile.Profile() as pr:
+            if obj.type == 'ARMATURE':
+                import_model_anim_fast(context, self.filepath,
+                                        self.include_transform_track, self.include_material_track,
+                                        self.include_visibility_track, self.first_blender_frame)
+            else:
+                import_camera_anim(self, context, self.filepath, self.first_blender_frame)
+        if self.use_debug_timer:
+            stats = pstats.Stats(pr)
+            stats.sort_stats(pstats.SortKey.TIME)
+            stats.print_stats()
+        end = time.perf_counter()
+        print(f'Anim import finished in {end-start} seconds!')
+        return {'FINISHED'}
+  
 def poll_cameras(self, obj):
     return obj.type == 'CAMERA'
 
@@ -355,7 +292,7 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
     # Load the anim data first with ssbh_data_py since blender setup relies on data from it
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
     # Blender Action setup
-    arma: bpy.types.Object = context.scene.sub_scene_properties.anim_import_arma
+    arma: bpy.types.Object = context.object
     if arma.animation_data is None: # For the bones
         arma.animation_data_create()
     arma.animation_data.action = bpy.data.actions.new(arma.name + ' ' + Path(filepath).name)
@@ -918,7 +855,7 @@ Group: 'Camera'
         Track: 'NearClip'
 '''
 def import_camera_anim(operator, context:bpy.types.Context, filepath, first_blender_frame):
-    camera = context.scene.sub_scene_properties.anim_import_camera
+    camera: bpy.types.Object = context.object
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
     name_group_dict = {group.group_type.name : group for group in ssbh_anim_data.groups}
     transform_group = name_group_dict.get('Transform')
@@ -948,11 +885,11 @@ def import_camera_anim(operator, context:bpy.types.Context, filepath, first_blen
     for index, frame in enumerate(range(scene.frame_start, scene.frame_end+1)):
         scene.frame_set(frame)
         if camera_group is not None:
-            update_camera_properties(operator, context, camera_group, index, frame)
+            update_camera_properties(operator, camera, camera_group, index, frame)
         if transform_group is not None:
-            update_camera_transforms(context, transform_group, index, frame)
+            update_camera_transforms(camera, transform_group, index, frame)
 
-def update_camera_properties(operator, context, camera_group, index, frame):
+def update_camera_properties(operator: bpy.types.Operator, camera:bpy.types.Object, camera_group, index, frame):
     node: ssbh_data_py.anim_data.NodeData = None
     # Imported anim should always have at least one node under the camera group
     if len(camera_group.nodes) == 0:
@@ -971,8 +908,6 @@ def update_camera_properties(operator, context, camera_group, index, frame):
                 node = n
         if node is None:
             node = camera_group.nodes[0]
-    camera = context.scene.sub_scene_properties.anim_import_camera
-    #scp = camera.data.sub_camera_properties
     for track in node.tracks:
         if track.name == 'FieldOfView':
             if index < len(track.values):
@@ -995,7 +930,7 @@ def update_camera_properties(operator, context, camera_group, index, frame):
         else:
             operator.report({'WARNING'}, f'Unsupported track {track.name} in camera group, skipping!')
 
-def update_camera_transforms(context, transform_group, index, frame):
+def update_camera_transforms(camera: bpy.types.Object, transform_group, index, frame):
     value = transform_group.nodes[0].tracks[0].values[index]
     rt = raw_translation = value.translation
     rr = raw_rotation = value.rotation
@@ -1007,6 +942,6 @@ def update_camera_transforms(context, transform_group, index, frame):
     rsm = raw_scale_matrix = Matrix.Diagonal((rs[0], rs[1], rs[2], 1.0))
     axis_correction = Matrix.Rotation(math.radians(90), 4, 'X')   
     fm = final_matrix = Matrix(axis_correction @ rtm @ rrm @ rsm)
-    context.scene.sub_scene_properties.anim_import_camera.matrix_local = fm
-    keyframe_insert_camera_locrotscale(context.scene.sub_scene_properties.anim_import_camera, frame)
+    camera.matrix_local = fm
+    keyframe_insert_camera_locrotscale(camera, frame)
 
