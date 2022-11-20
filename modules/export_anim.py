@@ -2,65 +2,65 @@ import bpy
 import mathutils
 import math
 import re
+#import numpy as np
+import time
+import cProfile
+import pstats
 
-from mathutils import Matrix
-from bpy.types import Operator, Panel, Context
+from mathutils import Matrix, Quaternion
+from bpy.types import Operator, Panel
 from bpy.props import IntProperty, StringProperty, BoolProperty
 
 from .. import ssbh_data_py
+from .import_anim import get_heirarchy_order
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from ..properties import SubSceneProperties
-    from .anim_data import VisTrackEntry
-    from bpy.types import PoseBone, FCurve
+    from .anim_data import VisTrackEntry, SubAnimProperties, MatTrack, MatTrackProperty
+    CustomVector = list[int]
+    CustomFloat = float
+    CustomBool = bool
+    PatternIndex = int
+    TextureTransform = list[float]
+    pose_bone: bpy.types.PoseBone # Workaround for typechecking, remove if obsolete
+    fcurve: bpy.types.FCurve # Workaround for typechecking, remove if obsolete
 
 class SUB_PT_export_anim(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_context = "objectmode"
     bl_category = 'Ultimate'
     bl_label = 'Animation Exporter'
     bl_options = {'DEFAULT_CLOSED'}
 
-    def draw(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        arma: bpy.types.Object = ssp.anim_export_arma
-        camera: bpy.types.Camera = ssp.anim_export_camera
-
+    @classmethod
+    def poll(cls, context):
+        if context.mode == "POSE" or context.mode == "OBJECT":
+            return True
+        return False
+    
+    def draw(self, context: bpy.types.Context):
         layout = self.layout
         layout.use_property_split = False
-
+        
+        obj: bpy.types.Object = context.active_object
         row = layout.row()
-        row.label(text="Select an Armature or Camera.")
-        if not arma and not camera:
-            row = layout.row()
-            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA', text='')
-            row = layout.row()
-            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA', text='')
-        elif arma:
-            row = layout.row()
-            row.prop(ssp, 'anim_export_arma', icon='ARMATURE_DATA', text='')
-            if not arma.animation_data:
-                row = layout.row()
-                row.label(text='The selected armature has no animation data!', icon='ERROR')
-            elif not arma.animation_data.action:
-                row = layout.row()
-                row.label(text='The selected armature has no action!', icon='ERROR')
-            if arma.name not in context.view_layer.objects:
-                row = layout.row()
-                row.label(text='The selected armature is not in the active view layer!', icon='ERROR')
-            row = layout.row()
-            row.operator('sub.anim_model_exporter', icon='EXPORT', text='Export a Model Animation')
-        elif camera:
-            row = layout.row()
-            row.prop(ssp, 'anim_export_camera', icon='VIEW_CAMERA', text='')
-            row = layout.row()
-            row.operator('sub.export_camera_anim', icon='EXPORT', text='Export a Camera Animation')
+        if obj is None:
+            row.label(text="Click on an Armature or Camera.")
+        elif obj.select_get() is False:
+            row.label(text="Click on an Armature or Camera.")
+        elif obj.type == 'ARMATURE' or obj.type == 'CAMERA':
+            if obj.animation_data is None:
+                row.label(text=f'The selected {obj.type.lower()} has no animation data!', icon='ERROR')
+            elif obj.animation_data.action is None:
+                row.label(text=f'The selected {obj.type.lower()} has no action!', icon='ERROR')
+            else:
+                row.operator(SUB_OP_anim_export.bl_idname, icon='EXPORT', text='Export .NUANMB')
+        else:
+            row.label(text=f'The selected {obj.type.lower()} is not an armature or a camera.')
 
-class SUB_OP_export_model_anim(Operator):
-    bl_idname = 'sub.anim_model_exporter'
-    bl_label = 'Export Anim'   
+class SUB_OP_anim_export(Operator):
+    bl_idname = 'sub.anim_export'
+    bl_label = 'Export Anim'
 
     filter_glob: StringProperty(
         default='*.nuanmb',
@@ -92,94 +92,409 @@ class SUB_OP_export_model_anim(Operator):
         description='Last Exported Frame',
         default=1,
     )
+    use_debug_timer: BoolProperty(
+        name='Debug timing stats',
+        description='Print advance import timing info to the console',
+        default=False,
+    )
+
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
     @classmethod
     def poll(cls, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        arma: bpy.types.Object = ssp.anim_export_arma
-        if not arma:
+        obj: bpy.types.Object = context.object
+        if obj is None:
             return False
-        if arma.name not in context.view_layer.objects:
+        elif obj.type != 'ARMATURE' and obj.type != 'CAMERA':
             return False
-        if arma.animation_data is None:
+        elif obj.animation_data is None:
             return False
-        if arma.animation_data.action is None:
+        elif obj.animation_data.action is None:
             return False
         return True
 
     def invoke(self, context, _event):
+        obj: bpy.types.Object = context.object
         self.first_blender_frame = context.scene.frame_start
         self.last_blender_frame = context.scene.frame_end
-        self.filepath = ""
+        self.filepath = f'{obj.animation_data.action.name}'
+        if not self.filepath.endswith('.nuanmb'):
+            self.filepath += '.nuanmb'
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        arma: bpy.types.Object = ssp.anim_export_arma
-        arma.hide_viewport = False
-        arma.hide_set(False)
-        arma.select_set(True)
-        context.view_layer.objects.active = arma
+        print("Starting Animation Export...")
+        start = time.perf_counter()
 
-        initial_auto_keying_value = context.scene.tool_settings.use_keyframe_insert_auto
-        context.scene.tool_settings.use_keyframe_insert_auto = False
+        obj: bpy.types.Object = context.object
 
         if self.filepath == "":
-            self.filepath = f'{arma.animation_data.action.name}.nuanmb'
+            self.filepath = f'{obj.animation_data.action.name}.nuanmb'
         if not self.filepath.endswith('.nuanmb'):
             self.filepath += '.nuanmb'
 
-        bpy.ops.object.mode_set(mode='POSE', toggle=False)
-        export_model_anim(context, self.filepath,
-                        self.include_transform_track, self.include_material_track,
-                        self.include_visibility_track, self.first_blender_frame,
-                        self.last_blender_frame)
-        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+        with cProfile.Profile() as pr:
+            if obj.type == 'ARMATURE':
+                export_model_anim_fast(
+                    context, self, obj, self.filepath,
+                    self.include_transform_track, self.include_material_track,
+                    self.include_visibility_track, self.first_blender_frame,
+                    self.last_blender_frame)
+            else:
+                # TODO: Make "fast" camera export using same technique (currently fighter camera animations take less than a second to export, so theres not much priority)
+                export_camera_anim(context, self, obj, self.filepath,
+                    self.first_blender_frame, self.last_blender_frame)  
+        if self.use_debug_timer:
+            stats = pstats.Stats(pr)
+            stats.sort_stats(pstats.SortKey.TIME)
+            stats.print_stats()
 
-        context.scene.tool_settings.use_keyframe_insert_auto = initial_auto_keying_value
+        end = time.perf_counter()
+        print(f"Animation Export finished in {end - start} seconds!")
+        return {'FINISHED'}
+           
+class Location():
+    def __init__(self, x, y, z):
+        self.x: float = x
+        self.y: float = y
+        self.z: float = z
+    def __repr__(self) -> str:
+        return f'[{self.x=}, {self.y=}, {self.z=}]'
 
-        return {'FINISHED'}    
+class Rotation():
+    def __init__(self, w, x, y, z):
+        self.w: float = w
+        self.x: float = x
+        self.y: float = y
+        self.z: float = z
+    def __repr__(self) -> str:
+        return f'[{self.w=}, {self.x=}, {self.y=}, {self.z=}]'
 
-class SUB_OP_export_camera_anim(Operator):
-    bl_idname = 'sub.export_camera_anim'
-    bl_label = 'Export Anim'   
+class Scale():
+    def __init__(self, x, y, z):
+        self.x: float = x
+        self.y: float = y
+        self.z: float = z
+    def __repr__(self) -> str:
+        return f'[{self.x=}, {self.y=}, {self.z=}]'
 
-    filter_glob: StringProperty(
-        default='*.nuanmb',
-        options={'HIDDEN'}
-    )
+def get_smash_transform(m) -> Matrix:
+    # This is the inverse of the get_blender_transform permutation matrix.
+    # https://en.wikipedia.org/wiki/Matrix_similarity
+    p = Matrix([
+        [0, 1, 0, 0],
+        [-1, 0, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1]
+    ])
+    # Perform the transformation m in Blender's basis and convert back to Ultimate.
+    return p @ m @ p.inverted()
 
-    first_blender_frame: IntProperty(
-        name='Start Frame',
-        description='First Exported Frame',
-        default=1,
-    )
-    last_blender_frame: IntProperty(
-        name='End Frame',
-        description='Last Exported Frame',
-        default=1,
-    )
-    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+def transform_group_fix_floating_point_inaccuracies(trans_group: ssbh_data_py.anim_data.GroupData):
+    from math import isclose
+    for node in trans_group.nodes:
+        track = node.tracks[0]
+        if len(track.values) <= 1:
+            continue
+        first_transform = track.values[0]
+        for index, val in enumerate(first_transform.scale):
+            if isclose(val, 1, abs_tol=.00001):
+                first_transform.scale[index] = 1
+        for current_transform_index, current_transform in enumerate(track.values[1:], start=1):
+            # To avoid quaternion math issues, have to check if every value is close and replace the entire quaternion,
+            #  not just the 'x' or 'y' or 'z' or 'w'
+            all_rot_vals_close = True
+            for i in (0,1,2,3):
+                if not isclose(current_transform.rotation[i], first_transform.rotation[i], abs_tol=.00001):
+                    all_rot_vals_close = False
+            if all_rot_vals_close is True:
+                track.values[current_transform_index].rotation = first_transform.rotation
+            
+            for i in (0,1,2):
+                if isclose(current_transform.scale[i], first_transform.scale[i], abs_tol=.00001):
+                    track.values[current_transform_index].scale[i] = first_transform.scale[i]
+            
+            for i in (0,1,2):
+                if isclose(current_transform.translation[i], first_transform.translation[i], abs_tol=.00001):
+                    track.values[current_transform_index].translation[i] = first_transform.translation[i]
 
-    def invoke(self, context, event):
-        self.first_blender_frame = context.scene.frame_start
-        self.last_blender_frame = context.scene.frame_end
-        self.filepath = ""
-        context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+def uv_transform_equality(a: ssbh_data_py.anim_data.UvTransform, b: ssbh_data_py.anim_data.UvTransform) -> bool:
+    if a.rotation != b.rotation:
+        return False
+    if a.scale_u != b.scale_u:
+        return False
+    if a.scale_v != b.scale_v:
+        return False
+    if a.translate_u != b.translate_u:
+        return False
+    if a.translate_v != b.translate_v:
+        return False
+    return True
 
-    def execute(self, context):
-        if not self.filepath.endswith('.nuanmb'):
-            self.filepath += '.nuanmb'
-        export_camera_anim(self, context, self.filepath, self.first_blender_frame, self.last_blender_frame)
-        return {'FINISHED'}  
+def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.types.Object, filepath, include_transform_track, include_material_track, include_visibility_track, first_blender_frame, last_blender_frame):
+    # SSBH Anim Setup
+    ssbh_anim_data =  ssbh_data_py.anim_data.AnimData()
+    final_frame_index = last_blender_frame - first_blender_frame
+    ssbh_anim_data.final_frame_index = final_frame_index
 
-def export_camera_anim(operator: Operator, context: Context, filepath, first_blender_frame, last_blender_frame):
-    scene = context.scene
-    ssp: SubSceneProperties = context.scene.sub_scene_properties
-    camera: bpy.types.Object = ssp.anim_export_camera
+    # Gather Groups
+    if include_transform_track:
+        # First gather the blender animation data, then create the ssbh data
+        # Create value dicts ahead of time
+        bone_name_to_location_values: dict[str, list[Location]] = {}
+        bone_name_to_rotation_values: dict[str, list[Rotation]] = {}
+        bone_name_to_scale_values: dict[str, list[Scale]] = {}
+        bone_to_rel_matrix_local = {}
+        reordered_pose_bones = get_heirarchy_order(list(arma.pose.bones))
+
+        # Fill value dicts with default values. Not every bone will be animated, so for these the default values of a matrix basis will be needed
+        for pose_bone in reordered_pose_bones:
+            bone_name_to_location_values[pose_bone.name] = [Location(0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+            bone_name_to_rotation_values[pose_bone.name] = [Rotation(1.0, 0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+            bone_name_to_scale_values[pose_bone.name] = [Scale(1.0, 1.0, 1.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+            if pose_bone.parent: # non-root bones
+                bone_to_rel_matrix_local[pose_bone] = pose_bone.parent.bone.matrix_local.inverted() @ pose_bone.bone.matrix_local
+            else: # root bones
+                bone_to_rel_matrix_local[pose_bone] = pose_bone.bone.matrix_local
+
+        # Go through the pose bones' fcurves and store all the values at each frame.
+        animated_pose_bones: set[bpy.types.PoseBone] = set()
+        
+        for fcurve in arma.animation_data.action.fcurves:
+            regex = r'pose\.bones\[\"(.*)\"\]\.(.*)'
+            matches = re.match(regex, fcurve.data_path)
+            if matches is None: # A fcurve in the action that isn't a bone transform, such as the user keyframing the Armature Object itself.
+                operator.report(type={'WARNING'}, message=f"The fcurve with data path {fcurve.data_path} will not be exported, since it didn't match the pattern of a bone fcurve.")
+                continue
+            if len(matches.groups()) != 2: # TODO: Is this possible?
+                operator.report(type={'WARNING'}, message=f"The fcurve with data path {fcurve.data_path} will not be exported, its format only partially matched the expected pattern of a bone fcurve.")
+                continue
+            bone_name = matches.groups()[0]
+            transform_subtype = matches.groups()[1]
+            if transform_subtype == 'location':
+                for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                    if fcurve.array_index == 0:
+                        bone_name_to_location_values[bone_name][index].x = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 1:
+                        bone_name_to_location_values[bone_name][index].y = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 2:
+                        bone_name_to_location_values[bone_name][index].z = fcurve.evaluate(frame)
+            elif transform_subtype == 'rotation_quaternion':
+                for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                    if fcurve.array_index == 0:
+                        bone_name_to_rotation_values[bone_name][index].w = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 1:
+                        bone_name_to_rotation_values[bone_name][index].x = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 2:
+                        bone_name_to_rotation_values[bone_name][index].y = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 3:
+                        bone_name_to_rotation_values[bone_name][index].z = fcurve.evaluate(frame)
+            elif transform_subtype == 'scale':
+                for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                    if fcurve.array_index == 0:
+                        bone_name_to_scale_values[bone_name][index].x = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 1:
+                        bone_name_to_scale_values[bone_name][index].y = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 2:
+                        bone_name_to_scale_values[bone_name][index].z = fcurve.evaluate(frame)
+            animated_pose_bone = arma.pose.bones.get(bone_name)
+            if animated_pose_bone is not None:
+                animated_pose_bones.add(animated_pose_bone)
+
+        # Create SSBH Transform Group
+        trans_group = ssbh_data_py.anim_data.GroupData(ssbh_data_py.anim_data.GroupType.Transform)
+        ssbh_anim_data.groups.append(trans_group)
+
+        # Create ssbh nodes for the animated bones, no values just yet tho. Also, its normal for smash anims to skip some un-animated bones.
+        for bone in animated_pose_bones:
+            node = ssbh_data_py.anim_data.NodeData(bone.name)
+            track = ssbh_data_py.anim_data.TrackData('Transform')
+            track.scale_options = ssbh_data_py.anim_data.ScaleOptions(False, False)
+            node.tracks.append(track)
+            trans_group.nodes.append(node)
+
+        # Convenience dict for later node access
+        node_name_to_node = {node.name:node for node in trans_group.nodes}
+
+        # Blender stores the 'matrix basis' values in the fcurves
+        # Smash stores a 'relative matrix', such that bone.parent.final_matrix @ bone.relative_matrix = bone.final_matrix
+        # Need to calculate the final_matrix of each bone at each frame, even the un-animated ones, so that the child bones can be properly calculated.
+        bone_to_world_matrix = {}
+        for bone in reordered_pose_bones:
+            for index, _ in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                # Get the matrix basis from the stored values of this frame.
+                trans_basis_vec = bone_name_to_location_values[bone.name][index]
+                trans_basis_mat = Matrix.Translation([trans_basis_vec.x, trans_basis_vec.y, trans_basis_vec.z])
+                rot_basis_vec = bone_name_to_rotation_values[bone.name][index]
+                rot_basis_quat = Quaternion([rot_basis_vec.w, rot_basis_vec.x, rot_basis_vec.y, rot_basis_vec.z])
+                rot_basis_mat = Matrix.Rotation(rot_basis_quat.angle, 4, rot_basis_quat.axis)
+                scale_basis_vec = bone_name_to_scale_values[bone.name][index]
+                scale_basis_mat = Matrix.Diagonal((scale_basis_vec.x, scale_basis_vec.y, scale_basis_vec.z, 1.0))
+                matrix_basis = Matrix(trans_basis_mat @ rot_basis_mat @ scale_basis_mat)
+
+                # Now we can calculate and update the world matrix.
+                if bone.parent is None: # Root bones
+                    bone_to_world_matrix[bone] = matrix_basis
+                else: # Non-root bones
+                    bone_to_world_matrix[bone] = bone_to_world_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
+
+                # Now if theres a matching node, we can update the values for that node.
+                node = node_name_to_node.get(bone.name)
+                if node is not None:
+                    # Have to get the relative matrix from the stored matrixes, then transform that to smash orientation.
+                    if bone.parent is None:
+                        raw_rel_matrix = bone_to_world_matrix[bone]
+                    else:
+                        raw_rel_matrix = bone_to_world_matrix[bone.parent].inverted() @ bone_to_world_matrix[bone]
+                    smash_rel_matrix = get_smash_transform(raw_rel_matrix)
+                    t,q,s = smash_rel_matrix.decompose()
+                    transform = ssbh_data_py.anim_data.Transform(
+                        [s.x, s.y, s.z],
+                        [q.x, q.y, q.z, q.w],
+                        [t.x, t.y, t.z]
+                    )
+                    node.tracks[0].values.append(transform)
+                    # Check for quaternion interpolation issues
+                    if index > 0:
+                        pq = mathutils.Quaternion(node.tracks[0].values[index-1].rotation)
+                        cq = mathutils.Quaternion(node.tracks[0].values[index].rotation)
+                        if pq.dot(cq) < 0:
+                            node.tracks[0].values[index].rotation = [-c for c in node.tracks[0].values[index].rotation]
+        # Pre-Saving Optimizations
+        transform_group_fix_floating_point_inaccuracies(trans_group)
+        # Vanilla anims sort the nodes alphabetically. 
+        # Without this, certain anims will behave incorrectly, such as the Trans bone motion not working in-game.
+        trans_group.nodes.sort(key=lambda node: node.name)
+
+    if include_visibility_track:
+        # Convenience variable for the sub_anim_properties
+        sap: SubAnimProperties = arma.data.sub_anim_properties
+        
+        # First gather the values
+        vis_track_index_to_name: dict[int, str] = {}
+        vis_track_index_to_values: dict[int, list[bool]] = {}
+        fcurve: bpy.types.FCurve
+        for fcurve in arma.data.animation_data.action.fcurves:
+            regex = r'.*\[(\d*)\]\.value'
+            matches = re.match(regex, fcurve.data_path)
+            if matches is None: # Not a visibility fcurve, its probably a material track fcurve
+                continue
+            vis_track_index = int(matches.groups()[0])
+            if vis_track_index >= len(sap.vis_track_entries): # this can happen if the user removes entries manually but not the fcurves
+                operator.report(type={'WARNING'}, message=f'The fcurve with data path {fcurve.data_path} will be skipped, its index was out of bounds.')
+                continue
+            vis_track_index_to_name[vis_track_index] = sap.vis_track_entries[vis_track_index].name
+            vis_track_index_to_values[vis_track_index] = [fcurve.evaluate(frame) for frame in range(first_blender_frame, last_blender_frame+1)]
+
+        # Create Vis Group
+        vis_group = ssbh_data_py.anim_data.GroupData(ssbh_data_py.anim_data.GroupType.Visibility)
+        ssbh_anim_data.groups.append(vis_group)
+
+        # Create nodes
+        for vis_track_index, values in vis_track_index_to_values.items():
+            node = ssbh_data_py.anim_data.NodeData(vis_track_index_to_name[vis_track_index])
+            track = ssbh_data_py.anim_data.TrackData('Visibility')
+            track.values = values.copy()
+            node.tracks.append(track)
+            vis_group.nodes.append(node)
+
+    if include_material_track:
+        # Convenience variable for the sub_anim_properties
+        sap: SubAnimProperties = arma.data.sub_anim_properties
+
+        # Gather the Values
+        # Not every CustomVector, CustomBool, etc will be animated, so only the animated ones should be exported.
+        # In addition, fcurves may only exist for a few indices of a CustomVector or TextureTransform, since the user may not have animated them all
+        # Example: mat_name_prop_name_to_values['EyeL']['CustomVector31'] -> [[1.0,1.0,1.0,1.0], ...]
+        mat_name_prop_name_to_values: dict[str, dict[str, list[CustomVector|CustomFloat|CustomBool|PatternIndex|TextureTransform]]] = {}
+        for fcurve in arma.data.animation_data.action.fcurves:
+            regex = r"sub_anim_properties\.mat_tracks\[(\d+)\]\.properties\[(\d+)\](\.\w+)"
+            matches = re.match(regex, fcurve.data_path)
+            if matches is None: # The vis and mat track fcurves are in the same action, so its normal to not match every fcurve
+                continue
+            if len(matches.groups()) != 3: # TODO: Is this possible?
+                operator.report(type={'WARNING'}, message=f"The fcurve with data path {fcurve.data_path} will not be exported, its format only partially matched the expected pattern of a mat track.")
+                continue
+            # The material index may be out of bounds, this can happen due to improper removal of the MatTrack from the sub_anim_properties.
+            # This should however not happen when removed properly through the implemented operators
+            material_index = int(matches.groups()[0])
+            if material_index >= len(sap.mat_tracks):
+                operator.report(type={'WARNING'}, message=f'The fcurve with data path {fcurve.data_path} will be skipped, its material index was out of bounds.')
+                continue
+            # Now that the material index is validated, can grab the coresponding MatTrack
+            mat_track: MatTrack = sap.mat_tracks[material_index]
+            material_name = mat_track.name
+            # This dict won't exist yet for the first fcurve belonging to a material, so we add it now.
+            if mat_name_prop_name_to_values.get(material_name) is None: 
+                mat_name_prop_name_to_values[material_name] = {}
+            # The property index may be out of bounds, this can happen due to improper removal of the MatTrackProperty from the MatTrack.
+            # This should however not happen when removed properly through the implemented operators
+            property_index = int(matches.groups()[1])
+            if property_index >= len(mat_track.properties):
+                operator.report(type={'WARNING'}, message=f'The fcurve with data path {fcurve.data_path} will be skipped, its property index was out of bounds.')
+                continue
+            # Now that the property index is validated, can grab the coresponding MatTrackProperty
+            mat_track_property: MatTrackProperty = mat_track.properties[property_index]
+            property_name = mat_track_property.name
+            # This dict won't exist yet for the first fcurve belonging to a material's property, so we add it now.
+            # If it didn't exist, then the default values also didn't exist yet so nows a good time to add them.
+            # The default values need to be filled out because an fcurve for each array_index may not exist.
+            # This only applies to the CustomVector and TextureTransforms, all others only have one fcurve for the property.  
+            if mat_name_prop_name_to_values.get(material_name).get(property_name) is None:
+                if mat_track_property.sub_type == 'VECTOR':
+                    cv = mat_track_property.custom_vector
+                    # Use numpy as this one line takes way to long
+                    #mat_name_prop_name_to_values[material_name][property_name] = [[cv[0], cv[1], cv[2], cv[3]] for _ in range(0, final_frame_index+1)]
+                    #mat_name_prop_name_to_values[material_name][property_name] = np.full((final_frame_index+1, 4), [cv[0], cv[1], cv[2], cv[3]]).tolist()
+                    # Nevermind it seems like the numpy array needs to be converted back into a list before being saved
+                    mat_name_prop_name_to_values[material_name][property_name] = [[cv[0], cv[1], cv[2], cv[3]] for _ in range(0, final_frame_index+1)]
+                elif mat_track_property.sub_type == 'TEXTURE':
+                    tt = mat_track_property.texture_transform
+                    mat_name_prop_name_to_values[material_name][property_name] = [[tt[0], tt[1], tt[2], tt[3], tt[4]] for _ in range(0, final_frame_index+1)]
+                else: # Bools, Floats, PatternIndex have only one fcurve, so any default value filled here would get replaced anyways
+                    mat_name_prop_name_to_values[material_name][property_name] = []
+            # Finally can add the values at each frame
+            for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                if mat_track_property.sub_type == 'VECTOR' or mat_track_property.sub_type == 'TEXTURE':
+                    mat_name_prop_name_to_values[material_name][property_name][index][fcurve.array_index] = fcurve.evaluate(frame)
+                else:
+                    mat_name_prop_name_to_values[material_name][property_name].append(fcurve.evaluate(frame))
+                
+        # Now we can finally process the data
+        # Create the material group
+        mat_group = ssbh_data_py.anim_data.GroupData(ssbh_data_py.anim_data.GroupType.Material)
+        ssbh_anim_data.groups.append(mat_group)
+        # Create the nodes and tracks
+        for mat_name in mat_name_prop_name_to_values:
+            node = ssbh_data_py.anim_data.NodeData(mat_name)
+            mat_group.nodes.append(node)
+            for prop_name in mat_name_prop_name_to_values[mat_name]:
+                track = ssbh_data_py.anim_data.TrackData(prop_name)
+                node.tracks.append(track)
+                track.values.extend(mat_name_prop_name_to_values[mat_name][prop_name])
+
+    # Pre-Saving Optimizations
+    for group in ssbh_anim_data.groups:
+        for node in group.nodes:
+            for track in node.tracks:
+                if type(track.values[0]) == ssbh_data_py.anim_data.UvTransform:
+                    if all(uv_transform_equality(value, track.values[0]) for value in track.values):
+                        track.values = [track.values[0]]
+                elif all(value == track.values[0] for value in track.values):
+                    track.values = [track.values[0]]
+    
+    # fix for the error `ssbh_data_py.AnimDataError: Scale options of ScaleOptions { inherit_scale: false, compensate_scale: false } cannot be preserved for a uncompressed track.`
+    for group in ssbh_anim_data.groups:
+        for node in group.nodes:
+            for track in node.tracks:
+                if len(track.values) == 1:
+                    track.scale_options = ssbh_data_py.anim_data.ScaleOptions(True, False)
+
+    # Done!
+    ssbh_anim_data.save(filepath)        
+                
+def export_camera_anim(context, operator, camera: bpy.types.Object, filepath, first_blender_frame, last_blender_frame):
     ssbh_anim_data = ssbh_data_py.anim_data.AnimData()
     ssbh_anim_data.final_frame_index = last_blender_frame - first_blender_frame
     
@@ -196,7 +511,7 @@ def export_camera_anim(operator: Operator, context: Context, filepath, first_ble
     track_name_to_track = {track.name : track for track in camera_group.nodes[0].tracks}
     trans_track = transform_group.nodes[0].tracks[0]
     for index, frame in enumerate(range(first_blender_frame, last_blender_frame + 1)):
-        scene.frame_set(frame)
+        context.scene.frame_set(frame)
         track_name_to_track['FieldOfView'].values.append(camera.data.angle_y)
         track_name_to_track['FarClip'].values.append(camera.data.clip_end)
         track_name_to_track['NearClip'].values.append(camera.data.clip_start)
@@ -222,237 +537,3 @@ def export_camera_anim(operator: Operator, context: Context, filepath, first_ble
     ssbh_anim_data.groups.append(camera_group)
 
     ssbh_anim_data.save(filepath)
-
-def export_model_anim(context, filepath,
-                    include_transform_track, include_material_track,
-                    include_visibility_track, first_blender_frame,
-                    last_blender_frame):
-    ssbh_anim_data = ssbh_data_py.anim_data.AnimData()
-    ssbh_anim_data.final_frame_index = last_blender_frame - first_blender_frame
-    if include_transform_track:
-        trans_group = make_transform_group(context, first_blender_frame, last_blender_frame)
-        transform_group_fix_floating_point_inaccuracies(trans_group) # Pre-saving Optimization
-        ssbh_anim_data.groups.append(trans_group)
-    if include_visibility_track:
-        vis_group = make_visibility_group(context, first_blender_frame, last_blender_frame)
-        ssbh_anim_data.groups.append(vis_group)
-    if include_material_track:
-        mat_group = make_material_group(context, first_blender_frame, last_blender_frame)
-        ssbh_anim_data.groups.append(mat_group)
-    
-    # Pre-saving Optimization
-    # Remove duplicate keyframes
-    for group in ssbh_anim_data.groups:
-        for node in group.nodes:
-            for track in node.tracks:
-                if type(track.values[0]) == ssbh_data_py.anim_data.UvTransform:
-                    if all(uv_transform_equality(value, track.values[0]) for value in track.values):
-                        track.values = [track.values[0]]
-                elif all(value == track.values[0] for value in track.values):
-                    track.values = [track.values[0]]
-    
-    # fix for the error `ssbh_data_py.AnimDataError: Scale options of ScaleOptions { inherit_scale: false, compensate_scale: false } cannot be preserved for a uncompressed track.`
-    for group in ssbh_anim_data.groups:
-        for node in group.nodes:
-            for track in node.tracks:
-                if len(track.values) == 1:
-                    track.scale_options = ssbh_data_py.anim_data.ScaleOptions(True, False)
-                    
-    ssbh_anim_data.save(filepath)
-
-def transform_group_fix_floating_point_inaccuracies(trans_group: ssbh_data_py.anim_data.GroupData):
-    from math import isclose
-    for node in trans_group.nodes:
-        track = node.tracks[0]
-        if len(track.values) <= 1:
-            continue
-        first_transform = track.values[0]
-        for index, val in enumerate(first_transform.scale):
-            if isclose(val, 1, abs_tol=.00001):
-                first_transform.scale[index] = 1
-        for current_transform_index, current_transform in enumerate(track.values[1:], start=1):
-            # To avoid quaternion math issues, have to check if every value is close and replace the entire quaternion,
-            #  not just the 'x' or 'y' or 'z' or 'w'
-            all_rot_vals_close = True
-            for i in (0,1,2,3):
-                if not isclose(current_transform.rotation[i], first_transform.rotation[i], abs_tol=.00001):
-                    all_rot_vals_close = False
-            if all_rot_vals_close is True:
-                print(f'{node.name=} {current_transform_index=} {all_rot_vals_close=}')
-                track.values[current_transform_index].rotation = first_transform.rotation
-            
-            for i in (0,1,2):
-                if isclose(current_transform.scale[i], first_transform.scale[i], abs_tol=.00001):
-                    track.values[current_transform_index].scale[i] = first_transform.scale[i]
-            
-            for i in (0,1,2):
-                if isclose(current_transform.translation[i], first_transform.translation[i], abs_tol=.00001):
-                    track.values[current_transform_index].translation[i] = first_transform.translation[i]
-
-            
-
-def uv_transform_equality(a: ssbh_data_py.anim_data.UvTransform, b: ssbh_data_py.anim_data.UvTransform) -> bool:
-    if a.rotation != b.rotation:
-        return False
-    if a.scale_u != b.scale_u:
-        return False
-    if a.scale_v != b.scale_v:
-        return False
-    if a.translate_u != b.translate_u:
-        return False
-    if a.translate_v != b.translate_v:
-        return False
-    return True
-
-def make_transform_group(context, first_blender_frame, last_blender_frame):
-    trans_type = ssbh_data_py.anim_data.GroupType.Transform
-    trans_group = ssbh_data_py.anim_data.GroupData(trans_type)
-    ssp: SubSceneProperties = context.scene.sub_scene_properties   
-    arma: bpy.types.Object = ssp.anim_export_arma
-    all_bone_names: list[str] = [b.name for b in arma.pose.bones]
-    fcurves: list[FCurve] = arma.animation_data.action.fcurves
-    curve_names = {curve.data_path.split('"')[1] for curve in fcurves if '"' in curve.data_path}
-    animated_bone_names = [cn for cn in curve_names if cn in all_bone_names]
-    animated_bones: list[PoseBone] = [bone for bone in arma.pose.bones if bone.name in animated_bone_names]
-
-    '''
-    Theres extremely minor differences in the matrixes frame-to-frame, so a better way of seeing if a bone's transform
-     is 'constant' is to check the number of keyframes in the anim range.
-    '''
-    #bone_name_to_curves = {name: {fc for fc in fcurves if fc.data_path.startswith(name)} for name in animated_bone_names}
-    bone_name_to_curves: dict[str, set[FCurve]] = {}
-    for fcurve in fcurves:
-        regex = r"pose\.bones\[\"(\w*)\"\].*"
-        match = re.match(regex, fcurve.data_path)
-        if not match:
-            continue
-        if len(match.groups()) != 1:
-            continue
-        bone_name = match.groups()[0]
-        if not bone_name_to_curves.get(bone_name):
-            bone_name_to_curves[bone_name] = set()
-        bone_name_to_curves[bone_name].add(fcurve)
-
-    constant_bone_names: set[str] = set()
-    for bone_name, fcurves in bone_name_to_curves.items():
-        if all(len([keyframe for keyframe in fc.keyframe_points if keyframe.co.x >= first_blender_frame]) <= 1 for fc in fcurves ):
-            constant_bone_names.add(bone_name)
-
-    for bone in animated_bones:
-        node = ssbh_data_py.anim_data.NodeData(bone.name)
-        track = ssbh_data_py.anim_data.TrackData('Transform')
-        track.scale_options = ssbh_data_py.anim_data.ScaleOptions(False, False)
-        node.tracks.append(track)
-        trans_group.nodes.append(node)
-    name_to_node = {node.name:node for node in trans_group.nodes}
-    # changing frames is expensive so need to setup loop to only do once
-
-    from .export_model import get_smash_transform, get_smash_root_transform
-    for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
-        context.scene.frame_set(frame)
-
-        for bone in animated_bones:
-            if frame != first_blender_frame and bone.name in constant_bone_names:
-                continue # for constant bones only need to insert the value once
-            m:mathutils.Matrix = None
-            if bone.parent:
-                m = bone.parent.matrix.inverted() @ bone.matrix
-                m = get_smash_transform(m).transposed()
-            else:
-                arma.data.bones.active = bone.bone
-                bpy.ops.transform.rotate(value=math.radians(90), orient_axis='X', center_override=arma.location)
-                bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='Z', center_override=arma.location)
-                m = get_smash_transform(bone.matrix).transposed()
-
-            # TODO: Investigate why this can cause twists on Mario's foot with the vanilla skel.
-            mt, mq, ms = m.decompose()
-            '''
-            Checking here and fixing the quaternion before using ssbh_data_py seems to not work.
-            Luckily ssbh_data_py allows manual editing of the rotation values so can just fix after creation of the
-            transform.
-            '''
-            node = name_to_node[bone.name]
-            track = node.tracks[0]
-            new_ssbh_transform = ssbh_data_py.anim_data.Transform(
-                [ms[0], ms[1], ms[2]], 
-                [mq.x, mq.y, mq.z, mq.w],
-                [mt[0], mt[1], mt[2]]
-            )
-            track.values.append(new_ssbh_transform)
-            # Check for quaternion interpolation issues
-            if index > 0:
-                pq = mathutils.Quaternion(track.values[index-1].rotation)
-                cq = mathutils.Quaternion(track.values[index].rotation)
-                if pq.dot(cq) < 0:
-                    track.values[index].rotation = [-c for c in track.values[index].rotation]
-
-    # Vanilla anims sort the nodes alphabetically. Seems to work either way however.
-    trans_group.nodes.sort(key=lambda node: node.name)
-
-    return trans_group
-
-def make_visibility_group(context, first_blender_frame, last_blender_frame):
-    # Setup SSBH group
-    vis_type = ssbh_data_py.anim_data.GroupType.Visibility
-    vis_group = ssbh_data_py.anim_data.GroupData(vis_type)
-    # Setup SSBH Node
-    ssp: SubSceneProperties = context.scene.sub_scene_properties
-    entries: list[VisTrackEntry] = ssp.anim_export_arma.data.sub_anim_properties.vis_track_entries
-    for entry in entries:
-        node = ssbh_data_py.anim_data.NodeData(entry.name)
-        track = ssbh_data_py.anim_data.TrackData('Visibility')
-        node.tracks.append(track)
-        vis_group.nodes.append(node)
-    name_to_node = {node.name:node for node in vis_group.nodes}
-    # Set Node Values
-    for frame in range(first_blender_frame, last_blender_frame + 1):
-        context.scene.frame_set(frame)
-        for entry in entries:
-            node = name_to_node[entry.name]
-            track = node.tracks[0]
-            track.values.append(entry.value)
-    return vis_group
-    
-def make_material_group(context, first_blender_frame, last_blender_frame):
-    # Setup SSBH group
-    mat_type = ssbh_data_py.anim_data.GroupType.Material
-    mat_group = ssbh_data_py.anim_data.GroupData(mat_type)
-    # Setup SSBH Node
-    ssp = context.scene.sub_scene_properties
-    sap = ssp.anim_export_arma.data.sub_anim_properties
-    for mat_track in sap.mat_tracks:
-        node = ssbh_data_py.anim_data.NodeData(mat_track.name)
-        for property in mat_track.properties:
-            track = ssbh_data_py.anim_data.TrackData(property.name)
-            node.tracks.append(track)
-        mat_group.nodes.append(node)
-    # Setup convenience dict
-    node_name_track_name_to_track = {} # node_name_track_name_to_track['EyeL']['CustomVector6'] -> nodes['EyeL'].tracks['CustomVector6']
-    for node in mat_group.nodes:
-        node_name_track_name_to_track[node.name] = {}
-        for track in node.tracks:
-            node_name_track_name_to_track[node.name][track.name] = track
-    # Set Node Values
-    for frame in range(first_blender_frame, last_blender_frame + 1):
-        context.scene.frame_set(frame)
-        for mat_track in sap.mat_tracks:
-            for prop in mat_track.properties:
-                if prop.sub_type == 'VECTOR':
-                    track = node_name_track_name_to_track[mat_track.name][prop.name]
-                    track.values.append([prop.custom_vector[0], prop.custom_vector[1], prop.custom_vector[2], prop.custom_vector[3]])
-                elif prop.sub_type == 'FLOAT':
-                    track = node_name_track_name_to_track[mat_track.name][prop.name]
-                    track.values.append(prop.custom_float)
-                elif prop.sub_type == 'BOOL':
-                    track = node_name_track_name_to_track[mat_track.name][prop.name]
-                    track.values.append(prop.custom_bool)
-                elif prop.sub_type == 'PATTERN':
-                    track = node_name_track_name_to_track[mat_track.name][prop.name]
-                    track.values.append(prop.pattern_index)
-                elif prop.sub_type == 'TEXTURE':
-                    track = node_name_track_name_to_track[mat_track.name][prop.name]
-                    tt = prop.texture_transform
-                    uvt = ssbh_data_py.anim_data.UvTransform(tt[0], tt[1], tt[2], tt[3], tt[4])
-                    track.values.append(uvt)
-    return mat_group
-
