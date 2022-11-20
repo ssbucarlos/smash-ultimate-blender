@@ -385,7 +385,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                 operator.report(type={'WARNING'}, message=f'The fcurve with data path {fcurve.data_path} will be skipped, its index was out of bounds.')
                 continue
             vis_track_index_to_name[vis_track_index] = sap.vis_track_entries[vis_track_index].name
-            vis_track_index_to_values[vis_track_index] = [fcurve.evaluate(frame) for frame in range(first_blender_frame, last_blender_frame+1)]
+            vis_track_index_to_values[vis_track_index] = [bool(fcurve.evaluate(frame)) for frame in range(first_blender_frame, last_blender_frame+1)]
 
         # Create Vis Group
         vis_group = ssbh_data_py.anim_data.GroupData(ssbh_data_py.anim_data.GroupType.Visibility)
@@ -458,6 +458,8 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
             for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
                 if mat_track_property.sub_type == 'VECTOR' or mat_track_property.sub_type == 'TEXTURE':
                     mat_name_prop_name_to_values[material_name][property_name][index][fcurve.array_index] = fcurve.evaluate(frame)
+                elif mat_track_property.sub_type == 'BOOL':
+                    mat_name_prop_name_to_values[material_name][property_name].append(bool(fcurve.evaluate(frame)))
                 else:
                     mat_name_prop_name_to_values[material_name][property_name].append(fcurve.evaluate(frame))
                 
