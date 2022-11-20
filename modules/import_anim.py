@@ -95,7 +95,7 @@ class SUB_OP_import_model_anim(Operator, ImportHelper):
     use_debug_timer: BoolProperty(
         name='Debug timing stats',
         description='Print advance import timing info to the console',
-        default=True,
+        default=False,
     )
     @classmethod
     def poll(cls, context):
