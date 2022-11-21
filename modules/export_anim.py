@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     CustomFloat = float
     CustomBool = bool
     PatternIndex = int
-    TextureTransform = list[float]
+    TextureTransform = ssbh_data_py.anim_data.UvTransform
     pose_bone: bpy.types.PoseBone # Workaround for typechecking, remove if obsolete
     fcurve: bpy.types.FCurve # Workaround for typechecking, remove if obsolete
 
@@ -451,15 +451,26 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                     mat_name_prop_name_to_values[material_name][property_name] = [[cv[0], cv[1], cv[2], cv[3]] for _ in range(0, final_frame_index+1)]
                 elif mat_track_property.sub_type == 'TEXTURE':
                     tt = mat_track_property.texture_transform
-                    mat_name_prop_name_to_values[material_name][property_name] = [[tt[0], tt[1], tt[2], tt[3], tt[4]] for _ in range(0, final_frame_index+1)]
+                    mat_name_prop_name_to_values[material_name][property_name] = [ssbh_data_py.anim_data.UvTransform(tt[0], tt[1], tt[2], tt[3], tt[4]) for _ in range(0, final_frame_index+1)]
                 else: # Bools, Floats, PatternIndex have only one fcurve, so any default value filled here would get replaced anyways
                     mat_name_prop_name_to_values[material_name][property_name] = []
             # Finally can add the values at each frame
             for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
-                if mat_track_property.sub_type == 'VECTOR' or mat_track_property.sub_type == 'TEXTURE':
+                if mat_track_property.sub_type == 'VECTOR':
                     mat_name_prop_name_to_values[material_name][property_name][index][fcurve.array_index] = fcurve.evaluate(frame)
                 elif mat_track_property.sub_type == 'BOOL':
                     mat_name_prop_name_to_values[material_name][property_name].append(bool(fcurve.evaluate(frame)))
+                elif mat_track_property.sub_type == 'TEXTURE':
+                    if fcurve.array_index == 0:
+                        mat_name_prop_name_to_values[material_name][property_name][index].scale_u = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 1:
+                        mat_name_prop_name_to_values[material_name][property_name][index].scale_v = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 2:
+                        mat_name_prop_name_to_values[material_name][property_name][index].rotation = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 3:
+                        mat_name_prop_name_to_values[material_name][property_name][index].translate_u = fcurve.evaluate(frame)
+                    elif fcurve.array_index == 4:
+                        mat_name_prop_name_to_values[material_name][property_name][index].translate_v = fcurve.evaluate(frame)
                 else:
                     mat_name_prop_name_to_values[material_name][property_name].append(fcurve.evaluate(frame))
                 
