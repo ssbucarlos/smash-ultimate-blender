@@ -346,16 +346,34 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
                 tm = translation_matrix = Matrix.Translation(t)
                 qr = quaternion_rotation = Quaternion([r[3], r[0], r[1], r[2]])
                 rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
+                compensate_scale = node.tracks[0].scale_options.compensate_scale
                 # Blender doesn't have this built in for some reason.
                 scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
-                '''
-                if node.tracks[0].scale_options.compensate_scale is True:
-                    parent_scale_vector: Vector = parent_matrix.to_scale()
-                    sc = Vector([1.0/x for x in parent_scale_vector])
-                    scale_compensation_mat = Matrix.Diagonal((sc[0], sc[1], sc[2], 1.0))
-                    raw_matrix = mathutils.Matrix(tm @ scale_compensation_mat @ rm @ scale_matrix)
-                '''
-                raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)
+
+                scale_compensation = Matrix.Diagonal((1.0, 1.0, 1.0, 1.0))
+                if compensate_scale and bone.parent is not None:# and bone.parent.parent is not None:
+                    # TODO(SMG): Just use the parent and grandparent.
+                    # Scale compensation "compensates" the effect of the immediate parent's scale.
+                    # We don't want the compensation to accumulate along a bone chain. 
+                    # HACK: Use the transform itself since we may overwrite a scale value.
+                    # This assumes the parent is in the animation.
+                    # TODO(SMG): Investigate where the parent scale value comes from.
+                    # parent_scale = (bone.parent.parent.matrix.inverted() @ bone.parent.matrix).to_scale()
+                    # scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
+
+                    parent_node = bone_to_node.get(bone.parent, None)
+                    if parent_node is not None:
+                        try:
+                            parent_scale = parent_node.tracks[0].values[index].scale
+                            # TODO: Does this handle axes correctly with non uniform scale?
+                            scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
+                        except IndexError:
+                            # TODO: A single frame in ssbh_data_py should be assumed to be a constant animation.
+                            # The single element value applies to all frames.
+                            # This matches the convention used for Smash Ultimate.
+                            pass
+
+                raw_matrix = mathutils.Matrix(tm @ scale_compensation @ rm @ scale_matrix)
                 bone_fcurves = bone_to_fcurves[bone]
                 if bone.parent is None: # The root bone
                     fixed_matrix = get_blender_transform(raw_matrix, transpose=False)
@@ -496,7 +514,7 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
     if material_group:
         setup_material_drivers(arma)
                     
-
+# TODO: Delete this since it isn't used.
 def import_model_anim(context: bpy.types.Context, filepath,
                     include_transform_track, include_material_track,
                     include_visibility_track, first_blender_frame):
@@ -531,7 +549,6 @@ def import_model_anim(context: bpy.types.Context, filepath,
     if include_transform_track and transform_group is not None:
         bones = arma.pose.bones
         bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
-        setup_bone_scale_drivers(bone_to_node.keys()) # Only want to setup drivers for the bones that have an entry in the anim
 
     if include_material_track and material_group is not None:
         setup_sap_material_properties(context, material_group)
@@ -552,25 +569,6 @@ def import_model_anim(context: bpy.types.Context, filepath,
 
     scene.frame_set(scene.frame_start) # Return to the first frame for convenience
     #bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
-
-def setup_bone_scale_drivers(pose_bones):
-    for pose_bone in pose_bones:
-        # Setup default values for drivers to work, will get overwritten by the anim later anyways
-        # TODO: theres 4 combos of inherit_scale and compensate_scale together, i am honestly not sure how to make use
-        # of compensate_scale, however whenever 'inherit_scale' is 0, setting the blender scale inheritance to 'None' seems
-        # to do the trick. Its possible the other blender scale inheritance types can approximate
-        pose_bone['inherit_scale'] = 1 # The custom properties exist on the pose_bone, not the bone...
-        pose_bone['compensate_scale'] = 1
-        driver_handle = pose_bone.bone.driver_add('inherit_scale') # ... but drivers belong on the bone, not the pose_bone
-        inheritscale_var = driver_handle.driver.variables.new()
-        inheritscale_var.name = "inherit_scale"
-        isv = inheritscale_var # shorthand for this var
-        target = inheritscale_var.targets[0]
-        target.id = bpy.context.scene.sub_scene_properties.anim_import_arma
-        target.data_path = f'pose.bones["{pose_bone.name}"]["inherit_scale"]'
-        # TODO: Figure out how to incorporate compensate scale
-        driver_handle.driver.expression = f'0 if {isv.name} == 1 else 3' # 0 is 'FULL' and 3 is 'NONE'
-
 
 def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node):
     arma = context.scene.sub_scene_properties.anim_import_arma
@@ -598,36 +596,38 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
         r = rotation = node.tracks[0].values[index].rotation
         s = scale = node.tracks[0].values[index].scale
         compensate_scale = node.tracks[0].scale_options.compensate_scale
-        inherit_scale = node.tracks[0].scale_options.inherit_scale
         tm = translation_matrix = Matrix.Translation(t)
         qr = quaternion_rotation = Quaternion([r[3], r[0], r[1], r[2]])
         rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
         # Blender doesn't have this built in for some reason.
         scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
 
-        raw_matrix = mathutils.Matrix(tm @ rm @ scale_matrix)
+        scale_compensation = Matrix.Diagonal((1, 1, 1, 1))
+        if compensate_scale and bone.parent is not None:
+            # Scale compensation "compensates" the effect of the immediate parent's scale.
+            # We don't want the compensation to accumulate along a bone chain. 
+            # HACK: Use the transform itself since we may overwrite a scale value.
+            # This assumes the parent is in the animation.
+            # TODO(SMG): Investigate where the parent scale value comes from.
+            parent_node = bone_to_node.get(bone.parent, None)
+            if parent_node is not None:
+                try:
+                    parent_scale = parent_node.tracks[0].values[index].scale
+                    # TODO: Does this handle axes correctly with non uniform scale?
+                    print(parent_scale)
+                    scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
+                except IndexError:
+                    # TODO: A single frame in ssbh_data_py should be assumed to be a constant animation.
+                    # The single element value applies to all frames.
+                    # This matches the convention used for Smash Ultimate.
+                    pass
+
+        raw_matrix = mathutils.Matrix(tm @ scale_compensation @ rm @ scale_matrix)
+
         if bone.parent is not None:
             # TODO: Investigate twisting on mario's wait animations.
             fixed_matrix = get_blender_transform(raw_matrix, transpose=False)
             bone.matrix = bone.parent.matrix @ fixed_matrix
-
-            if compensate_scale:
-                # Scale compensation "compensates" the effect of the immediate parent's scale.
-                # We don't want the compensation to accumulate along a bone chain. 
-                # HACK: Use the transform itself since we may overwrite a scale value.
-                # This assumes the parent is in the animation.
-                # TODO(SMG): Investigate where the parent scale value comes from.
-                parent_node = bone_to_node.get(bone.parent, None)
-                if parent_node is not None:
-                    try:
-                        parent_scale = parent_node.tracks[0].values[index].scale
-                        # TODO: Does this handle axes correctly with non uniform scale?
-                        bone.scale = (bone.scale[0] / parent_scale[0], bone.scale[1] / parent_scale[1], bone.scale[2] / parent_scale[2])
-                    except IndexError:
-                        # TODO: A single frame in ssbh_data_py should be assumed to be a constant animation.
-                        # The single element value applies to all frames.
-                        # This matches the convention used for Smash Ultimate.
-                        pass
         else:
             # TODO: Investigate how to do this without bpy.ops
             bone.matrix = get_blender_transform(raw_matrix, transpose=False)
@@ -635,21 +635,6 @@ def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_
             bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
             bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)
         keyframe_insert_bone_locrotscale(arma, bone.name, frame, 'Transform')
-
-        bone['compensate_scale'] = compensate_scale
-        bone['inherit_scale'] = inherit_scale
-        bone.keyframe_insert(
-            data_path=f'["compensate_scale"]',
-            frame=frame,
-            group='Transform',
-            options={'INSERTKEY_NEEDED'},
-        )
-        bone.keyframe_insert(
-            data_path=f'["inherit_scale"]',
-            frame=frame,
-            group='Transform',
-            options={'INSERTKEY_NEEDED'},
-        )
 
 
 def keyframe_insert_bone_locrotscale(arma: bpy.types.Object, bone_name, frame, group_name):
