@@ -98,7 +98,7 @@ class SUB_OP_import_anim(Operator, ImportHelper):
         
         with cProfile.Profile() as pr:
             if obj.type == 'ARMATURE':
-                import_model_anim_fast(context, self.filepath,
+                import_model_anim(context, self.filepath,
                                         self.include_transform_track, self.include_material_track,
                                         self.include_visibility_track, self.first_blender_frame)
             else:
@@ -286,7 +286,7 @@ class BoneFCurves():
         self.scale.set_keyframe_values_from_stash()
 
 
-def import_model_anim_fast(context: bpy.types.Context, filepath: str,
+def import_model_anim(context: bpy.types.Context, filepath: str,
                       include_transform_track, include_material_track,
                       include_visibility_track, first_blender_frame):
     # Load the anim data first with ssbh_data_py since blender setup relies on data from it
@@ -513,138 +513,7 @@ def import_model_anim_fast(context: bpy.types.Context, filepath: str,
         setup_visibility_drivers(arma)
     if material_group:
         setup_material_drivers(arma)
-                    
-# TODO: Delete this since it isn't used.
-def import_model_anim(context: bpy.types.Context, filepath,
-                    include_transform_track, include_material_track,
-                    include_visibility_track, first_blender_frame):
-    ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
-    name_group_dict = {group.group_type.name : group for group in ssbh_anim_data.groups}
-    transform_group = name_group_dict.get('Transform', None)
-    visibility_group = name_group_dict.get('Visibility', None)
-    material_group = name_group_dict.get('Material', None)
 
-    # Find max frame count
-    frame_count = int(ssbh_anim_data.final_frame_index + 1)
-
-    scene = context.scene
-    arma = scene.sub_scene_properties.anim_import_arma
-    scene.frame_start = first_blender_frame
-    scene.frame_end = scene.frame_start + frame_count - 1
-    scene.frame_set(scene.frame_start)
-    #if context.active_object is not None:
-    #    bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # whatever object is currently selected, exit whatever mode its in
-    #context.view_layer.objects.active = arma
-    #bpy.ops.object.mode_set(mode='EDIT', toggle=False) 
-    #bone_name_to_edit_bone_matrix = {bone.name:bone.matrix.copy() for bone in arma.data.edit_bones}
-    #bpy.ops.object.mode_set(mode='POSE', toggle=False) # put our armature in pose mode
-    
-    from pathlib import Path
-    action_name = arma.name + ' ' + Path(filepath).name
-    if arma.animation_data is None:
-        arma.animation_data_create()
-    action = bpy.data.actions.new(action_name)
-    arma.animation_data.action = action
-
-    if include_transform_track and transform_group is not None:
-        bones = arma.pose.bones
-        bone_to_node = {b:n for n in transform_group.nodes for b in bones if b.name == n.name}
-
-    if include_material_track and material_group is not None:
-        setup_sap_material_properties(context, material_group)
-
-    for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
-        scene.frame_set(frame)
-        if include_transform_track and transform_group is not None:
-            do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node)
-        if include_material_track and material_group is not None:
-            do_material_stuff(context, material_group, index, frame)
-        if include_visibility_track and visibility_group is not None:
-            do_visibility_stuff(context, visibility_group, index, frame)
-
-    if include_visibility_track and visibility_group is not None:
-        setup_visibility_drivers(arma)
-    if include_material_track and material_group is not None:
-        setup_material_drivers(arma)
-
-    scene.frame_set(scene.frame_start) # Return to the first frame for convenience
-    #bpy.ops.object.mode_set(mode='OBJECT', toggle=False) # Done with our object, return to pose mode
-
-def do_armature_transform_stuff(context, transform_group, index, frame, bone_to_node):
-    arma = context.scene.sub_scene_properties.anim_import_arma
-    bones = arma.pose.bones
-    # Get a list of bones in 'heirarchal' order
-    # TODO: make own function
-    def heirarchy_order(bone, reordered):
-        if bone not in reordered:
-            reordered.append(bone)
-        for child in bone.children:
-            heirarchy_order(child, reordered)
-    reordered = []
-    heirarchy_order(bones[0], reordered)
-
-    for bone in reordered:
-        node = bone_to_node.get(bone, None)
-        if node is None: # Not all bones will have a transform node. For example, helper bones never have transforms in the anim.
-            continue   
-        try:
-            node.tracks[0].values[index]
-        except IndexError: # Not all bones will have a value at every frame. Many bones only have one frame.
-            continue
-
-        t = translation = node.tracks[0].values[index].translation
-        r = rotation = node.tracks[0].values[index].rotation
-        s = scale = node.tracks[0].values[index].scale
-        compensate_scale = node.tracks[0].scale_options.compensate_scale
-        tm = translation_matrix = Matrix.Translation(t)
-        qr = quaternion_rotation = Quaternion([r[3], r[0], r[1], r[2]])
-        rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
-        # Blender doesn't have this built in for some reason.
-        scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
-
-        scale_compensation = Matrix.Diagonal((1, 1, 1, 1))
-        if compensate_scale and bone.parent is not None:
-            # Scale compensation "compensates" the effect of the immediate parent's scale.
-            # We don't want the compensation to accumulate along a bone chain. 
-            # HACK: Use the transform itself since we may overwrite a scale value.
-            # This assumes the parent is in the animation.
-            # TODO(SMG): Investigate where the parent scale value comes from.
-            parent_node = bone_to_node.get(bone.parent, None)
-            if parent_node is not None:
-                try:
-                    parent_scale = parent_node.tracks[0].values[index].scale
-                    # TODO: Does this handle axes correctly with non uniform scale?
-                    print(parent_scale)
-                    scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
-                except IndexError:
-                    # TODO: A single frame in ssbh_data_py should be assumed to be a constant animation.
-                    # The single element value applies to all frames.
-                    # This matches the convention used for Smash Ultimate.
-                    pass
-
-        raw_matrix = mathutils.Matrix(tm @ scale_compensation @ rm @ scale_matrix)
-
-        if bone.parent is not None:
-            # TODO: Investigate twisting on mario's wait animations.
-            fixed_matrix = get_blender_transform(raw_matrix, transpose=False)
-            bone.matrix = bone.parent.matrix @ fixed_matrix
-        else:
-            # TODO: Investigate how to do this without bpy.ops
-            bone.matrix = get_blender_transform(raw_matrix, transpose=False)
-            arma.data.bones.active = bone.bone
-            bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
-            bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)
-        keyframe_insert_bone_locrotscale(arma, bone.name, frame, 'Transform')
-
-
-def keyframe_insert_bone_locrotscale(arma: bpy.types.Object, bone_name, frame, group_name):
-    for parameter in ['location', 'rotation_quaternion', 'scale']:
-        arma.keyframe_insert(
-            data_path=f'pose.bones["{bone_name}"].{parameter}',
-            frame=frame,
-            group=group_name,
-            options={'INSERTKEY_NEEDED'},
-        )
 
 def keyframe_insert_camera_locrotscale(camera, frame):
     for parameter in ['location', 'rotation_quaternion', 'scale']:
