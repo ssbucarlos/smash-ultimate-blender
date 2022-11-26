@@ -351,26 +351,21 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                 scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
 
                 scale_compensation = Matrix.Diagonal((1.0, 1.0, 1.0, 1.0))
-                if compensate_scale and bone.parent is not None:# and bone.parent.parent is not None:
-                    # TODO(SMG): Just use the parent and grandparent.
+                    # TODO: Figure out why this doesn't match ssbh_wgpu.
                     # Scale compensation "compensates" the effect of the immediate parent's scale.
-                    # We don't want the compensation to accumulate along a bone chain. 
-                    # HACK: Use the transform itself since we may overwrite a scale value.
-                    # This assumes the parent is in the animation.
-                    # TODO(SMG): Investigate where the parent scale value comes from.
-                    # parent_scale = (bone.parent.parent.matrix.inverted() @ bone.parent.matrix).to_scale()
-                    # scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
-
                     parent_node = bone_to_node.get(bone.parent, None)
                     if parent_node is not None:
                         try:
-                            parent_scale = parent_node.tracks[0].values[index].scale
+                            # The parent may not have the same frame count.
+                            # Handle the case where the parent has only one frame.
+                            if index >= len(parent_node.tracks[0].values):
+                                parent_scale = parent_node.tracks[0].values[0].scale
+                            else:
+                                parent_scale = parent_node.tracks[0].values[index].scale
+
                             # TODO: Does this handle axes correctly with non uniform scale?
                             scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
                         except IndexError:
-                            # TODO: A single frame in ssbh_data_py should be assumed to be a constant animation.
-                            # The single element value applies to all frames.
-                            # This matches the convention used for Smash Ultimate.
                             pass
 
                 raw_matrix = mathutils.Matrix(tm @ scale_compensation @ rm @ scale_matrix)
