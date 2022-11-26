@@ -448,6 +448,7 @@ def default_texture(param_name):
 
 
 def find_output_node(material):
+    # TODO: Potential error if the material does not use nodes.
     for node in material.node_tree.nodes:
         if node.bl_idname == 'ShaderNodeOutputMaterial':
             return node
@@ -844,7 +845,7 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_color_names)
             message = f'Mesh {mesh_name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
-            message += ' Select the mesh and change the vertex color name in Object Data Properties > Vertex Colors.'
+            message += ' Select the mesh and change the vertex color name in Object Data Properties > Color Attributes.'
             raise RuntimeError(message)
 
         ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
