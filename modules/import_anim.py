@@ -351,6 +351,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                 scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
 
                 scale_compensation = Matrix.Diagonal((1.0, 1.0, 1.0, 1.0))
+                if compensate_scale and bone.parent:
                     # TODO: Figure out why this doesn't match ssbh_wgpu.
                     # Scale compensation "compensates" the effect of the immediate parent's scale.
                     parent_node = bone_to_node.get(bone.parent, None)
