@@ -732,14 +732,14 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
 
     # For example, vertices is a bpy_prop_collection of MeshVertex, which has a "co" attribute for position.
     positions = np.zeros(len(mesh_data.vertices) * 3, dtype=np.float32)
-    mesh_data.vertices.foreach_get("co", positions)
+    mesh_data.vertices.foreach_get('co', positions)
     # The output data is flattened, so we need to reshape it into the appropriate number of rows and columns.
     position0.data = positions.reshape((-1, 3)) @ axis_correction
     ssbh_mesh_object.positions = [position0]
 
     # Store vertex indices as a numpy array for faster indexing later.
     vertex_indices = np.zeros(len(mesh_data.loops), dtype=np.uint32)
-    mesh_data.loops.foreach_get("vertex_index", vertex_indices)
+    mesh_data.loops.foreach_get('vertex_index', vertex_indices)
     ssbh_mesh_object.vertex_indices = vertex_indices
 
     # We use the loop normals rather than vertex normals to allow exporting custom normals.
@@ -748,7 +748,7 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
     # Export Normals
     normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
     loop_normals = np.zeros(len(mesh_data.loops) * 3, dtype=np.float32)
-    mesh_data.loops.foreach_get("normal", loop_normals)
+    mesh_data.loops.foreach_get('normal', loop_normals)
     normals = per_loop_to_per_vertex(loop_normals, vertex_indices, (len(mesh_data.vertices), 3))
     normals = normals @ axis_correction
 
@@ -840,18 +840,26 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
 
     # Export Color Set
     smash_color_names = ['colorSet1', 'colorSet2', 'colorSet2_1', 'colorSet2_2', 'colorSet2_3', 'colorSet3', 'colorSet4', 'colorSet5', 'colorSet6', 'colorSet7']
-    for color_layer in mesh.data.vertex_colors:
-        if color_layer.name not in smash_color_names:
+    for attribute in mesh.data.color_attributes:
+        if attribute.name not in smash_color_names:
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_color_names)
-            message = f'Mesh {mesh_name} has invalid vertex color name {color_layer.name}. Valid names are {valid_attribute_list}.'
+            message = f'Mesh {mesh_name} has invalid vertex color name {attribute.name}. Valid names are {valid_attribute_list}.'
             message += ' Select the mesh and change the vertex color name in Object Data Properties > Color Attributes.'
             raise RuntimeError(message)
 
-        ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(color_layer.name)
+        ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(attribute.name)
 
-        loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
-        color_layer.data.foreach_get("color", loop_colors)
+        # ssbh_data expects all colors to be 32 bit floats in the range 0.0 to 1.0.
+        # TODO: Support other data types.
+        print(attribute.domain)
+        if attribute.data_type == 'FLOAT_COLOR':
+            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+            attribute.data.foreach_get('color', loop_colors)
+        else:
+            message = f'Color attribute {attribute.name} has unsupported data type {attribute.data_type}.'
+            raise RuntimeError(message)
+
         ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
 
         ssbh_mesh_object.color_sets.append(ssbh_color_layer)
@@ -867,10 +875,10 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
     tangent0 = ssbh_data_py.mesh_data.AttributeData('Tangent0')
 
     loop_tangents = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
-    mesh.data.loops.foreach_get("tangent", loop_tangents)
+    mesh.data.loops.foreach_get('tangent', loop_tangents)
 
     loop_bitangent_signs = np.zeros(len(mesh.data.loops), dtype=np.float32)
-    mesh.data.loops.foreach_get("bitangent_sign", loop_bitangent_signs)
+    mesh.data.loops.foreach_get('bitangent_sign', loop_bitangent_signs)
 
     tangents = per_loop_to_per_vertex(loop_tangents, vertex_indices, (len(mesh.data.vertices), 3))
     bitangent_signs = per_loop_to_per_vertex(loop_bitangent_signs, vertex_indices, (len(mesh.data.vertices), 1))
@@ -919,6 +927,13 @@ def split_duplicate_uvs(mesh: bpy.types.Object, original_mesh):
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
     if len(edges_to_split) > 0:
+        # TODO: Get a mapping from old vertex normals to new vertex normals.
+        # TODO: Add a custom color attribute using the INT data type.
+        # This should allow mapping the newly split vertices to their old index.
+        # The old index can be used to get the previous custom normal.
+        # TODO: Use normals_split_custom_set_from_vertices to assign normals.
+        # TODO: Can the old normals just be put into a FLOAT color attribute instead?
+
         # Before splitting, add the split verts to a vertex group, 
         #  so that the data transfer modifier can only target these verts.
         new_vg = mesh.vertex_groups.new(name='_smush_blender_export_seam')

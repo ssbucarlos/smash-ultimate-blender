@@ -500,7 +500,7 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
     # Attach the mesh object to the armature object.
     if armature is not None:
         mesh_obj.parent = armature
-        modifier = mesh_obj.modifiers.new(armature.data.name, type="ARMATURE")
+        modifier = mesh_obj.modifiers.new(armature.data.name, type='ARMATURE')
         modifier.object = armature
 
 
@@ -514,7 +514,7 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
     positions = ssbh_mesh_object.positions[0].data[:,:3]
     blender_mesh.vertices.add(positions.shape[0])
-    blender_mesh.vertices.foreach_set("co", positions.flatten())
+    blender_mesh.vertices.foreach_set('co', positions.flatten())
 
     # Assume triangles, which is the only primitive used in Smash Ultimate.
     # TODO(SMG): ssbh_data_py can use a numpy array here in the future.
@@ -523,11 +523,11 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     loop_total = np.full(loop_start.shape[0], 3, dtype=np.int32)
 
     blender_mesh.loops.add(vertex_indices.shape[0])
-    blender_mesh.loops.foreach_set("vertex_index", vertex_indices)
+    blender_mesh.loops.foreach_set('vertex_index', vertex_indices)
 
     blender_mesh.polygons.add(loop_start.shape[0])
-    blender_mesh.polygons.foreach_set("loop_start", loop_start)
-    blender_mesh.polygons.foreach_set("loop_total", loop_total)
+    blender_mesh.polygons.foreach_set('loop_start', loop_start)
+    blender_mesh.polygons.foreach_set('loop_total', loop_total)
 
     for attribute_data in ssbh_mesh_object.texture_coordinates:
         uv_layer = blender_mesh.uv_layers.new(name=attribute_data.name)
@@ -538,16 +538,16 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
 
         # This is set per loop rather than per vertex.
         loop_uvs = uvs[vertex_indices].flatten()
-        uv_layer.data.foreach_set("uv", loop_uvs)
+        uv_layer.data.foreach_set('uv', loop_uvs)
 
     for attribute_data in ssbh_mesh_object.color_sets:
-        color_layer = blender_mesh.vertex_colors.new(name=attribute_data.name)
+        color_attribute = blender_mesh.color_attributes.new(name=attribute_data.name, type='FLOAT_COLOR', domain='CORNER')
         # TODO: Create a function for this?
         colors = attribute_data.data[:,:4]
 
         # This is set per loop rather than per vertex.
         loop_colors = colors[vertex_indices].flatten()
-        color_layer.data.foreach_set("color", loop_colors)
+        color_attribute.data.foreach_set('color', loop_colors)
 
     # These calls are necessary since we're setting mesh data manually.
     blender_mesh.update()
