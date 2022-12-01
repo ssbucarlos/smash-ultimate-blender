@@ -666,7 +666,6 @@ def make_mesh_data(operator, context, export_mesh_groups):
     for group_name, meshes in export_mesh_groups:
         for i, mesh in enumerate(meshes):
             '''
-            Need to Make a copy of the mesh, split by material, apply transforms, and validate for potential errors.
             list of potential issues that need to validate
             1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
             '''   
@@ -852,8 +851,11 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
 
         # ssbh_data expects all colors to be 32 bit floats in the range 0.0 to 1.0.
         # TODO: Support other data types.
-        print(attribute.domain)
         if attribute.data_type == 'FLOAT_COLOR':
+            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+            attribute.data.foreach_get('color', loop_colors)
+        elif attribute.data_type == 'BYTE_COLOR':
+            # Despite being called 'BYTE' color this uses an array of 4 floats.
             loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
             attribute.data.foreach_get('color', loop_colors)
         else:

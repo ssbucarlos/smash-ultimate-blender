@@ -541,7 +541,8 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
         uv_layer.data.foreach_set('uv', loop_uvs)
 
     for attribute_data in ssbh_mesh_object.color_sets:
-        color_attribute = blender_mesh.color_attributes.new(name=attribute_data.name, type='FLOAT_COLOR', domain='CORNER')
+        # Byte color still uses floats but restricts their range to 0.0 to 1.0.
+        color_attribute = blender_mesh.color_attributes.new(name=attribute_data.name, type='BYTE_COLOR', domain='CORNER')
         # TODO: Create a function for this?
         colors = attribute_data.data[:,:4]
 
