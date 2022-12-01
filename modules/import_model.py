@@ -554,9 +554,8 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     blender_mesh.update()
     blender_mesh.validate()
 
-    # TODO: Is there a faster way to do this?
-    # Now that the mesh is created, now we can assign split custom normals
-    blender_mesh.use_auto_smooth = True # Required to use custom normals
+    # Auto smooth also enables custom vertex normals.
+    blender_mesh.use_auto_smooth = True
     blender_mesh.normals_split_custom_set_from_vertices(ssbh_mesh_object.normals[0].data[:,:3])
 
     # Try and assign the material.

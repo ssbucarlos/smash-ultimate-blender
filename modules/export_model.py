@@ -673,8 +673,22 @@ def make_mesh_data(operator, context, export_mesh_groups):
             mesh_object_copy = mesh.copy()
             mesh_object_copy.data = mesh.data.copy()
 
-            # Auto smooth also enables custom vertex normals.
-            mesh_object_copy.data.use_auto_smooth = True
+            # Get the custom normals from the original mesh.
+            mesh.data.calc_normals_split()
+            loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
+            mesh.data.loops.foreach_get('normal', loop_normals)
+
+            # Pad to 4 components for fitting in the color attribute.
+            loop_normals = loop_normals.reshape((-1, 3))
+            loop_normals = np.append(loop_normals, np.zeros((loop_normals.shape[0],1)), axis=1)
+            loop_normals = loop_normals.flatten()
+
+            # Transfer the original normals to a custom attribute.
+            # This allows us to edit the mesh without affecting custom normals.
+            # Use FLOAT_COLOR since FLOAT_VECTOR doesn't add a key for some reason.
+            # TODO: Is it ok to always assume FLOAT_COLOR will allow signed values?
+            normals_color = mesh_object_copy.data.color_attributes.new(name='_smush_blender_custom_normals', type='FLOAT_COLOR', domain='CORNER')
+            normals_color.data.foreach_set('color', loop_normals)
 
             # Apply any transforms before exporting to preserve vertex positions.
             # Assume the meshes have no children that would inherit their transforms.
@@ -700,12 +714,26 @@ def make_mesh_data(operator, context, export_mesh_groups):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
-            # TODO: Tangents won't be calculated properly if there are splits?
-            # TODO: Is it better to use Blender's mikktspace tangents?
-            if split_duplicate_uvs(mesh_object_copy, mesh):
+            if split_duplicate_uvs(mesh_object_copy):
                 message = f'Mesh {mesh.name} has more than one UV coord per vertex.'
                 message += ' Splitting duplicate UV edges on temporary mesh for export.'
                 operator.report({'WARNING'}, message)
+
+            # Extract the custom normals preserved in the color attribute.
+            # Color attributes should not be affected by splitting or triangulating.
+            # This avoids the datatransfer modifier not handling vertices at the same position.
+            loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 4, dtype=np.float32)
+            normals_color = mesh_object_copy.data.color_attributes['_smush_blender_custom_normals']
+            normals_color.data.foreach_get('color', loop_normals)
+
+            # Remove the dummy fourth component.
+            loop_normals = loop_normals.reshape((-1, 4))[:,:3]
+
+            # Assign the preserved custom normals to the temp mesh.
+            mesh_object_copy.data.normals_split_custom_set(loop_normals)
+            mesh_object_copy.data.use_auto_smooth = True
+            mesh_object_copy.data.calc_normals_split()
+            mesh_object_copy.data.update()
 
             try:
                 # Use the original mesh name since the copy will have strings like ".001" appended.
@@ -740,9 +768,6 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
     vertex_indices = np.zeros(len(mesh_data.loops), dtype=np.uint32)
     mesh_data.loops.foreach_get('vertex_index', vertex_indices)
     ssbh_mesh_object.vertex_indices = vertex_indices
-
-    # We use the loop normals rather than vertex normals to allow exporting custom normals.
-    mesh_data.calc_normals_split()
 
     # Export Normals
     normal0 = ssbh_data_py.mesh_data.AttributeData('Normal0')
@@ -840,6 +865,9 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
     # Export Color Set
     smash_color_names = ['colorSet1', 'colorSet2', 'colorSet2_1', 'colorSet2_2', 'colorSet2_3', 'colorSet3', 'colorSet4', 'colorSet5', 'colorSet6', 'colorSet7']
     for attribute in mesh.data.color_attributes:
+        if attribute.name == '_smush_blender_custom_normals':
+            continue
+
         if attribute.name not in smash_color_names:
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_color_names)
@@ -913,7 +941,7 @@ def get_duplicate_uv_edges(bm, uv_layer):
     return edges_to_split
 
 
-def split_duplicate_uvs(mesh: bpy.types.Object, original_mesh):
+def split_duplicate_uvs(mesh: bpy.types.Object):
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.mode_set(mode = 'EDIT')
 
@@ -929,38 +957,12 @@ def split_duplicate_uvs(mesh: bpy.types.Object, original_mesh):
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
     if len(edges_to_split) > 0:
-        # TODO: Get a mapping from old vertex normals to new vertex normals.
-        # TODO: Add a custom color attribute using the INT data type.
-        # This should allow mapping the newly split vertices to their old index.
-        # The old index can be used to get the previous custom normal.
-        # TODO: Use normals_split_custom_set_from_vertices to assign normals.
-        # TODO: Can the old normals just be put into a FLOAT color attribute instead?
-
-        # Before splitting, add the split verts to a vertex group, 
-        #  so that the data transfer modifier can only target these verts.
-        new_vg = mesh.vertex_groups.new(name='_smush_blender_export_seam')
-        layer_deform = bm.verts.layers.deform.active
-        bm.verts.ensure_lookup_table()
-        for edge in edges_to_split:
-            for vert in edge.verts:
-                vert[layer_deform][new_vg.index] = 1.0
         bmesh.ops.split_edges(bm, edges=edges_to_split)
         bmesh.update_edit_mesh(me)
 
     bm.free()
 
     bpy.ops.object.mode_set(mode='OBJECT')
-
-    if len(edges_to_split) > 0:
-        # Copy the original normals to preserve smooth shading.
-        # TODO: Investigate preserving smooth tangents as well.
-        bpy.context.view_layer.objects.active = mesh
-        modifier: bpy.types.DataTransferModifier = mesh.modifiers.new(name='Transfer Normals', type='DATA_TRANSFER')
-        modifier.object = original_mesh
-        modifier.data_types_loops = {'CUSTOM_NORMAL'}
-        modifier.vertex_group = new_vg.name
-        bpy.ops.object.modifier_apply(modifier=modifier.name)
-
     bpy.context.view_layer.objects.active = None
 
     # Check if any edges were split.
