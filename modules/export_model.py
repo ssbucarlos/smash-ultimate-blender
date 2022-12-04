@@ -1081,7 +1081,7 @@ def make_update_prc(operator: Operator, context, bones_not_in_vanilla: list[Edit
     ssp: SubSceneProperties = context.scene.sub_scene_properties
     prc_root = pyprc.param(ssp.vanilla_update_prc) # Read the .prc into 'prc_root'
     bones_fake_list = dict(prc_root).get(pyprc.hash('bones'))
-    if not bones_fake_list:
+    if bones_fake_list is None:
         operator.report({'ERROR'}, 'No "bones" list in update.prc! (Did you load another prc instead?)')
         return
     bones_real_list = list(bones_fake_list)
