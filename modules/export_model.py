@@ -847,8 +847,9 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
         if uv_layer.name not in smash_uv_names:
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_uv_names)
-            message = f'Mesh {mesh_name} has invalid UV map name {uv_layer.name}. Valid names are {valid_attribute_list}.'
-            message += ' Select the mesh and change the UV map name in Object Data Properties > UV Maps.'
+            message = f'Mesh {mesh_name} has invalid UV map name {uv_layer.name}.'
+            message += ' Use the Attribute Renamer or change the name in Object Data Properties > UV Maps.'
+            message += f' Valid names are {valid_attribute_list}.'
             raise RuntimeError(message)
 
         ssbh_uv_layer = ssbh_data_py.mesh_data.AttributeData(uv_layer.name)
@@ -871,8 +872,9 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
         if attribute.name not in smash_color_names:
             # TODO: Use more specific exception classes?
             valid_attribute_list = ', '.join(smash_color_names)
-            message = f'Mesh {mesh_name} has invalid vertex color name {attribute.name}. Valid names are {valid_attribute_list}.'
-            message += ' Select the mesh and change the vertex color name in Object Data Properties > Color Attributes.'
+            message = f'Mesh {mesh_name} has invalid vertex color name {attribute.name}.'
+            message += ' Use the Attribute Renamer or change the name in Object Data Properties > Color Attributes.'
+            message += f' Valid names are {valid_attribute_list}.'
             raise RuntimeError(message)
 
         ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(attribute.name)
