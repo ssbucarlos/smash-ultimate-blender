@@ -229,13 +229,10 @@ def get_discard_shaders():
             discard_shaders = {line.strip() for line in f.readlines()}
     return discard_shaders
 
-'''
-The following code is mostly shamelessly stolen from SMG 
-(except for the bone import)
-Oh hey SMG is a collaborator of this repo now, and you cant steal code from a collaborator ;)
-'''
+
 def get_matrix4x4_blender(ssbh_matrix):
     return mathutils.Matrix(ssbh_matrix).transposed()
+
 
 def find_bone(skel, name):
     for bone in skel.bones:
@@ -252,21 +249,22 @@ def find_bone_index(skel, name):
 
     return None
 
+
 def get_name_from_index(index, bones):
     if index is None:
         return None
     return bones[index].name
+
 
 def get_index_from_name(name, bones):
     for index, bone in enumerate(bones):
         if bone.name == name:
             return index
 
-def get_blender_transform(m, transpose=True) -> Matrix:
-    m = Matrix(m)
-    # TODO(SMG): Transposing won't be necessary in the next ssbh_data_py update.
-    if transpose:
-        m.transpose()
+
+def get_blender_transform(m) -> Matrix:
+    m = Matrix(m).transposed()
+
     # In Ultimate, the bone's x-axis points from parent to child.
     # In Blender, the bone's y-axis points from parent to child.
     # https://en.wikipedia.org/wiki/Matrix_similarity
@@ -278,6 +276,7 @@ def get_blender_transform(m, transpose=True) -> Matrix:
     ])
     # Perform the transformation m in Ultimate's basis and convert back to Blender.
     return p @ m @ p.inverted()
+
 
 def create_armature(ssbh_skel, context) -> bpy.types.Object: 
     '''
@@ -517,7 +516,6 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     blender_mesh.vertices.foreach_set('co', positions.flatten())
 
     # Assume triangles, which is the only primitive used in Smash Ultimate.
-    # TODO(SMG): ssbh_data_py can use a numpy array here in the future.
     vertex_indices = np.array(ssbh_mesh_object.vertex_indices, dtype=np.int32)
     loop_start = np.arange(0, vertex_indices.shape[0], 3, dtype=np.int32)
     loop_total = np.full(loop_start.shape[0], 3, dtype=np.int32)
@@ -543,7 +541,6 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     for attribute_data in ssbh_mesh_object.color_sets:
         # Byte color still uses floats but restricts their range to 0.0 to 1.0.
         color_attribute = blender_mesh.color_attributes.new(name=attribute_data.name, type='BYTE_COLOR', domain='CORNER')
-        # TODO: Create a function for this?
         colors = attribute_data.data[:,:4]
 
         # This is set per loop rather than per vertex.

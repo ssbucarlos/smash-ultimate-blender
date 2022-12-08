@@ -993,6 +993,7 @@ def make_modl_data(operator, context, export_mesh_groups):
 
     return ssbh_modl_data
 
+
 def get_smash_transform(m) -> Matrix:
     # This is the inverse of the get_blender_transform permutation matrix.
     # https://en.wikipedia.org/wiki/Matrix_similarity
@@ -1003,7 +1004,6 @@ def get_smash_transform(m) -> Matrix:
         [0, 0, 0, 1]
     ])
     # Perform the transformation m in Blender's basis and convert back to Ultimate.
-    # TODO(SMG): Transposing won't be necessary in the next ssbh_data_py update.
     return (p @ m @ p.inverted()).transposed()
 
 
