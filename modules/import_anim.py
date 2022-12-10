@@ -372,11 +372,11 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                 raw_matrix = mathutils.Matrix(tm @ scale_compensation @ rm @ scale_matrix)
                 bone_fcurves = bone_to_fcurves[bone]
                 if bone.parent is None: # The root bone
-                    fixed_matrix = get_blender_transform(raw_matrix, transpose=False)
+                    fixed_matrix = get_blender_transform(raw_matrix).transposed()
                     bone_fcurves.stash_keyframe_set_from_matrix(index, frame, fixed_matrix)
                     bone_to_matrix[bone] = fixed_matrix
                 else:
-                    fixed_child_matrix = get_blender_transform(raw_matrix, transpose=False)
+                    fixed_child_matrix = get_blender_transform(raw_matrix).transposed()
                     parent_matrix = bone_to_matrix[bone.parent]
                     pose_matrix = parent_matrix @ fixed_child_matrix
                     matrix_basis: Matrix = bone_to_rel_matrix_local[bone].inverted() @ parent_matrix.inverted() @ pose_matrix
