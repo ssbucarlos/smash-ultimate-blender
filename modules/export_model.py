@@ -448,12 +448,14 @@ def default_texture(param_name):
 
 
 def find_output_node(material):
-    # TODO: Potential error if the material does not use nodes.
-    for node in material.node_tree.nodes:
-        if node.bl_idname == 'ShaderNodeOutputMaterial':
-            return node
+    try:
+        for node in material.node_tree.nodes:
+            if node.bl_idname == 'ShaderNodeOutputMaterial':
+                return node
 
-    return None
+        return None
+    except:
+        return None
 
 
 def find_ultimate_node(material):
@@ -488,11 +490,10 @@ def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
     for material in materials:
-        ultimate_node = find_ultimate_node(material)
-    
-        if ultimate_node is not None:
+        try:
+            ultimate_node = find_ultimate_node(material)
             entry = create_material_entry_from_node_group(operator, ultimate_node)
-        else:
+        except:
             # Materials are often edited in external applications.
             # Use a default for missing node groups to allow exporting to proceed.    
             entry = default_ssbh_material(material.name)

@@ -595,6 +595,7 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
             setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
             label_to_material_dict[label] = blender_mat
         except Exception as e:
+            # TODO: Report an exception instead.
             print(f'Failed to create material for {label}:  Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     name_index_mat_dict = { 
