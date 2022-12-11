@@ -715,9 +715,11 @@ def make_mesh_data(operator, context, export_mesh_groups):
             context.collection.objects.link(mesh_object_copy)
             context.view_layer.update()
 
-            if split_duplicate_uvs(mesh_object_copy):
-                message = f'Mesh {mesh.name} has more than one UV coord per vertex.'
-                message += ' Splitting duplicate UV edges on temporary mesh for export.'
+            # Blender stores normals and UVs per loop rather than per vertex.
+            # Edges with more than one value per vertex need to be split.
+            if split_duplicate_loop_attributes(mesh_object_copy):
+                message = f'Mesh {mesh.name} has more than one UV coord or normal per vertex.'
+                message += ' Splitting affected vertices on temporary mesh for export.'
                 operator.report({'WARNING'}, message)
 
             # Extract the custom normals preserved in the color attribute.
@@ -933,18 +935,42 @@ def get_duplicate_uv_edges(bm, uv_layer):
         for loop in face.loops:
             vertex_index = loop.vert.index
             uv = loop[uv_layer].uv
+            # Use strict equality since UVs are unlikely to change unintentionally.
             if vertex_index not in index_to_uv:
                 index_to_uv[vertex_index] = uv
             elif uv != index_to_uv[vertex_index]:
-                # Get any edges containing this vertex.
                 edges_to_split.extend(loop.vert.link_edges)
 
-    # TODO: Do duplicates matter?
-    edges_to_split = list(set(edges_to_split))
     return edges_to_split
 
 
-def split_duplicate_uvs(mesh: bpy.types.Object):
+def get_duplicate_normal_edges(bm):
+    edges_to_split = []
+
+    # The original normals are preserved in a color attribute.
+    normal_layer = bm.loops.layers.float_color.get('_smush_blender_custom_normals')
+
+    # Find edges connected to vertices with more than one normal.
+    # This allows converting to per vertex later by splitting edges.
+    index_to_normal = {}
+    for face in bm.faces:
+        for loop in face.loops:
+            vertex_index = loop.vert.index
+            normal = loop[normal_layer]
+            # Small fluctuations in normal vectors are expected during processing.
+            # Check if the angle between normals is sufficiently large.
+            # Assume normal vectors are normalized to have length 1.0.
+            if vertex_index not in index_to_normal:
+                index_to_normal[vertex_index] = normal
+            elif not np.isclose(normal.dot(index_to_normal[vertex_index]), 1.0, atol=0.001, rtol=0.001):
+                print(normal, index_to_normal[vertex_index], normal.dot(index_to_normal[vertex_index]))
+                # Get any edges containing this vertex.
+                edges_to_split.extend(loop.vert.link_edges)
+
+    return edges_to_split
+
+
+def split_duplicate_loop_attributes(mesh: bpy.types.Object):
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.mode_set(mode = 'EDIT')
 
@@ -953,9 +979,14 @@ def split_duplicate_uvs(mesh: bpy.types.Object):
 
     edges_to_split: list[bmesh.types.BMEdge] = []
 
+    edges_to_split.extend(get_duplicate_normal_edges(bm))
+
     for layer_name in bm.loops.layers.uv.keys():
         uv_layer = bm.loops.layers.uv.get(layer_name)
         edges_to_split.extend(get_duplicate_uv_edges(bm, uv_layer))
+
+    # Duplicate edges cause problems with split_edges.
+    edges_to_split = list(set(edges_to_split))
 
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
