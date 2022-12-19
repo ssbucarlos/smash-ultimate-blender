@@ -377,25 +377,30 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                     bone_to_matrix[bone] = fixed_matrix
                 else:
                     fixed_child_matrix = get_blender_transform(raw_matrix).transposed()
-                    parent_matrix = bone_to_matrix[bone.parent]
-                    pose_matrix = parent_matrix @ fixed_child_matrix
-                    matrix_basis: Matrix = bone_to_rel_matrix_local[bone].inverted() @ parent_matrix.inverted() @ pose_matrix
+                    matrix_basis: Matrix = bone_to_rel_matrix_local[bone].inverted() @ fixed_child_matrix
+
+                    # Some tracks ignore parts of the anim transform.
+                    # This allows bones like swing bones to be animated in other ways.
                     mbtv, mbrq, mbsv = matrix_basis.decompose()
-                    if node.tracks[0].transform_flags.override_translation is True:
+
+                    if node.tracks[0].transform_flags.override_translation:
                         mbtv = [0.0, 0.0, 0.0]
                     mbtm = Matrix.Translation(mbtv)
-                    if node.tracks[0].transform_flags.override_rotation is True:
+                    if node.tracks[0].transform_flags.override_rotation:
                         mbrq = Quaternion([1,0,0,0])
                     mbrm = Matrix.Rotation(mbrq.angle, 4, mbrq.axis)
-                    if node.tracks[0].transform_flags.override_scale is True:
+                    if node.tracks[0].transform_flags.override_scale:
                         mbsv = [1.0, 1.0, 1.0]
                     mbsm = Matrix.Diagonal((mbsv[0], mbsv[1], mbsv[2], 1.0))
 
                     matrix_basis = (mbtm @ mbrm @ mbsm)
+
                     bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
                     bone_fcurves.stash_keyframe_set_from_matrix(index, frame, matrix_basis)
+
         for bone, bone_fcurves in bone_to_fcurves.items():
             bone_fcurves.set_keyframe_values_from_stash()
+
     # Visibility group import stuff
     visibility_group = name_to_group_dict.get('Visibility') if include_visibility_track else None
     if visibility_group:
