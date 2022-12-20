@@ -8,10 +8,10 @@ def get_master_shader_name():
     return 'Smash Ultimate Master Shader'
 
 
-def create_inputs(node_group_node, name_to_inputs):
-    for name, inputs in name_to_inputs.items():
+def create_inputs(node_tree, name_to_inputs):
+    for _, inputs in name_to_inputs.items():
         for socket, name, default in inputs:
-            input = node_group_node.inputs.new(socket, name)
+            input = node_tree.inputs.new(socket, name)
             input.default_value = default
 
 
@@ -35,27 +35,26 @@ def create_master_shader():
     node_group_node = mat_node_tree.nodes.new('ShaderNodeGroup')
 
     # Make the Node Group, which is its own node tree and lives with other node groups
-    new_node_group = bpy.data.node_groups.new(
-        master_shader_name, 'ShaderNodeTree')
+    node_group_node_tree = bpy.data.node_groups.new(master_shader_name, 'ShaderNodeTree')
 
     # Connect that new node_group to the node_group_node
     # (this should get rid of the 'missing data block', blender fills it out automatically)
-    node_group_node.node_tree = new_node_group
+    node_group_node.node_tree = node_group_node_tree
 
     node_group_node.name = 'Master'
 
     # Make the one output
-    output = node_group_node.outputs.new('NodeSocketShader', 'Final Output')
+    node_group_node_tree.outputs.new('NodeSocketShader', 'Final Output')
 
     # Now we are ready to start adding inputs
     def add_color_node(name):
-        return node_group_node.inputs.new('NodeSocketColor', name)
+        return node_group_node_tree.inputs.new('NodeSocketColor', name)
 
     def add_float_node(name):
-        return node_group_node.inputs.new('NodeSocketFloat', name)
+        return node_group_node_tree.inputs.new('NodeSocketFloat', name)
 
-    node_group_node.inputs.new('NodeSocketString', 'Material Name')
-    node_group_node.inputs.new('NodeSocketString', 'Shader Label')
+    node_group_node_tree.inputs.new('NodeSocketString', 'Material Name')
+    node_group_node_tree.inputs.new('NodeSocketString', 'Shader Label')
 
     add_color_node('Texture0 RGB (Col Map Layer 1)')
     input = add_float_node('Texture0 Alpha (Col Map Layer 1)')
@@ -117,23 +116,23 @@ def create_master_shader():
     input = add_float_node('colorSet5 Alpha')
     input.default_value = 1.0 / 3.0
 
-    create_inputs(node_group_node, material_inputs.vec4_param_to_inputs)
-    create_inputs(node_group_node, material_inputs.float_param_to_inputs)
-    create_inputs(node_group_node, material_inputs.bool_param_to_inputs)
+    create_inputs(node_group_node_tree, material_inputs.vec4_param_to_inputs)
+    create_inputs(node_group_node_tree, material_inputs.float_param_to_inputs)
+    create_inputs(node_group_node_tree, material_inputs.bool_param_to_inputs)
 
-    input = node_group_node.inputs.new(
+    input = node_group_node_tree.inputs.new(
         'NodeSocketString', 'BlendState0 Field1 (Source Color)')
     input.default_value = "One"
-    input = node_group_node.inputs.new(
+    input = node_group_node_tree.inputs.new(
         'NodeSocketString', 'BlendState0 Field3 (Destination Color)')
     input.default_value = "Zero"
-    input = node_group_node.inputs.new(
+    input = node_group_node_tree.inputs.new(
         'NodeSocketBool', 'BlendState0 Field7 (Alpha to Coverage)')
     input.default_value = False
-    input = node_group_node.inputs.new(
+    input = node_group_node_tree.inputs.new(
         'NodeSocketString', 'RasterizerState0 Field1 (Polygon Fill)')
     input.default_value = 'Fill'
-    input = node_group_node.inputs.new(
+    input = node_group_node_tree.inputs.new(
         'NodeSocketString', 'RasterizerState0 Field2 (Cull Mode)')
     input.default_value = 'Back'
     input = add_float_node('RasterizerState0 Field3 (Depth Bias)')
