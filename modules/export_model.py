@@ -717,10 +717,7 @@ def make_mesh_data(operator, context, export_mesh_groups):
 
             # Blender stores normals and UVs per loop rather than per vertex.
             # Edges with more than one value per vertex need to be split.
-            if split_duplicate_loop_attributes(mesh_object_copy):
-                message = f'Mesh {mesh.name} has more than one UV coord or normal per vertex.'
-                message += ' Splitting affected vertices on temporary mesh for export.'
-                operator.report({'WARNING'}, message)
+            split_duplicate_loop_attributes(mesh_object_copy)
 
             # Extract the custom normals preserved in the color attribute.
             # Color attributes should not be affected by splitting or triangulating.
