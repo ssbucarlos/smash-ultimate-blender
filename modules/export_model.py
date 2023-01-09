@@ -666,18 +666,22 @@ def make_mesh_data(operator, context, export_mesh_groups):
 
     for group_name, meshes in export_mesh_groups:
         for i, mesh in enumerate(meshes):
-            '''
-            list of potential issues that need to validate
-            1.) Shape Keys 2.) Negative Scaling 3.) Invalid Materials 4.) Degenerate Geometry
-            '''   
+            # TODO: Validate shape keys and degenerate geometry?
+
             # Make a copy of the mesh so that the original remains unmodified.
             mesh_object_copy = mesh.copy()
             mesh_object_copy.data = mesh.data.copy()
 
+            # Apply any transforms before exporting to preserve vertex positions.
+            # Assume the meshes have no children that would inherit their transforms.
+            mesh_object_copy.data.transform(mesh_object_copy.matrix_basis)
+            mesh_object_copy.matrix_basis.identity()
+
             # Get the custom normals from the original mesh.
-            mesh.data.calc_normals_split()
-            loop_normals = np.zeros(len(mesh.data.loops) * 3, dtype=np.float32)
-            mesh.data.loops.foreach_get('normal', loop_normals)
+            # We use the copy here since applying transforms alters the normals.
+            mesh_object_copy.data.calc_normals_split()
+            loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 3, dtype=np.float32)
+            mesh_object_copy.data.loops.foreach_get('normal', loop_normals)
 
             # Pad to 4 components for fitting in the color attribute.
             loop_normals = loop_normals.reshape((-1, 3))
@@ -690,11 +694,6 @@ def make_mesh_data(operator, context, export_mesh_groups):
             # TODO: Is it ok to always assume FLOAT_COLOR will allow signed values?
             normals_color = mesh_object_copy.data.color_attributes.new(name='_smush_blender_custom_normals', type='FLOAT_COLOR', domain='CORNER')
             normals_color.data.foreach_set('color', loop_normals)
-
-            # Apply any transforms before exporting to preserve vertex positions.
-            # Assume the meshes have no children that would inherit their transforms.
-            mesh_object_copy.data.transform(mesh_object_copy.matrix_basis)
-            mesh_object_copy.matrix_basis.identity()
 
             # Check if any of the faces are not tris, and converts them into tris
             if any(len(f.vertices) != 3 for f in mesh_object_copy.data.polygons):
