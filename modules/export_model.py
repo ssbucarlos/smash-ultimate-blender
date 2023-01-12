@@ -880,18 +880,28 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
 
         # ssbh_data expects all colors to be 32 bit floats in the range 0.0 to 1.0.
         # TODO: Support other data types.
+        if attribute.domain == 'CORNER':
+            colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+        elif attribute.domain == 'POINT':
+            colors = np.zeros(len(mesh.data.vertices) * 4, dtype=np.float32)
+        else:
+            message = f'Color attribute {attribute.name} has unsupported domain {attribute.domain}.'
+            raise RuntimeError(message)
+
         if attribute.data_type == 'FLOAT_COLOR':
-            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
-            attribute.data.foreach_get('color', loop_colors)
+            attribute.data.foreach_get('color', colors)
         elif attribute.data_type == 'BYTE_COLOR':
             # Despite being called 'BYTE' color this uses an array of 4 floats.
-            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
-            attribute.data.foreach_get('color', loop_colors)
+            attribute.data.foreach_get('color', colors)
         else:
             message = f'Color attribute {attribute.name} has unsupported data type {attribute.data_type}.'
             raise RuntimeError(message)
+        colors = per_loop_to_per_vertex(colors, vertex_indices, (len(mesh.data.vertices), 4))
 
-        ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
+        if attribute.domain == 'POINT':
+            colors = colors[vertex_indices]
+
+        ssbh_color_layer.data = colors
 
         ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
