@@ -879,7 +879,8 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
         ssbh_color_layer = ssbh_data_py.mesh_data.AttributeData(attribute.name)
 
         # ssbh_data expects all colors to be 32 bit floats in the range 0.0 to 1.0.
-        # TODO: Support other data types.
+        # Blender currently supports 'POINT' or 'CORNER' and 'FLOAT_COLOR' or 'BYTE_COLOR'.
+        # Raise an error if we encounter an unexpected data type or domain.
         if attribute.domain == 'CORNER':
             colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
         elif attribute.domain == 'POINT':
@@ -888,19 +889,20 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
             message = f'Color attribute {attribute.name} has unsupported domain {attribute.domain}.'
             raise RuntimeError(message)
 
-        if attribute.data_type == 'FLOAT_COLOR':
-            attribute.data.foreach_get('color', colors)
-        elif attribute.data_type == 'BYTE_COLOR':
-            # Despite being called 'BYTE' color this uses an array of 4 floats.
+        # 'BYTE_COLOR' also uses an array of 4 floats.
+        # https://docs.blender.org/api/current/bpy_types_enum_items/attribute_type_items.html#rna-enum-attribute-type-items
+        if attribute.data_type == 'FLOAT_COLOR' or attribute.data_type == 'BYTE_COLOR':
             attribute.data.foreach_get('color', colors)
         else:
             message = f'Color attribute {attribute.name} has unsupported data type {attribute.data_type}.'
             raise RuntimeError(message)
-        colors = per_loop_to_per_vertex(colors, vertex_indices, (len(mesh.data.vertices), 4))
 
-        if attribute.domain == 'POINT':
-            colors = colors[vertex_indices]
-
+        # Only face corner data is stored per loop.
+        # Unsupported domains are already checked above.
+        if attribute.domain == 'CORNER':
+            colors = per_loop_to_per_vertex(colors, vertex_indices, (len(mesh.data.vertices), 4))
+        
+        colors = colors.reshape((len(mesh.data.vertices), 4))
         ssbh_color_layer.data = colors
 
         ssbh_mesh_object.color_sets.append(ssbh_color_layer)

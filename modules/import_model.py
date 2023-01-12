@@ -921,7 +921,6 @@ def read_nuhlpb_data(nuhlpb_path: Path, armature: bpy.types.Armature):
         constraint.constraint_axes = o.constraint_axes
         # Smash is XYZW but blender is WXYZ
         constraint.quat1 = [o.quat1[3], o.quat1[0], o.quat1[1], o.quat1[2]]
-        # Smash is XYZW but blender is WXYZ
         constraint.quat2 = [o.quat2[3], o.quat2[0], o.quat2[1], o.quat2[2]]
         constraint.range_min = o.range_min
         constraint.range_max = o.range_max
