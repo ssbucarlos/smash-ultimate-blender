@@ -642,7 +642,7 @@ def create_texture_sampler(operator, input, material_label, param_name):
     return texture_attribute, sampler_attribute
 
 
-def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
+def per_loop_to_per_vertex(per_loop, vertex_indices, dim, domain = 'CORNER'):
     # Consider the following per loop data.
     # index, value
     # 0, 1
@@ -657,7 +657,10 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     # Convert from 1D per loop to 2D per vertex using numpy indexing magic.
     _, cols = dim
     per_vertex = np.zeros(dim, dtype=np.float32)
-    per_vertex[vertex_indices] = per_loop.reshape((-1, cols))
+    value = per_loop.reshape((-1, cols))
+    if domain == 'POINT':
+        value = value[vertex_indices]
+    per_vertex[vertex_indices] = value
     return per_vertex
 
 
@@ -881,17 +884,23 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
         # ssbh_data expects all colors to be 32 bit floats in the range 0.0 to 1.0.
         # TODO: Support other data types.
         if attribute.data_type == 'FLOAT_COLOR':
-            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+            if attribute.domain == 'POINT':
+                loop_colors = np.zeros(len(mesh.data.vertices) * 4, dtype=np.float32)
+            elif attribute.domain == 'CORNER':
+                loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
             attribute.data.foreach_get('color', loop_colors)
         elif attribute.data_type == 'BYTE_COLOR':
             # Despite being called 'BYTE' color this uses an array of 4 floats.
-            loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
+            if attribute.domain == 'POINT':
+                loop_colors = np.zeros(len(mesh.data.vertices) * 4, dtype=np.float32)
+            elif attribute.domain == 'CORNER':
+                loop_colors = np.zeros(len(mesh.data.loops) * 4, dtype=np.float32)
             attribute.data.foreach_get('color', loop_colors)
         else:
             message = f'Color attribute {attribute.name} has unsupported data type {attribute.data_type}.'
             raise RuntimeError(message)
 
-        ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4))
+        ssbh_color_layer.data = per_loop_to_per_vertex(loop_colors, vertex_indices, (len(mesh.data.vertices), 4),attribute.domain)
 
         ssbh_mesh_object.color_sets.append(ssbh_color_layer)
 
