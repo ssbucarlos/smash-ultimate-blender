@@ -932,9 +932,7 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
     return ssbh_mesh_object
 
 
-def get_duplicate_uv_edges(bm, uv_layer):
-    edges_to_split = []
-
+def add_duplicate_uv_edges(edges_to_split, bm, uv_layer):
     # Blender stores uvs per loop rather than per vertex.
     # Find edges connected to vertices with more than one uv coord.
     # This allows converting to per vertex later by splitting edges.
@@ -949,12 +947,8 @@ def get_duplicate_uv_edges(bm, uv_layer):
             elif uv != index_to_uv[vertex_index]:
                 edges_to_split.extend(loop.vert.link_edges)
 
-    return edges_to_split
 
-
-def get_duplicate_normal_edges(bm):
-    edges_to_split = []
-
+def add_duplicate_normal_edges(edges_to_split, bm):
     # The original normals are preserved in a color attribute.
     normal_layer = bm.loops.layers.float_color.get('_smush_blender_custom_normals')
 
@@ -970,12 +964,9 @@ def get_duplicate_normal_edges(bm):
             # Assume normal vectors are normalized to have length 1.0.
             if vertex_index not in index_to_normal:
                 index_to_normal[vertex_index] = normal
-            elif not np.isclose(normal.dot(index_to_normal[vertex_index]), 1.0, atol=0.001, rtol=0.001):
-                print(normal, index_to_normal[vertex_index], normal.dot(index_to_normal[vertex_index]))
+            elif not math.isclose(normal.dot(index_to_normal[vertex_index]), 1.0, abs_tol=0.001, rel_tol=0.001):
                 # Get any edges containing this vertex.
                 edges_to_split.extend(loop.vert.link_edges)
-
-    return edges_to_split
 
 
 def split_duplicate_loop_attributes(mesh: bpy.types.Object):
@@ -987,11 +978,11 @@ def split_duplicate_loop_attributes(mesh: bpy.types.Object):
 
     edges_to_split: list[bmesh.types.BMEdge] = []
 
-    edges_to_split.extend(get_duplicate_normal_edges(bm))
+    add_duplicate_normal_edges(edges_to_split, bm)
 
     for layer_name in bm.loops.layers.uv.keys():
         uv_layer = bm.loops.layers.uv.get(layer_name)
-        edges_to_split.extend(get_duplicate_uv_edges(bm, uv_layer))
+        add_duplicate_uv_edges(edges_to_split, bm, uv_layer)
 
     # Duplicate edges cause problems with split_edges.
     edges_to_split = list(set(edges_to_split))
