@@ -332,7 +332,9 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                     else:
                         bone_to_matrix[bone] = bone_to_rel_matrix_local[bone]
                     continue
-                if index >= len(node.tracks[0].values): # Bones either have a value on the first frame, or every frame
+
+                # Bones either have a value on the first frame or every frame.
+                if index >= len(node.tracks[0].values): 
                     if bone.parent:
                         matrix_basis = bone_to_fcurves[bone].get_matrix_basis(0)
                         bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
@@ -340,36 +342,9 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                         matrix_basis = bone_to_fcurves[bone].get_matrix_basis(0)
                         bone_to_matrix[bone] = bone_to_rel_matrix_local[bone] @ matrix_basis
                     continue 
-                t = translation = node.tracks[0].values[index].translation
-                r = rotation = node.tracks[0].values[index].rotation
-                s = scale = node.tracks[0].values[index].scale
-                tm = translation_matrix = Matrix.Translation(t)
-                qr = quaternion_rotation = Quaternion([r[3], r[0], r[1], r[2]])
-                rm = rotation_matrix = Matrix.Rotation(qr.angle, 4, qr.axis)
-                compensate_scale = node.tracks[0].scale_options.compensate_scale
-                # Blender doesn't have this built in for some reason.
-                scale_matrix = Matrix.Diagonal((s[0], s[1], s[2], 1.0))
 
-                scale_compensation = Matrix.Diagonal((1.0, 1.0, 1.0, 1.0))
-                if compensate_scale and bone.parent:
-                    # TODO: Figure out why this doesn't match ssbh_wgpu.
-                    # Scale compensation "compensates" the effect of the immediate parent's scale.
-                    parent_node = bone_to_node.get(bone.parent, None)
-                    if parent_node is not None:
-                        try:
-                            # The parent may not have the same frame count.
-                            # Handle the case where the parent has only one frame.
-                            if index >= len(parent_node.tracks[0].values):
-                                parent_scale = parent_node.tracks[0].values[0].scale
-                            else:
-                                parent_scale = parent_node.tracks[0].values[index].scale
+                raw_matrix = get_raw_matrix(bone_to_node, bone, index, node)
 
-                            # TODO: Does this handle axes correctly with non uniform scale?
-                            scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
-                        except IndexError:
-                            pass
-
-                raw_matrix = mathutils.Matrix(tm @ scale_compensation @ rm @ scale_matrix)
                 bone_fcurves = bone_to_fcurves[bone]
                 if bone.parent is None: # The root bone
                     fixed_matrix = get_blender_transform(raw_matrix).transposed()
@@ -514,6 +489,44 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
         setup_visibility_drivers(arma)
     if material_group:
         setup_material_drivers(arma)
+
+
+def get_raw_matrix(bone_to_node, bone, index, node):
+    translation = node.tracks[0].values[index].translation
+    rotation = node.tracks[0].values[index].rotation
+    scale = node.tracks[0].values[index].scale
+
+    tm = Matrix.Translation(translation)
+    qr = Quaternion([rotation[3], rotation[0], rotation[1], rotation[2]])
+    rm = Matrix.Rotation(qr.angle, 4, qr.axis)
+    # Blender doesn't have this built in for some reason.
+    scale_matrix = Matrix.Diagonal((scale[0], scale[1], scale[2], 1.0))
+    compensate_scale = node.tracks[0].scale_options.compensate_scale
+    scale_compensation = get_scale_compensation(bone_to_node, bone, index, compensate_scale)
+
+    return tm @ scale_compensation @ rm @ scale_matrix
+
+
+def get_scale_compensation(bone_to_node, bone, frame, compensate_scale):
+    scale_compensation = Matrix.Diagonal((1.0, 1.0, 1.0, 1.0))
+    if compensate_scale and bone.parent:
+        # Scale compensation "compensates" the effect of the immediate parent's scale.
+        parent_node = bone_to_node.get(bone.parent, None)
+        if parent_node is not None:
+            try:
+                # The parent may not have the same frame count.
+                # Handle the case where the parent has only one frame.
+                if frame >= len(parent_node.tracks[0].values):
+                    parent_scale = parent_node.tracks[0].values[0].scale
+                else:
+                    parent_scale = parent_node.tracks[0].values[frame].scale
+
+                scale_compensation = Matrix.Diagonal((1.0 / parent_scale[0], 1.0 / parent_scale[1], 1.0 / parent_scale[2], 1.0))
+            except IndexError:
+                # TODO: Handle the case when the parent has no animation track?
+                pass
+
+    return scale_compensation
 
 
 def keyframe_insert_camera_locrotscale(camera, frame):
