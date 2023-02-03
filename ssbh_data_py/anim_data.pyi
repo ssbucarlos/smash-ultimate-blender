@@ -115,3 +115,15 @@ class UvTransform:
         translate_u: float,
         translate_v: float
     ) -> None: ...
+
+class TransformFlags:
+    override_translation: bool
+    override_rotation: bool
+    override_scale: bool
+
+    def __init__(
+        self,
+        override_translation: bool = False,
+        override_rotation: bool = False,
+        override_scale: bool = False
+    ) -> None: ...

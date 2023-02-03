@@ -312,35 +312,17 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
         bones: list[bpy.types.PoseBone] = arma.pose.bones
         bone_to_node = {bones[n.name]:n for n in transform_group.nodes if n.name in bones}
         reordered: list[bpy.types.PoseBone] = get_heirarchy_order(list(bones)) # Do this to gaurantee we never process a child before its parent
-        #bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves) for b in bone_to_node.keys()} # only create fcurves for animated bones
         bone_to_fcurves = {b:BoneFCurves(b.name, arma.animation_data.action.fcurves, len(n.tracks[0].values)) for b,n in bone_to_node.items()} # only create fcurves for animated bones
-        #bone_to_rel_matrix_local = {b:b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local for b in bones if b.parent} # non-root bones
-        bone_to_rel_matrix_local = {}
-        for bone in bones:
-            if bone.parent: # non-root bones
-                bone_to_rel_matrix_local[bone] = bone.parent.bone.matrix_local.inverted() @ bone.bone.matrix_local
-            else: # root bones
-                bone_to_rel_matrix_local[bone] = bone.bone.matrix_local
-        bone_to_matrix: dict[bpy.types.PoseBone, Matrix] = {}
+
         for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
-            #context.scene.frame_set(frame)
             for bone in reordered:
                 node = bone_to_node.get(bone)
-                if node is None: # Some bones may not be animated, but their children may be
-                    if bone.parent:
-                        bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone]
-                    else:
-                        bone_to_matrix[bone] = bone_to_rel_matrix_local[bone]
+                # Some bones may not be animated, but their children may be.
+                if node is None: 
                     continue
 
                 # Bones either have a value on the first frame or every frame.
                 if index >= len(node.tracks[0].values): 
-                    if bone.parent:
-                        matrix_basis = bone_to_fcurves[bone].get_matrix_basis(0)
-                        bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
-                    else: # TODO: This is probably unecessary
-                        matrix_basis = bone_to_fcurves[bone].get_matrix_basis(0)
-                        bone_to_matrix[bone] = bone_to_rel_matrix_local[bone] @ matrix_basis
                     continue 
 
                 raw_matrix = get_raw_matrix(bone_to_node, bone, index, node)
@@ -349,28 +331,17 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                 if bone.parent is None: # The root bone
                     fixed_matrix = get_blender_transform(raw_matrix).transposed()
                     bone_fcurves.stash_keyframe_set_from_matrix(index, frame, fixed_matrix)
-                    bone_to_matrix[bone] = fixed_matrix
                 else:
                     fixed_child_matrix = get_blender_transform(raw_matrix).transposed()
-                    matrix_basis: Matrix = bone_to_rel_matrix_local[bone].inverted() @ fixed_child_matrix
 
-                    # Some tracks ignore parts of the anim transform.
-                    # This allows bones like swing bones to be animated in other ways.
-                    mbtv, mbrq, mbsv = matrix_basis.decompose()
+                    # The anim transform is relative to the parent bone's animated world transform.
+                    # Matrix basis is the transform set for the pose bone by the user.
+                    # The fcurves work on these user configurable values.
+                    # TODO: What is this calculating?
+                    matrix_basis = (bone.bone.matrix_local.inverted() @ bone.parent.bone.matrix_local) @ fixed_child_matrix
 
-                    if node.tracks[0].transform_flags.override_translation:
-                        mbtv = [0.0, 0.0, 0.0]
-                    mbtm = Matrix.Translation(mbtv)
-                    if node.tracks[0].transform_flags.override_rotation:
-                        mbrq = Quaternion([1,0,0,0])
-                    mbrm = Matrix.Rotation(mbrq.angle, 4, mbrq.axis)
-                    if node.tracks[0].transform_flags.override_scale:
-                        mbsv = [1.0, 1.0, 1.0]
-                    mbsm = Matrix.Diagonal((mbsv[0], mbsv[1], mbsv[2], 1.0))
+                    matrix_basis = apply_transform_flags(matrix_basis, node.tracks[0].transform_flags)
 
-                    matrix_basis = (mbtm @ mbrm @ mbsm)
-
-                    bone_to_matrix[bone] = bone_to_matrix[bone.parent] @ bone_to_rel_matrix_local[bone] @ matrix_basis
                     bone_fcurves.stash_keyframe_set_from_matrix(index, frame, matrix_basis)
 
         for bone, bone_fcurves in bone_to_fcurves.items():
@@ -527,6 +498,25 @@ def get_scale_compensation(bone_to_node, bone, frame, compensate_scale):
                 pass
 
     return scale_compensation
+
+
+def apply_transform_flags(matrix_basis: Matrix, transform_flags: ssbh_data_py.anim_data.TransformFlags):
+    # Some tracks override parts of the anim transform.
+    # This allows bones like swing bones to be animated in other ways.
+    mbtv, mbrq, mbsv = matrix_basis.decompose()
+
+    if transform_flags.override_translation:
+        mbtv = [0.0, 0.0, 0.0]
+    if transform_flags.override_rotation:
+        mbrq = Quaternion([1,0,0,0])
+    if transform_flags.override_scale:
+        mbsv = [1.0, 1.0, 1.0]
+
+    mbtm = Matrix.Translation(mbtv)
+    mbrm = Matrix.Rotation(mbrq.angle, 4, mbrq.axis)
+    mbsm = Matrix.Diagonal((mbsv[0], mbsv[1], mbsv[2], 1.0))
+
+    return mbtm @ mbrm @ mbsm
 
 
 def keyframe_insert_camera_locrotscale(camera, frame):
@@ -722,6 +712,7 @@ Group: 'Camera'
         Track: 'FieldOfView'
         Track: 'NearClip'
 '''
+# TODO: Stages use additional anim layouts.
 def import_camera_anim(operator, context:bpy.types.Context, filepath, first_blender_frame):
     camera: bpy.types.Object = context.object
     ssbh_anim_data = ssbh_data_py.anim_data.read_anim(filepath)
