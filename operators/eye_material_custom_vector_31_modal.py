@@ -21,6 +21,8 @@ class SUB_OP_eye_material_custom_vector_31_modal(Operator):
 
     @classmethod
     def poll(cls, context):
+        if context.object is None:
+            return False
         return context.object.type == 'ARMATURE'
 
     def execute(self, context):
