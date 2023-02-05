@@ -232,6 +232,15 @@ def uv_transform_equality(a: ssbh_data_py.anim_data.UvTransform, b: ssbh_data_py
         return False
     return True
 
+def does_armature_data_have_fcurves(arma: bpy.types.Object) -> bool:
+    if arma.data.animation_data is None:
+        return False
+    if arma.data.animation_data.action is None:
+        return False
+    if arma.data.animation_data.action.fcurves is None:
+        return False
+    return True
+
 def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.types.Object, filepath, include_transform_track, include_material_track, include_visibility_track, first_blender_frame, last_blender_frame):
     # SSBH Anim Setup
     ssbh_anim_data =  ssbh_data_py.anim_data.AnimData()
@@ -367,7 +376,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
         # Without this, certain anims will behave incorrectly, such as the Trans bone motion not working in-game.
         trans_group.nodes.sort(key=lambda node: node.name)
 
-    if include_visibility_track:
+    if include_visibility_track and does_armature_data_have_fcurves(arma):
         # Convenience variable for the sub_anim_properties
         sap: SubAnimProperties = arma.data.sub_anim_properties
         
@@ -399,7 +408,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
             node.tracks.append(track)
             vis_group.nodes.append(node)
 
-    if include_material_track:
+    if include_material_track and does_armature_data_have_fcurves(arma):
         # Convenience variable for the sub_anim_properties
         sap: SubAnimProperties = arma.data.sub_anim_properties
 
