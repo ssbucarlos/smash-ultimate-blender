@@ -121,12 +121,11 @@ def heirarchy_order(bone, reordered):
             heirarchy_order(child, reordered)
 
 def get_heirarchy_order(bone_list: list[bpy.types.PoseBone]) -> list[bpy.types.PoseBone]:
-    root_bone: bpy.types.PoseBone = None
+    root_bones: list[bpy.types.PoseBone] = []
     for bone in bone_list:
         if bone.parent is None:
-            root_bone = bone
-            break
-    return [root_bone] + [c for c in root_bone.children_recursive if c in bone_list]
+            root_bones.append(bone)
+    return root_bones + [c for root_bone in root_bones for c in root_bone.children_recursive if c in bone_list]
 
 class BoneTranslationFCurves():
     def __init__(self, fcurves, bone_name, values_length):
