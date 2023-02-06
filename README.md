@@ -32,7 +32,8 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 
 ## Useful Tools
 * SSBH Editor (view models and animations and edit materials) https://github.com/ScanMountGoat/ssbh_editor
-* Switch Toolbox (to convert .NUTEXBS to .PNGS) https://github.com/KillzXGaming/Switch-Toolbox
+* Ultimate Tex (batch convert .NUTEXB to .PNG on Windows, MacOS, or Linux) https://github.com/ScanMountGoat/ultimate_tex
+* Switch Toolbox (to convert .NUTEXB to .PNG on Windows) https://github.com/KillzXGaming/Switch-Toolbox
 
 ## Special Thanks
 * SMG for creating SSBH_DATA_PY, which without it none of this would be possible https://github.com/ScanMountGoat/ssbh_data_py
