@@ -327,19 +327,22 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                 raw_matrix = get_raw_matrix(bone_to_node, bone, index, node)
 
                 bone_fcurves = bone_to_fcurves[bone]
-                if bone.parent is None: # The root bone
-                    fixed_matrix = get_blender_transform(raw_matrix).transposed()
-                    bone_fcurves.stash_keyframe_set_from_matrix(index, frame, fixed_matrix)
-                else:
-                    fixed_child_matrix = get_blender_transform(raw_matrix).transposed()
+                if bone.parent is None:
+                    # The root bone
+                    bone.matrix = get_blender_transform(raw_matrix).transposed()
+                    # TODO: Why is this necessary?
+                    arma.data.bones.active = bone.bone
+                    bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
+                    bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)
 
+                    bone_fcurves.stash_keyframe_set_from_matrix(index, frame, bone.matrix_basis)
+                else:
                     # The anim transform is relative to the parent bone's animated world transform.
+                    bone.matrix = bone.parent.matrix @ get_blender_transform(raw_matrix).transposed()
+
                     # Matrix basis is the transform set for the pose bone by the user.
                     # The fcurves work on these user configurable values.
-                    # TODO: What is this calculating?
-                    matrix_basis = (bone.bone.matrix_local.inverted() @ bone.parent.bone.matrix_local) @ fixed_child_matrix
-
-                    matrix_basis = apply_transform_flags(matrix_basis, node.tracks[0].transform_flags)
+                    matrix_basis = apply_transform_flags(bone.matrix_basis, node.tracks[0].transform_flags)
 
                     bone_fcurves.stash_keyframe_set_from_matrix(index, frame, matrix_basis)
 
