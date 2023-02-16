@@ -98,9 +98,14 @@ class SUB_OP_import_anim(Operator, ImportHelper):
         
         with cProfile.Profile() as pr:
             if obj.type == 'ARMATURE':
+                # Theres a bpy.ops in import_model_anim that requires being in pose mode
+                # The mode setting stuff should be removed when the bpy.ops is no longer required
+                old_mode = context.mode
+                bpy.ops.object.mode_set(mode='POSE', toggle=False)
                 import_model_anim(context, self.filepath,
                                         self.include_transform_track, self.include_material_track,
                                         self.include_visibility_track, self.first_blender_frame)
+                bpy.ops.object.mode_set(mode=old_mode, toggle=False)
             else:
                 import_camera_anim(self, context, self.filepath, self.first_blender_frame)
         if self.use_debug_timer:
