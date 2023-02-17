@@ -328,7 +328,9 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
             hierarchy_order(child, reordered)
     reordered = []
     if len(edit_bones) > 0:
-        hierarchy_order(edit_bones[0], reordered)
+        for edit_bone in edit_bones:
+            if edit_bone.parent is None:
+                hierarchy_order(edit_bone, reordered)
 
     # Transform bones
     for blender_bone in reordered:
