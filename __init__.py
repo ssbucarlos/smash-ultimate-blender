@@ -15,6 +15,7 @@ bl_info = {
 import bpy
 import sys
 import traceback
+import nodeitems_utils
 
 def check_unsupported_blender_versions():
     if bpy.app.version < (3, 3):
@@ -29,7 +30,7 @@ def register():
     from . import modules
     from . import operators
     from . import properties
-    from . import shaders
+    from . import shader_nodes
     from . import properties
     
     from .bpy_classes import classes
@@ -37,7 +38,9 @@ def register():
         bpy.utils.register_class(cls)
 
     properties.register()
-    shaders.custom_sampler_node.register()
+    
+    nodeitems_utils.register_node_categories('CUSTOM_ULTIMATE_NODES', shader_nodes.node_categories.node_categories)
+
     print('Loaded Smash Ultimate Blender Tools!')
 
 def unregister():
@@ -46,10 +49,10 @@ def unregister():
     from . import modules
     from . import operators
     from . import properties
-    from . import shaders
+    from . import shader_nodes
     from . import properties
 
-    shaders.custom_sampler_node.unregister()
+    nodeitems_utils.unregister_node_categories('CUSTOM_ULTIMATE_NODES')
 
     from .bpy_classes import classes
     for cls in reversed(classes):

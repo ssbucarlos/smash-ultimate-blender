@@ -820,7 +820,7 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
         
         uv_map_node = nodes.new('ShaderNodeUVMap')
         uv_map_node.name = 'uv_map_node'
-        uv_map_node.location = (texture_node.location[0] - 900, texture_node.location[1])
+        uv_map_node.location = (texture_node.location[0] - 1200, texture_node.location[1])
         uv_map_node.label = texture_param.param_id.name + ' UV Map'
 
         if texture_param.param_id.name == 'Texture9':
@@ -830,8 +830,20 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
         else:
             uv_map_node.uv_map = 'map1'
 
+        # Create UV Transform Node
+        # Also set the default_values here. I know it makes more sense to have the default_values
+        # be in the init func of the node itself, but it just doesn't work there lol
+        from ..shader_nodes import custom_uv_transform_node
+        uv_transform_node = nodes.new(custom_uv_transform_node.SUB_CSN_ultimate_uv_transform.bl_idname)
+        uv_transform_node.name = 'uv_transform_node'
+        uv_transform_node.label = 'UV Transform' + texture_param.param_id.name.split('Texture')[1]
+        uv_transform_node.location = (texture_node.location[0] - 900, texture_node.location[1])
+        uv_transform_node.inputs[0].default_value = 1.0 # Scale X
+        uv_transform_node.inputs[1].default_value = 1.0 # Scale Y
+
         # Create Sampler Node
-        sampler_node = nodes.new('CustomNodeUltimateSampler')
+        from ..shader_nodes import custom_sampler_node
+        sampler_node = nodes.new(custom_sampler_node.SUB_CSN_ultimate_sampler.bl_idname)
         sampler_node.name = 'sampler_node'
         sampler_node.label = 'Sampler' + texture_param.param_id.name.split('Texture')[1]
         sampler_node.location = (texture_node.location[0] - 600, texture_node.location[1])
@@ -856,7 +868,8 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
         sampler_node.border_color = tuple(sampler_data.border_color)
         sampler_node.lod_bias = sampler_data.lod_bias       
 
-        links.new(sampler_node.inputs['UV Input'], uv_map_node.outputs[0])
+        links.new(uv_transform_node.inputs[4], uv_map_node.outputs[0])
+        links.new(sampler_node.inputs['UV Input'], uv_transform_node.outputs[0])
         links.new(texture_node.inputs[0], sampler_node.outputs[0])
         links.new(matched_rgb_input, texture_node.outputs['Color'])
         links.new(matched_alpha_input, texture_node.outputs['Alpha'])

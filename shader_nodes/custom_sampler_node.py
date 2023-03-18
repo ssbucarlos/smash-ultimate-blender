@@ -6,9 +6,9 @@ class CustomNodeUltimateBase:
     def poll(cls, ntree):
         return ntree.bl_idname == 'ShaderNodeTree'
 
-class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
+class SUB_CSN_ultimate_sampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
     '''A custom node to implement Smash Ultimate Samplers'''
-    bl_idname = 'CustomNodeUltimateSampler'
+    bl_idname = 'SUB_CSN_ultimate_sampler'
     bl_label = "Ultimate Sampler"
 
     def update_internal_nodes(self, context):
@@ -214,7 +214,7 @@ class CustomNodeUltimateSampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         layout.prop(self, 'lod_bias')
         layout.prop(self, 'max_anisotropy')
 
-
+'''
 import nodeitems_utils
 from nodeitems_utils import NodeCategory, NodeItem
 
@@ -245,3 +245,4 @@ def unregister():
     for cls in reversed(classes):
         unregister_class(cls)
 
+'''

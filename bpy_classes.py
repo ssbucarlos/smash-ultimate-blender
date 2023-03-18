@@ -1,7 +1,7 @@
 from . import modules
 from . import operators
 from . import properties
-from . import shaders
+from . import shader_nodes
 from . import properties
 
 classes = [
@@ -76,4 +76,6 @@ classes = [
     modules.misc_panel.SUB_PT_misc,
     operators.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
     properties.SubSceneProperties,
+    shader_nodes.custom_sampler_node.SUB_CSN_ultimate_sampler,
+    shader_nodes.custom_uv_transform_node.SUB_CSN_ultimate_uv_transform,
 ]
