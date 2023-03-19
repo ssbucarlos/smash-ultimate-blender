@@ -559,11 +559,19 @@ def setup_material_drivers(arma: bpy.types.Object):
         cv31 = sap_mat_track.properties.get('CustomVector31', None)
         if cv31 is not None:
             labels_nodes_dict = {node.label:node for node in material.node_tree.nodes}
-            sampler_1_node = labels_nodes_dict.get('Sampler1', None)
-            if sampler_1_node is not None:
-                input = sampler_1_node.inputs.get('UV Transform')
-                for row in [0,1]:
-                    driver_handle = input.driver_add('default_value', row)
+            uv_transform_node = labels_nodes_dict.get('UV Transform1', None)
+            if uv_transform_node is not None:
+                for cv_31_field in ['x','y','z','w']:
+                    if cv_31_field == 'x':
+                        input = uv_transform_node.inputs[0]
+                    elif cv_31_field == 'y':
+                        input = uv_transform_node.inputs[1]
+                    elif cv_31_field == 'z':
+                        input = uv_transform_node.inputs[2]
+                    elif cv_31_field == 'w':
+                        input = uv_transform_node.inputs[3]
+
+                    driver_handle = input.driver_add('default_value')
                     var = driver_handle.driver.variables.new()
                     var.name = "var"
                     target = var.targets[0]
@@ -571,10 +579,19 @@ def setup_material_drivers(arma: bpy.types.Object):
                     target.id = arma.data
                     mti = sap.mat_tracks.find(sap_mat_track.name)
                     pi = sap_mat_track.properties.find(cv31.name)
-                    cvi = 2 if row == 0 else 3 # CustomVector31.Z and .W control translation
-                    target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
-                    driver_handle.driver.expression = f'0 - {var.name}'
 
+                    if cv_31_field == 'x':
+                        cvi = 0
+                    elif cv_31_field == 'y':
+                        cvi = 1
+                    elif cv_31_field == 'z':
+                        cvi = 2
+                    elif cv_31_field == 'w':
+                        cvi = 3
+
+                    target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
+                    driver_handle.driver.expression = f'{var.name}'
+            
         # Set up CustomVector6
         cv6 = sap_mat_track.properties.get('CustomVector6', None)
         if cv6 is not None:
@@ -611,7 +628,7 @@ def setup_material_drivers(arma: bpy.types.Object):
                     mti = material_track_index = sap.mat_tracks.find(sap_mat_track.name)
                     pi = property_index = sap_mat_track.properties.find(cv3.name)
                     target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{index}]'
-                    driver_handle.driver.expression = f'{var.name}'
+                    driver_handle.driver.expression = f'0.0 + {var.name}'
 
 
 def do_material_stuff(context, material_group, index, frame):
