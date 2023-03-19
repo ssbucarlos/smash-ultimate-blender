@@ -570,7 +570,7 @@ def setup_material_drivers(arma: bpy.types.Object):
                         input = uv_transform_node.inputs[2]
                     elif cv_31_field == 'w':
                         input = uv_transform_node.inputs[3]
-                        
+
                     driver_handle = input.driver_add('default_value')
                     var = driver_handle.driver.variables.new()
                     var.name = "var"
@@ -590,7 +590,7 @@ def setup_material_drivers(arma: bpy.types.Object):
                         cvi = 3
 
                     target.data_path = f'sub_anim_properties.mat_tracks[{mti}].properties[{pi}].custom_vector[{cvi}]'
-                    driver_handle.driver.expression = f'0.0 + {var.name}'
+                    driver_handle.driver.expression = f'{var.name}'
             
         # Set up CustomVector6
         cv6 = sap_mat_track.properties.get('CustomVector6', None)
