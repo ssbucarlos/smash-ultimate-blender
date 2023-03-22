@@ -696,10 +696,10 @@ class MatTrack(PropertyGroup):
         default="Unknown",
         update=mat_track_name_update,)
     properties: CollectionProperty(type=MatTrackProperty)
-    active_property_index: IntProperty(name='Active Mat Property Index', default=0)
+    active_property_index: IntProperty(name='Active Mat Property Index', default=0, options={'HIDDEN'})
 
 class SubAnimProperties(PropertyGroup):
     vis_track_entries: CollectionProperty(type=VisTrackEntry)
-    active_vis_track_index: IntProperty(name='Active Vis Track Index', default=0)
+    active_vis_track_index: IntProperty(name='Active Vis Track Index', default=0, options={'HIDDEN'})
     mat_tracks: CollectionProperty(type=MatTrack)
-    active_mat_track_index: IntProperty(name='Active Mat Track Index', default=0)
+    active_mat_track_index: IntProperty(name='Active Mat Track Index', default=0, options={'HIDDEN'})
