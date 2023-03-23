@@ -407,6 +407,9 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
             track.values = values.copy()
             node.tracks.append(track)
             vis_group.nodes.append(node)
+        
+        # Sort Nodes
+        vis_group.nodes.sort(key= lambda x: sap.vis_track_entries.find(x.name))
 
     if include_material_track and does_armature_data_have_fcurves(arma):
         # Convenience variable for the sub_anim_properties

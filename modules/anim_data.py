@@ -260,6 +260,11 @@ class SUB_OP_mat_property_add(Operator):
         context.window_manager.invoke_search_popup(self)
         return {'RUNNING_MODAL'}
 
+def refresh_material_drivers(context):
+    from .import_anim import setup_material_drivers
+    remove_material_drivers(context.object)
+    setup_material_drivers(context.object)
+
 class SUB_OP_mat_property_remove(Operator):
     bl_idname = 'sub.mat_prop_remove'
     bl_label = 'Remove Material Property'
@@ -313,9 +318,7 @@ class SUB_OP_mat_property_remove(Operator):
         i = amt.active_property_index
         amt.active_property_index = min(max(0,i-1), len(amt.properties)-1)
         # Refresh Material Drivers
-        remove_material_drivers(context.object)
-        from .import_anim import setup_material_drivers
-        setup_material_drivers(context.object)
+        refresh_material_drivers(context)
         return {'FINISHED'}
 
 def change_mat_property_fcurve_target_index(fcurve, new_property_index):
@@ -385,6 +388,8 @@ class SUB_OP_mat_property_shift(Operator):
 
         active_mat.properties.move(active_property_index, other_index)
         active_mat.active_property_index = other_index
+        # Refresh Material Drivers
+        refresh_material_drivers(context)
         return {'FINISHED'}
     
 class SUB_OP_vis_entry_add(Operator):
@@ -399,6 +404,11 @@ class SUB_OP_vis_entry_add(Operator):
         sap = context.object.data.sub_anim_properties
         sap.active_vis_track_index = entries.find(entry.name)
         return {'FINISHED'} 
+
+def refresh_visibility_drivers(context):
+    from .import_anim import setup_visibility_drivers
+    remove_visibility_drivers(context)
+    setup_visibility_drivers(context.object)
 
 class SUB_OP_vis_entry_remove(Operator):
     bl_idname = 'sub.vis_entry_remove'
@@ -430,9 +440,7 @@ class SUB_OP_vis_entry_remove(Operator):
         i = active_vis_track_index
         sap.active_vis_track_index = min(max(0, i-1), len(sap.vis_track_entries))
 
-        remove_visibility_drivers(context)
-        from .import_anim import setup_visibility_drivers
-        setup_visibility_drivers(context.object)        
+        refresh_visibility_drivers(context)       
         return {'FINISHED'} 
     
 class SUB_OP_vis_entry_shift(Operator):
@@ -476,6 +484,7 @@ class SUB_OP_vis_entry_shift(Operator):
 
         vis_entries.move(active_vis_entry_index, other_index)
         sap.active_vis_track_index = other_index
+        refresh_visibility_drivers(context)
         return {'FINISHED'}
 
 class SUB_OP_vis_drivers_refresh(Operator):
@@ -483,8 +492,7 @@ class SUB_OP_vis_drivers_refresh(Operator):
     bl_label = 'Refresh Visibility Drivers'
 
     def execute(self, context):
-        from .import_anim import setup_visibility_drivers
-        setup_visibility_drivers(context.object)
+        refresh_visibility_drivers(context)
         return {'FINISHED'} 
 
 class SUB_OP_vis_drivers_remove(Operator):
@@ -594,9 +602,7 @@ class SUB_OP_mat_drivers_refresh(Operator):
     bl_label = 'Refresh Material Drivers'   
 
     def execute(self, context):
-        remove_material_drivers(context.object)
-        from .import_anim import setup_material_drivers
-        setup_material_drivers(context.object)
+        refresh_material_drivers(context)
         return {'FINISHED'}  
 
 class SUB_OP_mat_drivers_remove(Operator):
