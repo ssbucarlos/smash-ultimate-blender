@@ -56,7 +56,7 @@ class SUB_PT_sub_smush_anim_data_vis_tracks(Panel):
             "vis_track_entries",
             arma.sub_anim_properties,
             "active_vis_track_index",
-            rows=3,
+            rows=5,
             maxrows=10,
             )
         col = row.column(align=True)
@@ -65,8 +65,8 @@ class SUB_PT_sub_smush_anim_data_vis_tracks(Panel):
         col.separator()
         col.menu("SUB_MT_vis_entry_context_menu", icon='DOWNARROW_HLT', text="")
         col.separator()
-        col.operator(SUB_OP_vis_entry_shift_up.bl_idname, icon='TRIA_UP', text='')
-        col.operator(SUB_OP_vis_entry_shift_up.bl_idname, icon='TRIA_DOWN', text='')
+        col.operator(SUB_OP_vis_entry_shift.bl_idname, icon='TRIA_UP', text='').shift_direction = 'UP'
+        col.operator(SUB_OP_vis_entry_shift.bl_idname, icon='TRIA_DOWN', text='').shift_direction = 'DOWN'
 
 class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
     bl_label = "Ultimate Material Tracks"
@@ -155,8 +155,8 @@ class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
         sr = split.row(align=True)
         sr.operator(SUB_OP_mat_property_add.bl_idname, text='+')
         sr.operator(SUB_OP_mat_property_remove.bl_idname, text='-')
-        sr.operator(SUB_OP_mat_property_shift_up.bl_idname, icon='TRIA_UP', text='')
-        sr.operator(SUB_OP_mat_property_shift_down.bl_idname, icon='TRIA_DOWN', text='')
+        sr.operator(SUB_OP_mat_property_shift.bl_idname, icon='TRIA_UP', text='').shift_direction = 'UP'
+        sr.operator(SUB_OP_mat_property_shift.bl_idname, icon='TRIA_DOWN', text='').shift_direction = 'DOWN'
         # Sub 3
         split = split.split()
         sr = split.row(align=True)
@@ -318,7 +318,20 @@ class SUB_OP_mat_property_remove(Operator):
         setup_material_drivers(context.object)
         return {'FINISHED'}
 
-def swap_mat_property_fcurve_indices(fcurves, sap, index_a, index_b):
+def change_mat_property_fcurve_target_index(fcurve, new_property_index):
+    regex = r"sub_anim_properties\.mat_tracks\[(\d+)\]\.properties\[(\d+)\](\.\w+)"
+    matches = re.match(regex, fcurve.data_path)
+    if matches is None:
+        return
+    if len(matches.groups()) < 3:
+        return
+    mat_track_index = int(matches.groups()[0])
+    _property_index = int(matches.groups()[1])
+    suffix = matches.groups()[2]
+    new_data_path = f"sub_anim_properties.mat_tracks[{mat_track_index}].properties[{new_property_index}]{suffix}"
+    fcurve.data_path = new_data_path
+
+def swap_mat_property_fcurve_target_indices(fcurves, sap, index_a, index_b):
     amti = sap.active_mat_track_index
 
     a_data_path = f"sub_anim_properties.mat_tracks[{amti}].properties[{index_a}]"
@@ -328,65 +341,20 @@ def swap_mat_property_fcurve_indices(fcurves, sap, index_a, index_b):
     b_fcurves = [fc for fc in fcurves if fc.data_path.startswith(b_data_path)]
     
     for fc in a_fcurves:
-        regex = r"sub_anim_properties\.mat_tracks\[(\d+)\]\.properties\[(\d+)\](\.\w+)"
-        matches = re.match(regex, fc.data_path)
-        if matches is None:
-            continue
-        if len(matches.groups()) < 3:
-            continue
-        mat_track_index = int(matches.groups()[0])
-        _property_index = int(matches.groups()[1])
-        suffix = matches.groups()[2]
-        new_data_path = f"sub_anim_properties.mat_tracks[{mat_track_index}].properties[{index_b}]{suffix}"
-        fc.data_path = new_data_path
+        change_mat_property_fcurve_target_index(fc, index_b)
     for fc in b_fcurves:
-        regex = r"sub_anim_properties\.mat_tracks\[(\d+)\]\.properties\[(\d+)\](\.\w+)"
-        matches = re.match(regex, fc.data_path)
-        if matches is None:
-            continue
-        if len(matches.groups()) < 3:
-            continue
-        mat_track_index = int(matches.groups()[0])
-        _property_index = int(matches.groups()[1])
-        suffix = matches.groups()[2]
-        new_data_path = f"sub_anim_properties.mat_tracks[{mat_track_index}].properties[{index_a}]{suffix}"
-        fc.data_path = new_data_path
+        change_mat_property_fcurve_target_index(fc, index_a)
           
-class SUB_OP_mat_property_shift_up(Operator):
-    bl_idname = 'sub.mat_property_shift_up'
-    bl_label = 'Shift Mat Propery Up'
+class SUB_OP_mat_property_shift(Operator):
+    bl_idname = 'sub.mat_property_shift'
+    bl_label = 'Shift Mat Propery'
 
-    @classmethod
-    def poll(cls, context):
-        sap = context.object.data.sub_anim_properties
-        if len(sap.mat_tracks) >= 1:
-            active_track = sap.mat_tracks[sap.active_mat_track_index]
-            if len(active_track.properties) >= 2:
-                return True
-        return False
+    shift_direction: EnumProperty(
+        name='Shift Direction',
+        description='The direction to shift',
+        items=[('UP', 'Up', 'Shift it up'),
+                ('DOWN', 'Down', 'Shift it down')])
     
-    def execute(self, context):
-        sap = context.object.data.sub_anim_properties
-        active_property_index = sap.mat_tracks[sap.active_mat_track_index].active_property_index
-        
-        if active_property_index == 0:
-            return {'FINISHED'}
-        
-        try: # Getting fcurves without throwing an exception is hard, so rather than do 3 "is not None" checks do one "try"
-            fcurves = context.object.data.animation_data.action.fcurves
-        except AttributeError: # Theres no fcurves
-            pass
-        else: # Theres fcurves
-            swap_mat_property_fcurve_indices(fcurves, sap, active_property_index, active_property_index-1)
-        
-        sap.mat_tracks[sap.active_mat_track_index].properties.move(active_property_index, active_property_index-1)
-        sap.mat_tracks[sap.active_mat_track_index].active_property_index = active_property_index - 1
-        return {'FINISHED'}
-
-class SUB_OP_mat_property_shift_down(Operator):
-    bl_idname = 'sub.mat_property_shift_down'
-    bl_label = 'Shift Mat Propery Down'
-
     @classmethod
     def poll(cls, context):
         sap = context.object.data.sub_anim_properties
@@ -400,22 +368,25 @@ class SUB_OP_mat_property_shift_down(Operator):
         sap = context.object.data.sub_anim_properties
         active_mat = sap.mat_tracks[sap.active_mat_track_index]
         active_property_index = active_mat.active_property_index
+            
+        if (self.shift_direction == 'UP' and active_property_index == 0) or \
+           (self.shift_direction == 'DOWN' and active_property_index == len(active_mat.properties)-1):
+                return {'CANCELLED'}
         
-        if active_property_index == len(active_mat.properties)-1:
-            return {'FINISHED'}
-        
-        try: # Getting fcurves without throwing an exception is hard, so rather than do 3 "is not None" checks do one "try"
+        other_index = active_property_index-1 if self.shift_direction == 'UP' else active_property_index+1
+            
+        # Getting fcurves without throwing an exception is hard, so rather than do 3 "is not None" checks do one "try"    
+        try:
             fcurves = context.object.data.animation_data.action.fcurves
         except AttributeError: # Theres no fcurves
             pass
         else: # Theres fcurves
-            swap_mat_property_fcurve_indices(fcurves, sap, active_property_index, active_property_index+1)
-        
-        active_mat.properties.move(active_property_index, active_property_index+1)
-        active_mat.active_property_index = active_property_index + 1
+            swap_mat_property_fcurve_target_indices(fcurves, sap, active_property_index, other_index)
+
+        active_mat.properties.move(active_property_index, other_index)
+        active_mat.active_property_index = other_index
         return {'FINISHED'}
-
-
+    
 class SUB_OP_vis_entry_add(Operator):
     bl_idname = 'sub.vis_entry_add'
     bl_label = 'Add Vis Track Entry'
@@ -440,32 +411,23 @@ class SUB_OP_vis_entry_remove(Operator):
 
     def execute(self, context):
         sap = context.object.data.sub_anim_properties
-        # Find matching Fcurve and Remove
+        active_vis_track_index = sap.active_vis_track_index
+        
         try:
             fcurves = context.object.data.animation_data.action.fcurves
         except AttributeError:
-            sap.vis_track_entries.remove(sap.active_vis_track_index)
-            i = sap.active_vis_track_index
-            sap.active_vis_track_index = min(max(0,i-1),len(sap.vis_track_entries))
-            return {'FINISHED'}
-        for fc in fcurves:
-            avti = sap.active_vis_track_index
-            if fc.data_path.startswith(f"sub_anim_properties.vis_track_entries[{avti}]"):
-                fcurves.remove(fc)
-        fcurves = context.object.data.animation_data.action.fcurves
-        for fc in fcurves:
-            regex = r"sub_anim_properties\.vis_track_entries\[(\d+)\]\.value"
-            matches = re.match(regex, fc.data_path)
-            if matches is None:
-                continue
-            cvtei = int(matches.groups()[0])
-            avtei = sap.active_vis_track_index
-            if cvtei < avtei:
-                continue
-            new_data_path = f'sub_anim_properties.vis_track_entries[{cvtei-1}].value'
-            fc.data_path = new_data_path
-        sap.vis_track_entries.remove(sap.active_vis_track_index)
-        i = sap.active_vis_track_index
+            pass
+        else:
+            fcurve_to_remove = fcurves.find(f'sub_anim_properties.vis_track_entries[{active_vis_track_index}].value')
+            if fcurve_to_remove is not None:
+                fcurves.remove(fcurve_to_remove)
+            for index in range(active_vis_track_index+1, len(sap.vis_track_entries)):
+                fcurve_to_decrement = fcurves.find(f'sub_anim_properties.vis_track_entries[{index}].value')
+                if fcurve_to_decrement is not None:
+                    fcurve_to_decrement.data_path = f'sub_anim_properties.vis_track_entries[{index-1}].value'
+        
+        sap.vis_track_entries.remove(active_vis_track_index)
+        i = active_vis_track_index
         sap.active_vis_track_index = min(max(0, i-1), len(sap.vis_track_entries))
 
         remove_visibility_drivers(context)
@@ -473,96 +435,48 @@ class SUB_OP_vis_entry_remove(Operator):
         setup_visibility_drivers(context.object)        
         return {'FINISHED'} 
     
-class SUB_OP_vis_entry_shift_up(Operator):
-    bl_idname = 'sub.vis_entry_shift_up'
-    bl_label = 'Shift Vis Track Entry Up'
+class SUB_OP_vis_entry_shift(Operator):
+    bl_idname = 'sub.vis_entry_shift'
+    bl_label = 'Shift Vis Entry'
 
+    shift_direction: EnumProperty(
+        name='Shift Direction',
+        description='The direction to shift',
+        items=[('UP', 'Up', 'Shift it up'),
+                ('DOWN', 'Down', 'Shift it down')])
+    
     @classmethod
     def poll(cls, context):
         sap = context.object.data.sub_anim_properties
         return len(sap.vis_track_entries) > 1
-
-    def shift_fcurve_index(self, context, fcurves, sap):
-        active_index = sap.active_vis_track_index
-
-        active_index_data_path = f"sub_anim_properties.vis_track_entries[{active_index}].value"
-        decremented_index_data_path = f"sub_anim_properties.vis_track_entries[{active_index - 1}].value"
-
-        fcurve_to_decrement = fcurves.find(active_index_data_path)
-        fcurve_to_increment = fcurves.find(decremented_index_data_path)
-
-        if fcurve_to_decrement is not None:
-            fcurve_to_decrement.data_path = decremented_index_data_path
-        if fcurve_to_increment is not None:
-            fcurve_to_increment.data_path = active_index_data_path
-
-    def execute(self, context):
-        '''
-        If the vis_track_entry isn't already at the top,
-        need to swap the fcurve's index with the value of the one above.
-        Then need to swap the vis track entry indices.
-        '''
-        sap = context.object.data.sub_anim_properties
-        active_index = sap.active_vis_track_index
-
-        if active_index == 0:
-            return {'FINISHED'} 
     
+    def execute(self, context):
+        sap = context.object.data.sub_anim_properties
+        vis_entries = sap.vis_track_entries
+        active_vis_entry_index = sap.active_vis_track_index
+            
+        if (self.shift_direction == 'UP' and active_vis_entry_index == 0) or \
+           (self.shift_direction == 'DOWN' and active_vis_entry_index == len(vis_entries)-1):
+                return {'CANCELLED'}
+        
+        other_index = active_vis_entry_index-1 if self.shift_direction == 'UP' else active_vis_entry_index+1
+            
+        # Getting fcurves without throwing an exception is hard, so rather than do 3 "is not None" checks do one "try"    
         try:
             fcurves = context.object.data.animation_data.action.fcurves
-        except AttributeError: # There were no fcurves
+        except AttributeError: # Theres no fcurves
             pass
-        else:
-            self.shift_fcurve_index(context, fcurves, sap)
-        
-        sap.vis_track_entries.move(active_index, active_index-1) # Bless Blender for this
-        sap.active_vis_track_index = active_index - 1
-        return {'FINISHED'} 
-    
-class SUB_OP_vis_entry_shift_down(Operator):
-    bl_idname = 'sub.vis_entry_shift_down'
-    bl_label = 'Shift Vis Track Entry Down'
+        else: # Theres fcurves
+            active_fcurve = fcurves.find(f"sub_anim_properties.vis_track_entries[{active_vis_entry_index}].value")
+            other_fcurve = fcurves.find(f"sub_anim_properties.vis_track_entries[{other_index}].value")
+            if active_fcurve is not None:
+                active_fcurve.data_path = f"sub_anim_properties.vis_track_entries[{other_index}].value"
+            if other_fcurve is not None:
+                other_fcurve.data_path = f"sub_anim_properties.vis_track_entries[{active_vis_entry_index}].value"
 
-    @classmethod
-    def poll(cls, context):
-        sap = context.object.data.sub_anim_properties
-        return len(sap.vis_track_entries) > 1
-
-    def shift_fcurve_index(self, context, fcurves, sap):
-        active_index = sap.active_vis_track_index
-
-        active_index_data_path = f"sub_anim_properties.vis_track_entries[{active_index}].value"
-        incremented_index_data_path = f"sub_anim_properties.vis_track_entries[{active_index + 1}].value"
-
-        fcurve_to_increment = fcurves.find(active_index_data_path)
-        fcurve_to_decrement = fcurves.find(incremented_index_data_path)
-
-        if fcurve_to_increment is not None:
-            fcurve_to_increment.data_path = incremented_index_data_path
-        if fcurve_to_decrement is not None:
-            fcurve_to_decrement.data_path = active_index_data_path
-
-    def execute(self, context):
-        '''
-        If the vis_track_entry isn't already at the top,
-        need to swap the fcurve's index with the value of the one above.
-        Then need to swap the vis track entry indices.
-        '''
-        sap = context.object.data.sub_anim_properties
-
-        if sap.active_vis_track_index == len(sap.vis_track_entries)-1:
-            return {'FINISHED'} 
-    
-        try:
-            fcurves = context.object.data.animation_data.action.fcurves
-            self.shift_fcurve_index(context, fcurves, sap)
-        except AttributeError: # There were no fcurves
-            pass
-        
-        active = sap.active_vis_track_index
-        sap.vis_track_entries.move(active, active+1) # Bless Blender for this
-        sap.active_vis_track_index = active + 1
-        return {'FINISHED'} 
+        vis_entries.move(active_vis_entry_index, other_index)
+        sap.active_vis_track_index = other_index
+        return {'FINISHED'}
 
 class SUB_OP_vis_drivers_refresh(Operator):
     bl_idname = 'sub.vis_drivers_refresh'
