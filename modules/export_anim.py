@@ -495,6 +495,10 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                 track = ssbh_data_py.anim_data.TrackData(prop_name)
                 node.tracks.append(track)
                 track.values.extend(mat_name_prop_name_to_values[mat_name][prop_name])
+        # Sort the nodes and tracks by their user-defined position
+        mat_group.nodes.sort(key= lambda x: sap.mat_tracks.find(x.name))
+        for node in mat_group.nodes:
+            node.tracks.sort(key= lambda x: sap.mat_tracks[node.name].properties.find(x.name))
 
     # Pre-Saving Optimizations
     for group in ssbh_anim_data.groups:
