@@ -38,12 +38,13 @@ class SUB_CSN_ultimate_uv_transform(ShaderNodeCustomGroup):
         self.node_tree: ShaderNodeTree = bpy.data.node_groups.new(self.bl_idname + '_node_tree', SHADER_NODE_TREE)
         
         # The sockets that go on the node itself
-        self.inputs.new(NODE_SOCKET_FLOAT, 'Scale X')
-        self.inputs.new(NODE_SOCKET_FLOAT, 'Scale Y')
-        self.inputs.new(NODE_SOCKET_FLOAT, 'Translate X')
-        self.inputs.new(NODE_SOCKET_FLOAT, 'Translate Y')
-        self.inputs.new(NODE_SOCKET_VECTOR, 'UV Input')
-        self.outputs.new(NODE_SOCKET_VECTOR, 'UV Input')
+        # As of blender 3.4.1, creating node sockets using `self.inputs.new` is no longer supported
+        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Scale X')
+        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Scale Y')
+        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Translate X')
+        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Translate Y')
+        self.node_tree.inputs.new(NODE_SOCKET_VECTOR, 'UV Input')
+        self.node_tree.outputs.new(NODE_SOCKET_VECTOR, 'UV Input')
         
         # Now handle the internal nodes
         nodes = self.node_tree.nodes
