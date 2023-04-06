@@ -15,11 +15,13 @@ from bpy.types import Panel, Operator
 from bpy_extras import image_utils
 from ..operators import master_shader, material_inputs
 from mathutils import Matrix
+from .material.sub_matl_data import create_blender_materials_from_matl
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..properties import SubSceneProperties
     from .helper_bone_data import SubHelperBoneData, AimConstraint, OrientConstraint
+    #from .material.sub_matl_data import SUB_PG_sub_matl_data
     from bpy.types import PoseBone, EditBone, CopyRotationConstraint, DampedTrackConstraint
 
 class SUB_PT_import_model(Panel):
@@ -154,7 +156,6 @@ class SUB_OP_select_model_import_folder(Operator):
                 ssp.model_import_nuhlpb_file_name = file_name
         return {'FINISHED'}
 
-
 class SUB_OP_import_model(bpy.types.Operator):
     bl_idname = 'sub.model_importer'
     bl_label = 'Model Importer'
@@ -194,8 +195,15 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
+    material_label_to_material = {}
+    if ssbh_matl is not None:
+        try:
+            material_label_to_material = create_blender_materials_from_matl(ssbh_matl)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to import materials; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+
     try:
-        create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context)
+        create_mesh(ssbh_model, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material)
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
@@ -217,17 +225,6 @@ def get_shader_db_file_path():
     this_file_path = Path(__file__)
     return this_file_path.parent.parent.joinpath('shader_file').joinpath('Nufx.db').resolve()
 
-
-def get_discard_shaders():
-    global discard_shaders
-    try:
-        discard_shaders
-    except NameError:
-        this_file_path = Path(__file__)
-        discard_shaders_file = this_file_path.parent.parent.joinpath('shader_file').joinpath('shaders_discard_v13.0.1.txt').resolve()
-        with open(discard_shaders_file, 'r') as f:
-            discard_shaders = {line.strip() for line in f.readlines()}
-    return discard_shaders
 
 
 def get_matrix4x4_blender(ssbh_matrix):
@@ -572,7 +569,7 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     return blender_mesh
 
 
-def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
+def create_mesh(ssbh_model: ssbh_data_py.modl_data.ModlData, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material):
     '''
     So the goal here is to create a set of materials to share among the meshes for this model.
     But, other previously created models can have materials of the same name.
@@ -580,11 +577,9 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
     example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
     '''
     created_meshes = []
+    '''
     unique_numdlb_material_labels = {e.material_label for e in ssbh_model.entries}
     
-    # Make Master Shader if its not already made
-    master_shader.create_master_shader()
-
     texture_name_to_image_dict = {}
     texture_name_to_image_dict = import_material_images(ssbh_matl, context.scene.sub_scene_properties.model_import_folder_path)
 
@@ -600,10 +595,10 @@ def create_mesh(ssbh_model, ssbh_matl, ssbh_mesh, ssbh_skel, armature, context):
         except Exception as e:
             # TODO: Report an exception instead.
             print(f'Failed to create material for {label}:  Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-
+    '''
     name_index_mat_dict = { 
-        (e.mesh_object_name,e.mesh_object_subindex):label_to_material_dict[e.material_label] 
-        for e in ssbh_model.entries if e.material_label in label_to_material_dict
+        (e.mesh_object_name,e.mesh_object_subindex):material_label_to_material[e.material_label] 
+        for e in ssbh_model.entries if e.material_label in material_label_to_material
     }
 
     start = time.time()
@@ -665,7 +660,7 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
     for ssbh_mat_entry in ssbh_matl.entries:
         if ssbh_mat_entry.material_label == material_label:
             entry = ssbh_mat_entry
-
+    """
     # Change Mat Settings
     BlendFactor = ssbh_data_py.matl_data.BlendFactor
     CullMode = ssbh_data_py.matl_data.CullMode
@@ -723,7 +718,7 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
     material_label = node_group_node.inputs['Material Name']
     material_label.hide = False
     material_label.default_value = entry.material_label
-
+    
     # TODO: Refactor this to be cleaner?
     blend_state = entry.blend_states[0].data
     enable_inputs(node_group_node, entry.blend_states[0].param_id.name)
@@ -754,7 +749,7 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
             input.default_value = rasterizer_state.cull_mode.name
         if field_name == 'Field3':
             input.default_value = rasterizer_state.depth_bias
-
+    """
     for param in entry.booleans:
         input = node_group_node.inputs.get(param.param_id.name)
         input.hide = False
@@ -797,12 +792,12 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
 
     for texture_param in entry.textures:
         enable_inputs(node_group_node, texture_param.param_id.name)
-
+        
         texture_node = nodes.new('ShaderNodeTexImage')
         texture_node.location = (-800, -500 * node_count + 1000)
         texture_file_name = texture_param.data
-        texture_node.name = texture_file_name
-        texture_node.label = texture_file_name
+        texture_node.name = texture_param.param_id.name
+        texture_node.label = texture_param.param_id.name
         texture_node.image = texture_name_to_image_dict[texture_file_name]
         matched_rgb_input = None
         matched_alpha_input = None

@@ -1,6 +1,30 @@
 import bpy
 from bpy.types import ShaderNodeCustomGroup
 
+wrap_types = (
+    ('Repeat', "Repeat", "The texture just keeps repeating"),
+    ('ClampToEdge', "Clamp To Edge", "Out-of-bounds UVs just get clamped to the edge"),
+    ('MirroredRepeat', "Mirrored Repeat", "Repeats, but mirrored"),
+    ('ClampToBorder', "Clamp To Border", "Out-of-bounds UVs just get clamped to one pixel before the edge"),
+)
+min_filter_types = (
+    ('Nearest', 'Nearest', 'Nearest'),
+    ('LinearMipmapLinear', 'LinearMipmapLinear', 'LinearMipmapLinear'),
+    ('LinearMipmapLinear2', 'LinearMipmapLinear2', 'LinearMipmapLinear2'),
+)
+mag_filter_types = (
+    ('Nearest', 'Nearest', 'Nearest'),
+    ('Linear', 'Linear', 'Linear'),
+    ('Linear2', 'Linear2', 'Linear2'),
+)
+max_anisotropy_levels = (
+    ('One', '1x', '1x'),
+    ('Two', '2x', '2x'),
+    ('Four', '4x', '4x'),
+    ('Eight', '8x', '8x'),
+    ('Sixteen', '16x', '16x'),
+)
+
 class CustomNodeUltimateBase:
     @classmethod
     def poll(cls, ntree):
@@ -42,29 +66,7 @@ class SUB_CSN_ultimate_sampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
             math_y.use_clamp = True
             math_y.inputs[1].default_value = 1.0
 
-    wrap_types = (
-        ('Repeat', "Repeat", "The texture just keeps repeating"),
-        ('ClampToEdge', "Clamp To Edge", "Out-of-bounds UVs just get clamped to the edge"),
-        ('MirroredRepeat', "Mirrored Repeat", "Repeats, but mirrored"),
-        ('ClampToBorder', "Clamp To Border", "Out-of-bounds UVs just get clamped to one pixel before the edge"),
-    )
-    min_filter_types = (
-        ('Nearest', 'Nearest', 'Nearest'),
-        ('LinearMipmapLinear', 'LinearMipmapLinear', 'LinearMipmapLinear'),
-        ('LinearMipmapLinear2', 'LinearMipmapLinear2', 'LinearMipmapLinear2'),
-    )
-    mag_filter_types = (
-        ('Nearest', 'Nearest', 'Nearest'),
-        ('Linear', 'Linear', 'Linear'),
-        ('Linear2', 'Linear2', 'Linear2'),
-    )
-    max_anisotropy_levels = (
-        ('One', '1x', '1x'),
-        ('Two', '2x', '2x'),
-        ('Four', '4x', '4x'),
-        ('Eight', '8x', '8x'),
-        ('Sixteen', '16x', '16x'),
-    )
+
     wrap_s: bpy.props.EnumProperty(
         name="S",
         description="Wrap S",
@@ -139,7 +141,7 @@ class SUB_CSN_ultimate_sampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         inner_nodes = self.node_tree.nodes
         
         self.node_tree.inputs.new('NodeSocketVector', 'UV Input')
-        self.node_tree.inputs.new('NodeSocketVector', 'UV Transform')
+        #self.node_tree.inputs.new('NodeSocketVector', 'UV Transform')
         self.node_tree.outputs.new('NodeSocketVector', 'UV Output')
         
         separate_xyz = inner_nodes.new('ShaderNodeSeparateXYZ')
@@ -182,15 +184,16 @@ class SUB_CSN_ultimate_sampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
             math_y.use_clamp = True
             math_y.inputs[1].default_value = 1.0
         
-        vector_math = inner_nodes.new('ShaderNodeVectorMath')
-        vector_math.name = 'vector_math'
-        vector_math.label = 'vector_math'
-        vector_math.operation = 'ADD'
+        #vector_math = inner_nodes.new('ShaderNodeVectorMath')
+        #vector_math.name = 'vector_math'
+        #vector_math.label = 'vector_math'
+        #vector_math.operation = 'ADD'
         
         
-        inner_links.new(vector_math.inputs[0], internal_input.outputs[0])
-        inner_links.new(vector_math.inputs[1], internal_input.outputs[1])
-        inner_links.new(separate_xyz.inputs[0], vector_math.outputs[0])
+        #inner_links.new(vector_math.inputs[0], internal_input.outputs[0])
+        #inner_links.new(vector_math.inputs[1], internal_input.outputs[1])
+        #inner_links.new(separate_xyz.inputs[0], vector_math.outputs[0])
+        inner_links.new(separate_xyz.inputs[0], internal_input.outputs[0])
         inner_links.new(math_x.inputs[0], separate_xyz.outputs['X'])
         inner_links.new(math_y.inputs[0], separate_xyz.outputs['Y'])
         inner_links.new(combine_xyz.inputs['X'], math_x.outputs[0])
