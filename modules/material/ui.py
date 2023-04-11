@@ -64,7 +64,17 @@ class SUB_PT_matl_data_bools(MaterialPanel):
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
 
     def draw(self, context):
+        sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
         layout = self.layout
+        box = layout.box()
+        for matl_bool in sub_matl_data.bools:
+            row = box.row()
+            row.alignment = 'EXPAND'
+            row.label(text=matl_bool.ui_name)
+            row = row.row()
+            row.alignment = 'RIGHT'
+            row.prop(matl_bool, "value", text="")
+
 
 class SUB_PT_matl_data_floats(MaterialPanel):
     bl_label = "Floats"
@@ -74,10 +84,14 @@ class SUB_PT_matl_data_floats(MaterialPanel):
         sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
         layout = self.layout
         box = layout.box()
-        for float in sub_matl_data.floats:
+        for matl_float in sub_matl_data.floats:
             row = box.row()
-            row.prop(float, "value")
-
+            row.alignment = 'EXPAND'
+            row.label(text=matl_float.ui_name)
+            row = row.row()
+            row.alignment = 'RIGHT'
+            row.prop(matl_float, "value", text="")
+            
 class SUB_PT_matl_data_vectors(MaterialPanel):
     bl_label = "Vectors"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
@@ -89,23 +103,23 @@ class SUB_PT_matl_data_vectors(MaterialPanel):
         for vector in sub_matl_data.vectors:
             row = box.row()
             sub_row = row.row()
-            sub_row.alignment = 'LEFT'
+            sub_row.alignment = 'EXPAND'
             sub_row.label(text=vector.ui_name)
             sub_row = row.row(align=True)
-            sub_row.alignment = 'EXPAND'
+            sub_row.alignment = 'RIGHT'
             sub_row.prop(vector, "value", text="")
-            sub_row.prop(vector, "value", text="X", index=0)
-            sub_row.prop(vector, "value", text="Y", index=1)
-            sub_row.prop(vector, "value", text="Z", index=2)
-            sub_row.prop(vector, "value", text="W", index=3)
+            sub_row.prop(vector, "value", text="", index=0)
+            sub_row.prop(vector, "value", text="", index=1)
+            sub_row.prop(vector, "value", text="", index=2)
+            sub_row.prop(vector, "value", text="", index=3)
 
 class SUB_PT_matl_data_textures(MaterialPanel):
     bl_label = "Textures"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
 
     def draw(self, context):
-        layout = self.layout
         sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
+        layout = self.layout
 
         box = layout.box()
         for texture in sub_matl_data.textures:
@@ -126,21 +140,82 @@ class SUB_PT_matl_data_samplers(MaterialPanel):
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
 
     def draw(self, context):
+        sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
         layout = self.layout
+
+        for sampler in sub_matl_data.samplers:
+            box = layout.box()
+            row = box.row()
+            row.label(text=sampler.ui_name)
+            row = box.row()
+            cf = row.column_flow(columns=4)
+            cf.label(text='Wrap Settings')
+            cf.separator()
+            cf.label(text='Filter Settings')
+            cf.separator()
+            cf.label(text='Other Settings')
+            cf.prop(sampler, 'wrap_s')
+            cf.separator()
+            cf.prop(sampler, 'min_filter')
+            cf.separator()
+            sub_row = cf.row() # Prevents border color from taking up 2 rows
+            sub_row.prop(sampler, 'border_color')
+            cf.prop(sampler, 'wrap_t')
+            cf.separator()
+            cf.prop(sampler, 'mag_filter')
+            cf.separator()
+            cf.prop(sampler, 'lod_bias')
+            cf.prop(sampler, 'wrap_r')
+            cf.separator()
+            cf.prop(sampler, 'anisotropic_filtering')
+            cf.separator()
+            cf.prop(sampler, 'max_anisotropy')
 
 class SUB_PT_matl_data_blend_states(MaterialPanel):
     bl_label = "Blend States"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
 
     def draw(self, context):
+        sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
         layout = self.layout
+
+        for blend_state in sub_matl_data.blend_states:
+            box = layout.box()
+            row = box.row()
+            row.label(text=blend_state.ui_name)
+            row = box.row()
+            row.label(text="Source Color")
+            row.prop(blend_state, "source_color", text="")
+            row = box.row()
+            row.label(text='Destination Color')
+            row.prop(blend_state, "destination_color", text="")
+            row = box.row()
+            row.label(text="Alpha Sample To Coverage")
+            row.prop(blend_state, "alpha_sample_to_coverage", text="")
+
 
 class SUB_PT_matl_data_rasterizer_states(MaterialPanel):
     bl_label = "Rasterizer States"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
 
     def draw(self, context):
+        sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
         layout = self.layout
+
+        for rasterizer_state in sub_matl_data.rasterizer_states:
+            box = layout.box()
+            row = box.row()
+            row.label(text=rasterizer_state.ui_name)
+            row = box.row()
+            row.label(text="Cull Mode")
+            row.prop(rasterizer_state, "cull_mode", text="")
+            row = box.row()
+            row.label(text='Depth Bias')
+            row.prop(rasterizer_state, "depth_bias", text="")
+            row = box.row()
+            row.label(text="Fill Mode")
+            row.prop(rasterizer_state, "fill_mode", text="")
+
 
 class SUB_MT_material_specials(Menu):
     bl_label = "Material Specials"

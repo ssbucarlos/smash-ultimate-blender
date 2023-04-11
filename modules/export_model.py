@@ -329,7 +329,9 @@ def get_mesh_materials(operator, export_meshes):
 def create_and_save_matl(operator, folder, export_meshes):
     try:
         materials = get_mesh_materials(operator, export_meshes)
-        ssbh_matl = make_matl(operator, materials)
+        #ssbh_matl = make_matl(operator, materials)
+        from .material.create_matl_from_blender_materials import create_matl_from_blender_materials
+        ssbh_matl = create_matl_from_blender_materials(materials)
     except RuntimeError as e:
         operator.report({'ERROR'}, f'Failed to prepare .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
         return
@@ -340,7 +342,7 @@ def create_and_save_matl(operator, folder, export_meshes):
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
-        
+
 def get_material_label_from_mesh(operator, mesh):
     if len(mesh.material_slots) == 0:
         message = f'No material assigned for {mesh.name}. Cannot create model.numdlb. Assign a material or disable .NUMDLB export.'
@@ -353,7 +355,7 @@ def get_material_label_from_mesh(operator, mesh):
         message += ' Cannot create model.numdlb. Create a material or disable .NUMDLB export.'
         raise RuntimeError(message)
 
-    mat_label = None
+    """mat_label = None
     try:
         ultimate_node = find_ultimate_node(material)
         mat_label = ultimate_node.inputs['Material Name'].default_value
@@ -361,9 +363,9 @@ def get_material_label_from_mesh(operator, mesh):
         # Use the Blender material name as a fallback.
         mat_label = material.name
         message = f'Missing Smash Ultimate node group for the mesh {mesh.name}. Assigning {mat_label} by material name.'
-        operator.report({'WARNING'}, message)
+        operator.report({'WARNING'}, message)"""
 
-    return mat_label
+    return material.name
 
 
 def find_bone_index(bones, name):

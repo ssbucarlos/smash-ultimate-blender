@@ -15,7 +15,7 @@ from bpy.types import Panel, Operator
 from bpy_extras import image_utils
 from ..operators import master_shader, material_inputs
 from mathutils import Matrix
-from .material.sub_matl_data import create_blender_materials_from_matl
+from .material.create_blender_materials_from_matl import create_blender_materials_from_matl
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -653,14 +653,14 @@ def get_vertex_attributes(node_group_node, shader_name):
         # The database has a single entry for each program, so don't include the render pass tag.
         return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
 
-
+"""
 def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl: ssbh_data_py.matl_data.MatlData, texture_name_to_image_dict):
     # TODO: Handle none?
     entry = None
     for ssbh_mat_entry in ssbh_matl.entries:
         if ssbh_mat_entry.material_label == material_label:
             entry = ssbh_mat_entry
-    """
+    
     # Change Mat Settings
     BlendFactor = ssbh_data_py.matl_data.BlendFactor
     CullMode = ssbh_data_py.matl_data.CullMode
@@ -749,7 +749,7 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
             input.default_value = rasterizer_state.cull_mode.name
         if field_name == 'Field3':
             input.default_value = rasterizer_state.depth_bias
-    """
+    
     for param in entry.booleans:
         input = node_group_node.inputs.get(param.param_id.name)
         input.hide = False
@@ -893,6 +893,9 @@ def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl:
 
     if 'colorSet5' in required_attributes:
         create_and_enable_color_set('colorSet5', 1)
+
+"""
+
 
 def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=None) -> bpy.types.Object:
     for mesh in meshes:

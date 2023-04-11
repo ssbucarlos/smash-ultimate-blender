@@ -1,0 +1,287 @@
+import bpy
+
+from bpy.types import ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial
+from bpy_extras import image_utils
+
+import ssbh_data_py
+
+from enum import Enum
+from pathlib import Path
+
+from .matl_params import texture_param_name_to_socket_params, vec4_param_name_to_socket_params
+from .sub_matl_data import SUB_PG_matl_blend_state, SUB_PG_matl_bool, SUB_PG_matl_float, SUB_PG_matl_rasterizer_state, SUB_PG_matl_sampler, SUB_PG_matl_texture, SUB_PG_matl_vector, SUB_PG_sub_matl_data
+
+generated_default_texture_name_value: dict[str, tuple[float, float, float, float]] = {
+     "common/shader/sfxpbs/default_black": (0, 0, 0, 0),
+     "common/shader/sfxpbs/default_color": (1,1,1,1),
+     "common/shader/sfxpbs/default_color2": (1,1,1,1),
+     "common/shader/sfxpbs/default_color3": (1,1,1,1),
+     "common/shader/sfxpbs/default_color4": (1,1,1,1),
+     "common/shader/sfxpbs/default_diffuse2": (1,1,0,1), # This is supposed to be a yellow and white checkerboad texture, but i can't imagine any user actually using it tbh tbh
+     "common/shader/sfxpbs/default_gray": (.5, .5, .5, 1),
+     "common/shader/sfxpbs/default_metallicbg": (0, 1, 1, .25),
+     "common/shader/sfxpbs/default_normal": (0.5, 0.5, 1, 1),
+     "common/shader/sfxpbs/default_params": (0, 1, 1, .25),
+     "common/shader/sfxpbs/default_params_r000_g025_b100": (0, 0.25, 1, 1),
+     "common/shader/sfxpbs/default_params_r100_g025_b100": (1, 0.25, 1, 1),
+     "common/shader/sfxpbs/default_params2": (1,1,1,1),
+     "common/shader/sfxpbs/default_params3": (0, 0.5, 1, .25),
+     "common/shader/sfxpbs/default_specular": (0.25 , 0.25, 0.25, 1.0),
+     "common/shader/sfxpbs/default_white": (1.0, 1.0, 1.0, 1.0),
+     "common/shader/sfxpbs/fighter/default_normal": (0.5, 0.5, 1.0, 1.0),
+     "common/shader/sfxpbs/fighter/default_params": (0.0, 1.0, 1.0, 0.25),
+}
+
+def create_default_textures():
+    for texture_name, value in generated_default_texture_name_value.items():
+        if texture_name not in bpy.data.images.keys():
+            image = bpy.data.images.new(texture_name, 8, 8, alpha=True, is_data=True)
+            image.generated_color = value
+            image.use_fake_user = True
+            
+
+def import_material_images(ssbh_matl, dir) -> dict[str, bpy.types.Image]:
+    texture_name_to_image_dict = {}
+    texture_name_set = set()
+
+    for ssbh_mat_entry in ssbh_matl.entries:
+        for attribute in ssbh_mat_entry.textures:
+            texture_name_set.add(attribute.data)
+
+    for texture_name in texture_name_set:
+        image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
+        image.name = texture_name
+        texture_name_to_image_dict[texture_name] = image
+
+    return texture_name_to_image_dict
+
+def get_discard_shaders():
+    global discard_shaders
+    try:
+        discard_shaders
+    except NameError:
+        this_file_path = Path(__file__)
+        discard_shaders_file = this_file_path.parent.parent.parent.joinpath('shader_file').joinpath('shaders_discard_v13.0.1.txt').resolve()
+        with open(discard_shaders_file, 'r') as f:
+            discard_shaders = {line.strip() for line in f.readlines()}
+    return discard_shaders
+
+def get_blend_method(shader_label: str, blend_states: list[SUB_PG_matl_blend_state]):
+    # TODO: Access blenders internal enum instead? Or use a cleaner enum method
+    BlendMethod = Enum('BlendMethod', 'OPAQUE HASHED CLIP BLEND')
+    if len(blend_states) != 1: # no vanilla ultimate shader has more than one blend state
+        return BlendMethod.OPAQUE.name
+    
+    discard_shaders = get_discard_shaders()
+    # Trims the trailing '_OPAQUE', '_SORT', etc.
+    if shader_label[:len('SFX_PBS_0000000000000080')] in discard_shaders:
+        return BlendMethod.CLIP.name
+    
+    blend_state_0 = blend_states[0]
+    if blend_state_0.alpha_sample_to_coverage is True:
+        return BlendMethod.HASHED.name
+    
+    if blend_state_0.destination_color == ssbh_data_py.matl_data.BlendFactor.OneMinusSourceAlpha.name:
+        # In theory, its supposed to be 'BLEND', but this more often than not looks wrong.
+        # I don't understand shaders well enough to really know why it doesn't work in EEVEE.
+        # So return 'HASHED' instead for now. The user can manually adjust to 'BLEND' after import.
+        return BlendMethod.HASHED.name
+    
+    return BlendMethod.OPAQUE.name
+
+def setup_blender_material_settings(material: bpy.types.Material):
+    sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+    # Blend Method
+    material.blend_method = get_blend_method(sub_matl_data.shader_label, sub_matl_data.blend_states)
+    # Back Face Culling
+    if len(sub_matl_data.rasterizer_states) == 1:
+        if sub_matl_data.rasterizer_states[0].cull_mode == ssbh_data_py.matl_data.CullMode.Back.name:
+            material.use_backface_culling = True
+
+def get_matched_sampler(sub_matl_data: SUB_PG_sub_matl_data, texture: SUB_PG_matl_texture):
+    sampler: SUB_PG_matl_sampler
+    for sampler in sub_matl_data.samplers:
+        if texture.texture_number == sampler.sampler_number:
+            return sampler
+
+def setup_blender_material_node_tree(material: bpy.types.Material):
+    from ...operators.master_shader import create_master_shader, get_master_shader_name
+    sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+    
+    # Make Master Shader if its not already made
+    create_master_shader()
+    
+    # Clone Master Shader
+    master_shader_name = get_master_shader_name()
+    master_node_group = bpy.data.node_groups.get(master_shader_name)
+    clone_group = master_node_group.copy()
+
+    # Setup Clone
+    clone_group.name = sub_matl_data.shader_label
+
+    # Prep the node_tree for the new nodes
+    material.use_nodes = True
+    material.node_tree.nodes.clear()
+
+    # Add the new Nodes
+    nodes = material.node_tree.nodes
+    
+    cycles_output: ShaderNodeOutputMaterial = nodes.new('ShaderNodeOutputMaterial')
+    cycles_output.name = 'cycles_output'
+    cycles_output.label = 'Cycles Output'
+    cycles_output.target = 'CYCLES'
+    cycles_output.location = (400,350)
+
+    eevee_output: ShaderNodeOutputMaterial = nodes.new('ShaderNodeOutputMaterial')
+    eevee_output.name = 'eevee_output'
+    eevee_output.label = 'EEVEE Output'
+    eevee_output.target = 'EEVEE'
+    eevee_output.location = (400,200)
+
+    node_group_node = nodes.new('ShaderNodeGroup')
+    node_group_node.name = 'smash_ultimate_shader'
+    node_group_node.width = 600
+    node_group_node.location = (-300, 300)
+    node_group_node.node_tree = clone_group
+
+    links = material.node_tree.links
+    links.new(node_group_node.outputs[0], cycles_output.inputs[0])
+    links.new(node_group_node.outputs[1], eevee_output.inputs[0])
+
+    texture: SUB_PG_matl_texture
+    ParamId = ssbh_data_py.matl_data.ParamId
+    created_node_rows = 0
+    texture_node_row_width = 500
+    for texture in sub_matl_data.textures:
+        # Create Texture Node
+        texture_node: ShaderNodeTexImage = nodes.new('ShaderNodeTexImage')
+        texture_node.location = (-800, 1000 - (texture_node_row_width * created_node_rows))
+        texture_node.name = texture.node_name
+        texture_node.label = texture.ui_name
+        texture_node.image = texture.image
+
+        # For now, manually set the colorspace types....
+        linear_textures_names = {ParamId.Texture4.name, ParamId.Texture6.name}
+        if texture.node_name in linear_textures_names:
+            texture_node.image.colorspace_settings.name = 'Linear'
+            texture_node.image.alpha_mode = 'CHANNEL_PACKED'
+        
+        # Create UV Map Node
+        uv_map_node: ShaderNodeUVMap = nodes.new("ShaderNodeUVMap")
+        uv_map_node.name = f'{texture.node_name}_uv_map'
+        uv_map_node.location = (texture_node.location[0] - 1200, texture_node.location[1])
+        uv_map_node.label = f'{texture.node_name} UV Map'
+        
+        # For now, manually set the UV maps
+        if texture.node_name == ParamId.Texture9.name:
+            uv_map_node.uv_map = 'bake1'
+        elif texture.node_name == ParamId.Texture1.name:
+            uv_map_node.uv_map = 'uvSet'
+        else:
+            uv_map_node.uv_map = 'map1'
+        
+        # Create UV Transform Node
+        # Also set the default_values here. I know it makes more sense to have the default_values
+        # be in the init func of the node itself, but it just doesn't work there lol
+        from ...shader_nodes import custom_uv_transform_node
+        uv_transform_node = nodes.new(custom_uv_transform_node.SUB_CSN_ultimate_uv_transform.bl_idname)
+        uv_transform_node.name = 'uv_transform_node'
+        uv_transform_node.label = 'UV Transform' + texture.node_name.split('Texture')[1]
+        uv_transform_node.location = (texture_node.location[0] - 900, texture_node.location[1])
+        uv_transform_node.inputs[0].default_value = 1.0 # Scale X
+        uv_transform_node.inputs[1].default_value = 1.0 # Scale Y
+
+        # Create Sampler Node
+        from ...shader_nodes import custom_sampler_node
+        
+        matched_sampler: SUB_PG_matl_sampler = get_matched_sampler(sub_matl_data, texture)
+        sampler_node:custom_sampler_node.SUB_CSN_ultimate_sampler = nodes.new(custom_sampler_node.SUB_CSN_ultimate_sampler.bl_idname)
+        sampler_node.name = 'sampler_node'
+        sampler_node.label = 'Sampler' + texture.node_name.split('Texture')[1]
+        sampler_node.location = (texture_node.location[0] - 600, texture_node.location[1])
+        sampler_node.width = 500
+
+        sampler_node.wrap_s = matched_sampler.wrap_s
+        sampler_node.wrap_t = matched_sampler.wrap_t
+        sampler_node.wrap_r = matched_sampler.wrap_r
+        sampler_node.min_filter = matched_sampler.min_filter
+        sampler_node.mag_filter = matched_sampler.mag_filter
+        sampler_node.anisotropic_filtering = matched_sampler.max_anisotropy is not None
+        sampler_node.max_anisotropy = matched_sampler.max_anisotropy if matched_sampler.max_anisotropy else 'One'
+        sampler_node.border_color = matched_sampler.border_color
+        sampler_node.lod_bias = matched_sampler.lod_bias 
+
+        # Link these nodes together
+        links.new(uv_transform_node.inputs[4], uv_map_node.outputs[0])
+        links.new(sampler_node.inputs['UV Input'], uv_transform_node.outputs[0])
+        links.new(texture_node.inputs[0], sampler_node.outputs[0])
+        links.new(node_group_node.inputs[texture_param_name_to_socket_params[texture.node_name].rgb_socket_name], texture_node.outputs['Color'])
+        links.new(node_group_node.inputs[texture_param_name_to_socket_params[texture.node_name].alpha_socket_name], texture_node.outputs['Alpha'])
+
+        created_node_rows = created_node_rows + 1
+
+    created_vector_rows = 0
+    vector: SUB_PG_matl_vector
+    for vector_index, vector in enumerate(sub_matl_data.vectors):
+        for axis_index, axis in enumerate(['X', 'Y', 'Z', 'W']):
+            # Create the value node
+            value_node: ShaderNodeValue = nodes.new('ShaderNodeValue')
+            value_node.name = f"{vector.param_id_name}_{axis}"
+            value_node.label = f"{vector.ui_name} {axis}"
+            value_node.location = (-1300 + (200 * axis_index), 1000 - (texture_node_row_width * (created_node_rows-1)) - 300 - (100 * created_vector_rows))
+            
+            socket_params = vec4_param_name_to_socket_params[vector.param_id_name]
+            if axis == 'X':
+                socket_name = socket_params.x_socket_name
+            elif axis == 'Y':
+                socket_name = socket_params.y_socket_name
+            elif axis == 'Z':
+                socket_name = socket_params.z_socket_name
+            elif axis == 'W':
+                socket_name = socket_params.w_socket_name
+
+            links.new(node_group_node.inputs[socket_name], value_node.outputs[0])
+
+            # Setup Driver
+            driver_fcurve: bpy.types.FCurve = value_node.outputs[0].driver_add('default_value')
+            var = driver_fcurve.driver.variables.new()
+            var.name = 'var'
+            target = var.targets[0]
+            target.id_type = 'MATERIAL'
+            target.id = material
+            target.data_path = f'sub_matl_data.vectors[{vector_index}].value[{axis_index}]'
+            driver_fcurve.driver.expression = f'{var.name}'
+        created_vector_rows = created_vector_rows + 1
+
+
+def create_blender_materials_from_matl(ssbh_matl: ssbh_data_py.matl_data.MatlData) -> dict[str, bpy.types.Material]:
+    '''
+    Creates a blender material with the sub_matl_data filled out for every entry in the ssbh_matl.
+    Returns a dictionary mapping the material_label to the created blender material to handle multiple models 
+    having the same material name.
+    '''
+    # Setup default textures if not already made
+    create_default_textures()
+    # Make new Blender Materials
+    material_label_to_material: dict[str, bpy.types.Material] = \
+        {entry.material_label: bpy.data.materials.new(entry.material_label) for entry in ssbh_matl.entries}
+    # Import the texture PNGs
+    texture_name_to_image_dict = import_material_images(ssbh_matl, bpy.context.scene.sub_scene_properties.model_import_folder_path)
+    # Fill out the sub_matl_data of each material
+    for entry in ssbh_matl.entries:
+        sub_matl_data: SUB_PG_sub_matl_data = material_label_to_material[entry.material_label].sub_matl_data
+        sub_matl_data.set_shader_label(entry.shader_label)
+        sub_matl_data.add_bools(entry.booleans)
+        sub_matl_data.add_floats(entry.floats)
+        sub_matl_data.add_vectors(entry.vectors)
+        sub_matl_data.add_textures(entry.textures, texture_name_to_image_dict)
+        sub_matl_data.add_samplers(entry.samplers)
+        sub_matl_data.add_blend_states(entry.blend_states)
+        sub_matl_data.add_rasterizer_states(entry.rasterizer_states)
+ 
+    # Make the blender material settings
+    for material_label, material in material_label_to_material.items():
+        setup_blender_material_settings(material)
+        setup_blender_material_node_tree(material)
+
+    return material_label_to_material
