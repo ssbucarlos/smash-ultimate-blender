@@ -152,6 +152,35 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
     ParamId = ssbh_data_py.matl_data.ParamId
     created_node_rows = 0
     texture_node_row_width = 500
+    layer_1_texture_names = {
+        ParamId.Texture0.name,
+        ParamId.Texture2.name,
+        ParamId.Texture3.name,
+        ParamId.Texture4.name,
+        ParamId.Texture5.name,
+        ParamId.Texture6.name,
+        ParamId.Texture7.name,
+        ParamId.Texture8.name,
+        ParamId.Texture9.name,
+        ParamId.Texture10.name,
+        ParamId.Texture16.name,
+    }
+    layer_2_texture_names = {
+        ParamId.Texture1.name,
+        ParamId.Texture11.name,
+        ParamId.Texture14.name,
+    }
+    layer_3_texture_names = {
+        ParamId.Texture12.name
+    }
+    layer_4_texture_names = {
+        ParamId.Texture13.name
+    }
+    layer_1_uv_transform_nodes = set()
+    layer_2_uv_transform_nodes = set()
+    layer_3_uv_transform_nodes = set()
+    layer_4_uv_transform_nodes = set()
+    sprite_sheet_nodes = set()
     for texture in sub_matl_data.textures:
         # Create Texture Node
         texture_node: ShaderNodeTexImage = nodes.new('ShaderNodeTexImage')
@@ -169,13 +198,15 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         # Create UV Map Node
         uv_map_node: ShaderNodeUVMap = nodes.new("ShaderNodeUVMap")
         uv_map_node.name = f'{texture.node_name}_uv_map'
-        uv_map_node.location = (texture_node.location[0] - 1200, texture_node.location[1])
+        uv_map_node.location = (texture_node.location[0] - 1500, texture_node.location[1])
         uv_map_node.label = f'{texture.node_name} UV Map'
         
         # For now, manually set the UV maps
-        if texture.node_name == ParamId.Texture9.name:
+        bake1_texture_names = {ParamId.Texture3.name, ParamId.Texture9.name}
+        uvset_texture_names = {ParamId.Texture1.name, ParamId.Texture11.name, ParamId.Texture14.name}
+        if texture.node_name in bake1_texture_names:
             uv_map_node.uv_map = 'bake1'
-        elif texture.node_name == ParamId.Texture1.name:
+        elif texture.node_name in uvset_texture_names:
             uv_map_node.uv_map = 'uvSet'
         else:
             uv_map_node.uv_map = 'map1'
@@ -187,10 +218,27 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         uv_transform_node = nodes.new(custom_uv_transform_node.SUB_CSN_ultimate_uv_transform.bl_idname)
         uv_transform_node.name = 'uv_transform_node'
         uv_transform_node.label = 'UV Transform' + texture.node_name.split('Texture')[1]
-        uv_transform_node.location = (texture_node.location[0] - 900, texture_node.location[1])
+        uv_transform_node.location = (texture_node.location[0] - 1200, texture_node.location[1])
         uv_transform_node.inputs[0].default_value = 1.0 # Scale X
         uv_transform_node.inputs[1].default_value = 1.0 # Scale Y
+        if texture.node_name in layer_1_texture_names:
+            layer_1_uv_transform_nodes.add(uv_transform_node)
+        elif texture.node_name in layer_2_texture_names:
+            layer_2_uv_transform_nodes.add(uv_transform_node)
+        elif texture.node_name in layer_3_texture_names:
+            layer_3_uv_transform_nodes.add(uv_transform_node)
 
+        # Create Sprite Sheet Param Node
+        from ...shader_nodes import custom_sprite_sheet_params_node
+        sprite_sheet_node = nodes.new(custom_sprite_sheet_params_node.SUB_CSN_ultimate_sprite_sheet_params.bl_idname)
+        sprite_sheet_node.name = 'sprite_sheet_node'
+        sprite_sheet_node.label = 'Sprite Sheet Params'
+        sprite_sheet_node.location = (texture_node.location[0] - 900, texture_node.location[1])
+        sprite_sheet_node.inputs[0].default_value = 1.0 # Column Count
+        sprite_sheet_node.inputs[1].default_value = 1.0 # Row Count
+        sprite_sheet_node.inputs[2].default_value = 1.0 # Active Sprite Count
+        sprite_sheet_node.width = 250
+        sprite_sheet_nodes.add(sprite_sheet_node)
         # Create Sampler Node
         from ...shader_nodes import custom_sampler_node
         
@@ -212,11 +260,12 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         sampler_node.lod_bias = matched_sampler.lod_bias 
 
         # Link these nodes together
-        links.new(uv_transform_node.inputs[4], uv_map_node.outputs[0])
-        links.new(sampler_node.inputs['UV Input'], uv_transform_node.outputs[0])
-        links.new(texture_node.inputs[0], sampler_node.outputs[0])
-        links.new(node_group_node.inputs[texture_param_name_to_socket_params[texture.node_name].rgb_socket_name], texture_node.outputs['Color'])
-        links.new(node_group_node.inputs[texture_param_name_to_socket_params[texture.node_name].alpha_socket_name], texture_node.outputs['Alpha'])
+        links.new(uv_map_node.outputs[0], uv_transform_node.inputs[4])
+        links.new(uv_transform_node.outputs[0], sprite_sheet_node.inputs[4])
+        links.new(sprite_sheet_node.outputs[0], sampler_node.inputs[0])
+        links.new(sampler_node.outputs[0], texture_node.inputs[0])
+        links.new(texture_node.outputs['Color'], node_group_node.inputs[texture_param_name_to_socket_params[texture.node_name].rgb_socket_name])
+        links.new(texture_node.outputs['Alpha'], node_group_node.inputs[texture_param_name_to_socket_params[texture.node_name].alpha_socket_name])
 
         created_node_rows = created_node_rows + 1
 
@@ -251,6 +300,19 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
             target.id = material
             target.data_path = f'sub_matl_data.vectors[{vector_index}].value[{axis_index}]'
             driver_fcurve.driver.expression = f'{var.name}'
+
+            if vector.param_id_name == ssbh_data_py.matl_data.ParamId.CustomVector6.name:
+                for node in layer_1_uv_transform_nodes:
+                    links.new(value_node.outputs[0], node.inputs[axis_index])
+            elif vector.param_id_name == ssbh_data_py.matl_data.ParamId.CustomVector31.name:
+                for node in layer_2_uv_transform_nodes:
+                    links.new(value_node.outputs[0], node.inputs[axis_index])
+            elif vector.param_id_name == ssbh_data_py.matl_data.ParamId.CustomVector32.name:
+                for node in layer_3_uv_transform_nodes:
+                    links.new(value_node.outputs[0], node.inputs[axis_index])
+            elif vector.param_id_name == ssbh_data_py.matl_data.ParamId.CustomVector18.name:
+                for node in sprite_sheet_nodes:
+                    links.new(value_node.outputs[0], node.inputs[axis_index])
         created_vector_rows = created_vector_rows + 1
 
 

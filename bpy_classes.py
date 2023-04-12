@@ -102,4 +102,5 @@ classes = [
     properties.SubSceneProperties,
     shader_nodes.custom_sampler_node.SUB_CSN_ultimate_sampler,
     shader_nodes.custom_uv_transform_node.SUB_CSN_ultimate_uv_transform,
+    shader_nodes.custom_sprite_sheet_params_node.SUB_CSN_ultimate_sprite_sheet_params,
 ]

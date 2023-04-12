@@ -44,7 +44,7 @@ class SUB_CSN_ultimate_uv_transform(ShaderNodeCustomGroup):
         self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Translate X')
         self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Translate Y')
         self.node_tree.inputs.new(NODE_SOCKET_VECTOR, 'UV Input')
-        self.node_tree.outputs.new(NODE_SOCKET_VECTOR, 'UV Input')
+        self.node_tree.outputs.new(NODE_SOCKET_VECTOR, 'UV Output')
         
         # Now handle the internal nodes
         nodes = self.node_tree.nodes
