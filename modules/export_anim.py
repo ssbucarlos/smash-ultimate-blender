@@ -16,7 +16,7 @@ from .import_anim import get_heirarchy_order
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .anim_data import VisTrackEntry, SubAnimProperties, MatTrack, MatTrackProperty
+    from .anim_data import SUB_PG_vis_track_entry, SUB_PG_sub_anim_data, SUB_PG_mat_track, SUB_PG_mat_track_property
     CustomVector = list[int]
     CustomFloat = float
     CustomBool = bool
@@ -378,7 +378,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
 
     if include_visibility_track and does_armature_data_have_fcurves(arma):
         # Convenience variable for the sub_anim_properties
-        sap: SubAnimProperties = arma.data.sub_anim_properties
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
         
         # First gather the values
         vis_track_index_to_name: dict[int, str] = {}
@@ -413,7 +413,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
 
     if include_material_track and does_armature_data_have_fcurves(arma):
         # Convenience variable for the sub_anim_properties
-        sap: SubAnimProperties = arma.data.sub_anim_properties
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
 
         # Gather the Values
         # Not every CustomVector, CustomBool, etc will be animated, so only the animated ones should be exported.
@@ -435,7 +435,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                 operator.report(type={'WARNING'}, message=f'The fcurve with data path {fcurve.data_path} will be skipped, its material index was out of bounds.')
                 continue
             # Now that the material index is validated, can grab the coresponding MatTrack
-            mat_track: MatTrack = sap.mat_tracks[material_index]
+            mat_track: SUB_PG_mat_track = sap.mat_tracks[material_index]
             material_name = mat_track.name
             # This dict won't exist yet for the first fcurve belonging to a material, so we add it now.
             if mat_name_prop_name_to_values.get(material_name) is None: 
@@ -447,7 +447,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                 operator.report(type={'WARNING'}, message=f'The fcurve with data path {fcurve.data_path} will be skipped, its property index was out of bounds.')
                 continue
             # Now that the property index is validated, can grab the coresponding MatTrackProperty
-            mat_track_property: MatTrackProperty = mat_track.properties[property_index]
+            mat_track_property: SUB_PG_mat_track_property = mat_track.properties[property_index]
             property_name = mat_track_property.name
             # This dict won't exist yet for the first fcurve belonging to a material's property, so we add it now.
             # If it didn't exist, then the default values also didn't exist yet so nows a good time to add them.

@@ -1,4 +1,5 @@
 import bpy
+import re
 import ssbh_data_py
 
 from .sub_matl_data import *
@@ -103,10 +104,44 @@ def get_texture(sub_matl_texture: SUB_PG_matl_texture) -> ssbh_data_py.matl_data
 def get_textures(textures: list[SUB_PG_matl_texture]) -> list[ssbh_data_py.matl_data.TextureParam]:
     return [get_texture(sub_matl_texture) for sub_matl_texture in textures]
 
+def trim_name(name: str) -> str:
+    trimmed_name = re.split(r'\.\d\d\d$', name)[0]
+    return trimmed_name
 
-def create_matl_from_blender_materials(blender_materials: set[bpy.types.Material]) -> ssbh_data_py.matl_data.MatlData:
+def are_material_names_unique(blender_materials: set[bpy.types.Material]) -> bool:
+    '''
+    Unique means that for instance, the user doesn't have a material called 'skin' and also a material called 'skin.001'
+    in the same model. 
+    Trimming can't be done on these, since we would end up with two different materials that are both called 'skin',
+    which wouldn't be usable in game.
+    '''
+    trimmed_names = {trim_name(mat.name) for mat in blender_materials}
+    print(trimmed_names)
+    print(f'{len(trimmed_names)}, {len(blender_materials)}')
+    return len(trimmed_names) == len(blender_materials)
+
+def get_problematic_material_names(blender_materials: set[bpy.types.Material]) -> set[str]:
+    trimmed_name_to_og_names: dict[str, list[str]] = {trim_name(material.name) : [] for material in blender_materials}
+
+    for material in blender_materials:
+        trimmed_name_to_og_names[trim_name(material.name)].append(material.name)
+
+    return [name for og_names in trimmed_name_to_og_names.values() for name in og_names if len(og_names) > 1]
+
+def create_matl_from_blender_materials(operator: bpy.types.Operator, blender_materials: set[bpy.types.Material]) -> ssbh_data_py.matl_data.MatlData:
     matl = ssbh_data_py.matl_data.MatlData()
     
+    '''
+    can_trim_names = are_material_names_unique(blender_materials)
+    if can_trim_names is False:
+        message = f'Material names are not unique after trimming! So the material names will be exported as-is, without trimming!'
+        operator.report({'WARNING'}, message)
+        problem_material_names = get_problematic_material_names(blender_materials)
+        for problem_material_name in problem_material_names:
+            message = f'The material name of "{problem_material_name}" is not a unique name after trimming! (Trimmed name is "{trim_name(problem_material_name)}")'
+            operator.report({'WARNING'}, message)
+    '''
+
     for material in blender_materials:
         try:
             sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
@@ -118,8 +153,9 @@ def create_matl_from_blender_materials(blender_materials: set[bpy.types.Material
             entry = create_default_matl_entry(material.name)
             matl.entries.append(entry)
             continue
-
+        
         new_matl_entry = ssbh_data_py.matl_data.MatlEntryData(
+            #material_label=trim_name(material.name) if can_trim_names else material.name,
             material_label=material.name,
             shader_label=sub_matl_data.shader_label,
             blend_states=get_blend_states(sub_matl_data.blend_states),

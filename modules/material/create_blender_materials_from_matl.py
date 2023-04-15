@@ -104,6 +104,41 @@ def get_matched_sampler(sub_matl_data: SUB_PG_sub_matl_data, texture: SUB_PG_mat
         if texture.texture_number == sampler.sampler_number:
             return sampler
 
+def setup_sub_matl_data_node_drivers(sub_matl_data: SUB_PG_sub_matl_data):
+    material: bpy.types.Material = sub_matl_data.id_data
+    sub_matl_vector: SUB_PG_matl_vector
+    for vector_index, sub_matl_vector in enumerate(sub_matl_data.vectors):
+        for axis_index, axis in enumerate(['X', 'Y', 'Z', 'W']):
+            value_node_name = f"{sub_matl_vector.param_id_name}_{axis}"
+            value_node: ShaderNodeValue = material.node_tree.nodes.get(value_node_name)
+            if value_node is None:
+                continue
+            # Setup Driver
+            driver_fcurve: bpy.types.FCurve = value_node.outputs[0].driver_add('default_value')
+            var = driver_fcurve.driver.variables.new()
+            var.name = 'var'
+            target = var.targets[0]
+            target.id_type = 'MATERIAL'
+            target.id = material
+            target.data_path = f'sub_matl_data.vectors[{vector_index}].value[{axis_index}]'
+            driver_fcurve.driver.expression = f'{var.name}'
+
+    sub_matl_float: SUB_PG_matl_float
+    for float_index, sub_matl_float in enumerate(sub_matl_data.floats):
+        value_node: ShaderNodeValue = material.node_tree.nodes.get(sub_matl_float.param_id_name)
+        if value_node is None:
+            continue
+        # Setup Driver
+        driver_fcurve: bpy.types.FCurve = value_node.outputs[0].driver_add('default_value')
+        var = driver_fcurve.driver.variables.new()
+        var.name = 'var'
+        target = var.targets[0]
+        target.id_type = 'MATERIAL'
+        target.id = material
+        target.data_path = f'sub_matl_data.floats[{float_index}].value'
+        driver_fcurve.driver.expression = f'{var.name}'
+
+
 def setup_blender_material_node_tree(material: bpy.types.Material):
     from ...operators.master_shader import create_master_shader, get_master_shader_name
     sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
@@ -259,6 +294,8 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         sampler_node.border_color = matched_sampler.border_color
         sampler_node.lod_bias = matched_sampler.lod_bias 
 
+        sampler_node.show_options = False
+
         # Link these nodes together
         links.new(uv_map_node.outputs[0], uv_transform_node.inputs[4])
         links.new(uv_transform_node.outputs[0], sprite_sheet_node.inputs[4])
@@ -269,7 +306,7 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
 
         created_node_rows = created_node_rows + 1
 
-    created_vector_rows = 0
+    created_value_rows = 0
     vector: SUB_PG_matl_vector
     for vector_index, vector in enumerate(sub_matl_data.vectors):
         for axis_index, axis in enumerate(['X', 'Y', 'Z', 'W']):
@@ -277,7 +314,7 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
             value_node: ShaderNodeValue = nodes.new('ShaderNodeValue')
             value_node.name = f"{vector.param_id_name}_{axis}"
             value_node.label = f"{vector.ui_name} {axis}"
-            value_node.location = (-1300 + (200 * axis_index), 1000 - (texture_node_row_width * (created_node_rows-1)) - 300 - (100 * created_vector_rows))
+            value_node.location = (-1300 + (200 * axis_index), 1000 - (texture_node_row_width * (created_node_rows-1)) - 300 - (100 * created_value_rows))
             
             socket_params = vec4_param_name_to_socket_params[vector.param_id_name]
             if axis == 'X':
@@ -291,16 +328,6 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
 
             links.new(node_group_node.inputs[socket_name], value_node.outputs[0])
 
-            # Setup Driver
-            driver_fcurve: bpy.types.FCurve = value_node.outputs[0].driver_add('default_value')
-            var = driver_fcurve.driver.variables.new()
-            var.name = 'var'
-            target = var.targets[0]
-            target.id_type = 'MATERIAL'
-            target.id = material
-            target.data_path = f'sub_matl_data.vectors[{vector_index}].value[{axis_index}]'
-            driver_fcurve.driver.expression = f'{var.name}'
-
             if vector.param_id_name == ssbh_data_py.matl_data.ParamId.CustomVector6.name:
                 for node in layer_1_uv_transform_nodes:
                     links.new(value_node.outputs[0], node.inputs[axis_index])
@@ -313,7 +340,25 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
             elif vector.param_id_name == ssbh_data_py.matl_data.ParamId.CustomVector18.name:
                 for node in sprite_sheet_nodes:
                     links.new(value_node.outputs[0], node.inputs[axis_index])
-        created_vector_rows = created_vector_rows + 1
+        created_value_rows = created_value_rows + 1
+
+    sub_matl_float: SUB_PG_matl_float
+    for sub_matl_float in sub_matl_data.floats:
+        # Create Node
+        value_node: ShaderNodeValue = nodes.new('ShaderNodeValue')
+        value_node.name = sub_matl_float.param_id_name
+        value_node.label = sub_matl_float.param_id_name
+        value_node.location = (-1300, 1000 - (texture_node_row_width * (created_node_rows-1)) - 300 - (100 * created_value_rows))
+        # Link Node
+        links.new(value_node.outputs[0], node_group_node.inputs[sub_matl_float.ui_name])
+        # Adjust row counter (for proper placement in UI)
+        created_value_rows = created_value_rows + 1
+
+    setup_sub_matl_data_node_drivers(sub_matl_data)
+    node_group_node.show_options = False
+    for input in node_group_node.inputs:
+        if input.is_linked is False:
+            input.hide = True
 
 
 def create_blender_materials_from_matl(ssbh_matl: ssbh_data_py.matl_data.MatlData) -> dict[str, bpy.types.Material]:

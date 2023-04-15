@@ -2,11 +2,11 @@ import bpy
 from mathutils import Vector
 from bpy.props import FloatVectorProperty
 from bpy.types import Operator
-from ..modules.anim_data import MatTrackProperty
+from ..modules.anim_data import SUB_PG_mat_track_property
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from ..modules.anim_data import SubAnimProperties, MatTrack, MatTrackProperty
+    from ..modules.anim_data import SUB_PG_sub_anim_data, SUB_PG_mat_track, SUB_PG_mat_track_property
     from ..properties import SubSceneProperties
 
 class SUB_OP_eye_material_custom_vector_31_modal(Operator):
@@ -106,17 +106,17 @@ class SUB_OP_eye_material_custom_vector_31_modal(Operator):
             ssp: SubSceneProperties = context.scene.sub_scene_properties
             self.target_eye = ssp.cv31_modal_last_mode
 
-            sap: SubAnimProperties = context.object.data.sub_anim_properties
+            sap: SUB_PG_sub_anim_data = context.object.data.sub_anim_properties
             eye_l = sap.mat_tracks.get('EyeL')
             if eye_l: 
-                cv31_l: MatTrackProperty = eye_l.properties.get('CustomVector31')
+                cv31_l: SUB_PG_mat_track_property = eye_l.properties.get('CustomVector31')
                 if cv31_l:
                     self._initial_cv31_l = [cv31_l.custom_vector[0], cv31_l.custom_vector[1], cv31_l.custom_vector[2], cv31_l.custom_vector[3]]
                     self.temp_cv31_l = [cv31_l.custom_vector[0], cv31_l.custom_vector[1], cv31_l.custom_vector[2], cv31_l.custom_vector[3]]
                     self.cv31_l = cv31_l
             eye_r = sap.mat_tracks.get('EyeR')
             if eye_r: 
-                cv31_r: MatTrackProperty = eye_r.properties.get('CustomVector31')
+                cv31_r: SUB_PG_mat_track_property = eye_r.properties.get('CustomVector31')
                 if cv31_r:
                     self._initial_cv31_r = [cv31_r.custom_vector[0], cv31_r.custom_vector[1], cv31_r.custom_vector[2], cv31_r.custom_vector[3]]
                     self.temp_cv31_r = [cv31_r.custom_vector[0], cv31_r.custom_vector[1], cv31_r.custom_vector[2], cv31_r.custom_vector[3]]
@@ -127,20 +127,20 @@ class SUB_OP_eye_material_custom_vector_31_modal(Operator):
             self.report({'WARNING'}, "Active space must be a View3d")
             return {'CANCELLED'}
 
-def insert_cv31_keyframes(arma: bpy.types.Object, cv31_l: MatTrackProperty, cv31_r: MatTrackProperty):
+def insert_cv31_keyframes(arma: bpy.types.Object, cv31_l: SUB_PG_mat_track_property, cv31_r: SUB_PG_mat_track_property):
     try:
         arma.data.animation_data.action.fcurves
     except AttributeError:
         return
-    sap: SubAnimProperties = arma.data.sub_anim_properties
+    sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
     if cv31_l:
-        mat_track: MatTrack = sap.mat_tracks.get('EyeL')
+        mat_track: SUB_PG_mat_track = sap.mat_tracks.get('EyeL')
         mat_track_index = sap.mat_tracks.find('EyeL')
         prop_index = mat_track.properties.find('CustomVector31')
         arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
 
     if cv31_r:
-        mat_track: MatTrack = sap.mat_tracks.get('EyeR')
+        mat_track: SUB_PG_mat_track = sap.mat_tracks.get('EyeR')
         mat_track_index = sap.mat_tracks.find('EyeR')
         prop_index = mat_track.properties.find('CustomVector31')
         arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})

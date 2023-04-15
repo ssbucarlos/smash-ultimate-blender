@@ -41,8 +41,7 @@ class SUB_PG_matl_bool(PropertyGroup):
 
     )
 class SUB_PG_matl_float(PropertyGroup):
-    socket_name: StringProperty(
-    )
+    #socket_name: StringProperty()
     ui_name: StringProperty(
     )
     value: FloatProperty(
@@ -257,6 +256,7 @@ class SUB_PG_sub_matl_data(PropertyGroup):
             new_float.value = float_param.data
             new_float.ui_name = param_id_to_ui_name[float_param.param_id.value]
             new_float.param_id_name = float_param.param_id.name
+            
     def add_vectors(self, vector_params: list[ssbh_data_py.matl_data.Vector4Param]):
         for vector_param in vector_params:
             new_vector: SUB_PG_matl_vector = self.vectors.add()

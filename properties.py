@@ -7,7 +7,7 @@ from .modules.material import sub_matl_data
 from .modules import exo_skel, import_anim, helper_bone_data, anim_data, export_model
 def register():
     Armature.sub_anim_properties = PointerProperty(
-        type=anim_data.SubAnimProperties
+        type=anim_data.SUB_PG_sub_anim_data
     )
     Scene.sub_scene_properties = PointerProperty(
         type=SubSceneProperties

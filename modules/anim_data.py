@@ -522,10 +522,10 @@ class SUB_OP_auto_fill_vis_entries(Operator):
             match = re.match(regex, name)
             if match:
                 vis_names.add(match.groups()[0])
-        sap: SubAnimProperties = arma.data.sub_anim_properties
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
         for vis_name in vis_names:
             if vis_name not in sap.vis_track_entries:
-                new_entry: VisTrackEntry = sap.vis_track_entries.add()
+                new_entry: SUB_PG_vis_track_entry = sap.vis_track_entries.add()
                 new_entry.name = vis_name
                 new_entry.value = True
         return {'FINISHED'}
@@ -572,7 +572,7 @@ class SUB_OP_insert_all_vis_entry_keyframes(Operator):
     
     def execute(self, context):
         arma: bpy.types.Object = context.object
-        sap: SubAnimProperties = arma.data.sub_anim_properties
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
         for index, vis_entry in enumerate(sap.vis_track_entries):
             arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{index}].value', group='Visibility', options={'INSERTKEY_NEEDED'})
         return {'FINISHED'}
@@ -781,14 +781,14 @@ def dummy_update(self, context):
     '''
     pass
 
-class VisTrackEntry(PropertyGroup):
+class SUB_PG_vis_track_entry(PropertyGroup):
     name: StringProperty(
         name="Vis Name",
         default="Unknown",
         update=vis_track_name_update,)
     value: BoolProperty(name="Visible", default=False, update=dummy_update)
 
-class MatTrackProperty(PropertyGroup):
+class SUB_PG_mat_track_property(PropertyGroup):
     name: StringProperty(
         name="Property Name",
         default="Unknown",
@@ -804,16 +804,16 @@ class MatTrackProperty(PropertyGroup):
     pattern_index: IntProperty(name='Pattern Index', subtype='UNSIGNED')
     texture_transform: FloatVectorProperty(name='Texture Transform', size=5)
 
-class MatTrack(PropertyGroup):
+class SUB_PG_mat_track(PropertyGroup):
     name: StringProperty(
         name="Material Name",
         default="Unknown",
         update=mat_track_name_update,)
-    properties: CollectionProperty(type=MatTrackProperty)
+    properties: CollectionProperty(type=SUB_PG_mat_track_property)
     active_property_index: IntProperty(name='Active Mat Property Index', default=0, options={'HIDDEN'})
 
-class SubAnimProperties(PropertyGroup):
-    vis_track_entries: CollectionProperty(type=VisTrackEntry)
+class SUB_PG_sub_anim_data(PropertyGroup):
+    vis_track_entries: CollectionProperty(type=SUB_PG_vis_track_entry)
     active_vis_track_index: IntProperty(name='Active Vis Track Index', default=0, options={'HIDDEN'})
-    mat_tracks: CollectionProperty(type=MatTrack)
+    mat_tracks: CollectionProperty(type=SUB_PG_mat_track)
     active_mat_track_index: IntProperty(name='Active Mat Track Index', default=0, options={'HIDDEN'})
