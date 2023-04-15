@@ -220,7 +220,7 @@ class SUB_OP_mat_track_remove(Operator):
         i = sap.active_mat_track_index
         sap.active_mat_track_index = min(max(0,i-1),len(sap.mat_tracks))
         # Refresh Material Drivers
-        remove_material_drivers(context.object)
+        remove_anim_material_drivers(context.object)
         from .import_anim import setup_material_drivers
         setup_material_drivers(context.object)
         return {'FINISHED'}
@@ -262,7 +262,7 @@ class SUB_OP_mat_property_add(Operator):
 
 def refresh_material_drivers(context):
     from .import_anim import setup_material_drivers
-    remove_material_drivers(context.object)
+    remove_anim_material_drivers(context.object)
     setup_material_drivers(context.object)
 
 class SUB_OP_mat_property_remove(Operator):
@@ -588,14 +588,20 @@ def remove_visibility_drivers(context):
             if any(d.data_path == s for s in ['hide_viewport', 'hide_render']):
                 drivers.remove(d)
 
-def remove_material_drivers(arma:bpy.types.Object):
+def remove_anim_material_drivers(arma:bpy.types.Object):
+    from .material.sub_matl_data import SUB_PG_sub_matl_data
+    from .material.create_blender_materials_from_matl import setup_sub_matl_data_node_drivers
     mesh_children = [child for child in arma.children if child.type == 'MESH']
     materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots}
     for material in materials:
         for node in material.node_tree.nodes:
-            for input in node.inputs:
-                if hasattr(input, 'default_value'):
-                    input.driver_remove('default_value')
+            for output in node.outputs:
+                if hasattr(output, 'default_value'):
+                    output.driver_remove('default_value')
+        
+        sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+        if sub_matl_data is not None:
+            setup_sub_matl_data_node_drivers(sub_matl_data)    
 
 class SUB_OP_mat_drivers_refresh(Operator):
     bl_idname = 'sub.mat_drivers_refresh'
@@ -610,7 +616,7 @@ class SUB_OP_mat_drivers_remove(Operator):
     bl_label = 'Remove Material Drivers'
 
     def execute(self, context):
-        remove_material_drivers(context.object)
+        remove_anim_material_drivers(context.object)
         return {'FINISHED'}  
 
 class SUB_MT_vis_entry_context_menu(Menu):
