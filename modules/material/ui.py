@@ -56,7 +56,7 @@ class SUB_PT_matl_data_master(MaterialPanel):
             row.scale_x = 2
             return
         box = layout.box()
-        box.prop(sub_matl_data, "shader_label")
+        box.prop(sub_matl_data, "shader_label", emboss=False)
         box.menu(SUB_MT_material_specials.bl_idname)
 
 class SUB_PT_matl_data_bools(MaterialPanel):
@@ -225,6 +225,6 @@ class SUB_MT_material_specials(Menu):
         layout = self.layout
         
         layout.operator(SUB_OP_change_render_pass.bl_idname, icon="RENDERLAYERS")
-        layout.operator(SUB_OP_change_shader_label.bl_idname, icon="SHADERFX")
+        layout.operator(SUB_OP_create_sub_matl_data_from_shader_label.bl_idname, icon="SHADERFX")
 
 

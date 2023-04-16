@@ -77,7 +77,7 @@ classes = [
     modules.attribute_renamer.SUB_PT_attribute_renamer,
     modules.misc_panel.SUB_PT_misc,
     modules.material.operators.SUB_OP_change_render_pass,
-    modules.material.operators.SUB_OP_change_shader_label,  
+    modules.material.operators.SUB_OP_create_sub_matl_data_from_shader_label,  
     modules.material.operators.SUB_OP_apply_material_preset,  
     modules.material.operators.SUB_OP_convert_blender_material,
     modules.material.operators.SUB_OP_copy_from_ult_material,    
