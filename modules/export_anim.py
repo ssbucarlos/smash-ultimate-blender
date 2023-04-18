@@ -517,7 +517,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
     for group in ssbh_anim_data.groups:
         for node in group.nodes:
             for track in node.tracks:
-                if len(track.values) == 1:
+                if len(track.values) <= 5:
                     track.scale_options = ssbh_data_py.anim_data.ScaleOptions(True, False)
 
     # Done!
