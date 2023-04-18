@@ -264,6 +264,11 @@ class SUB_PG_matl_rasterizer_state(PropertyGroup, SubMatlPropertyGroup):
 
     )
     """
+class SUB_PG_matl_vertex_attribute(PropertyGroup):
+    name: StringProperty(
+        description="The name of the vertex attribute"
+    )
+
 
 class SUB_PG_sub_matl_data(PropertyGroup):
     bools: CollectionProperty(
@@ -286,6 +291,9 @@ class SUB_PG_sub_matl_data(PropertyGroup):
     )
     rasterizer_states: CollectionProperty(
         type=SUB_PG_matl_rasterizer_state
+    )
+    vertex_attributes: CollectionProperty(
+        type=SUB_PG_matl_vertex_attribute
     )
     shader_label: StringProperty(
         name="Shader Label",
@@ -390,10 +398,14 @@ class SUB_PG_sub_matl_data(PropertyGroup):
         new_rasterizer_state.param_id_name = rasterizer_state.param_id.name
         new_rasterizer_state.param_id_value = rasterizer_state.param_id.value
 
-
     def add_rasterizer_states(self, rasterizer_states: list[ssbh_data_py.matl_data.RasterizerStateParam]):
         for rasterizer_state in rasterizer_states:
             self.add_rasterizer_state(rasterizer_state)
+
+    def add_vertex_attributes(self, vertex_attributes: list[str]):
+        for vertex_attribute in vertex_attributes:
+            new_vertex_attribute = self.vertex_attributes.add()
+            new_vertex_attribute.name = vertex_attribute
 
     def set_shader_label(self, shader_label):
         self.shader_label = shader_label

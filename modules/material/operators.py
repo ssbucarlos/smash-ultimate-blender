@@ -51,16 +51,19 @@ class SUB_OP_apply_material_preset(Operator):
     def execute(self, context):
         return {'FINISHED'} 
     
+from .convert_blender_material import convert_blender_material, rename_mesh_attributes_of_meshes_using_material
 class SUB_OP_convert_blender_material(Operator):
     bl_idname = 'sub.convert_blender_material'
     bl_label = 'Convert Blender Material'
 
     def execute(self, context):
+        rename_mesh_attributes_of_meshes_using_material(self, context.object.active_material)
+        convert_blender_material(self, context.object.active_material)
         return {'FINISHED'} 
 
 class SUB_OP_copy_from_ult_material(Operator):
-    bl_idname = 'sub.convert_blender_material'
-    bl_label = 'Convert Blender Material'
+    bl_idname = 'sub.copy_from_ult_material'
+    bl_label = 'Copy From Other Material'
 
     def execute(self, context):
         return {'FINISHED'} 

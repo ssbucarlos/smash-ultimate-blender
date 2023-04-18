@@ -4,11 +4,18 @@ from pathlib import Path
 import sqlite3
 from .sub_matl_data import *
 from typing import Any
+from .matl_params import vector_param_id_values, param_id_to_ui_name, vector_param_id_value_to_default_value
+from ..export_model import default_texture
+from .matl_params import *
+from .create_blender_materials_from_matl import setup_blender_material_settings, setup_blender_material_node_tree, get_shader_db_file_path, get_vertex_attributes
+
+"""
 def get_shader_db_file_path():
     # This file was generated with duplicates removed to optimize space.
     # https://github.com/ScanMountGoat/Smush-Material-Research#shader-database
     this_file_path = Path(__file__)
     return this_file_path.parent.parent.parent.joinpath('shader_file').joinpath('Nufx.db').resolve()
+"""
 
 def is_valid_shader_label(operator: bpy.types.Operator, shader_label: str) -> bool:
     if len(shader_label) > len("SFX_PBS_0100000008008269_opaque"):
@@ -35,22 +42,6 @@ def is_valid_shader_label(operator: bpy.types.Operator, shader_label: str) -> bo
     return True
 
 
-'''
-def get_vertex_attributes(node_group_node, shader_name):
-    # Query the shader database for attribute information.
-    # Using SQLite is much faster than iterating through the JSON dump.
-    with sqlite3.connect(get_shader_db_file_path()) as con:
-        # Construct a query to find all the vertex attributes for this shader.
-        # Invalid shaders will return an empty list.
-        sql = """
-            SELECT v.AttributeName 
-            FROM VertexAttribute v 
-            INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
-            WHERE s.Name = ?
-            """
-        # The database has a single entry for each program, so don't include the render pass tag.
-       return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
-'''
 def get_material_parameter_ids(shader_label: str) -> set[int]:
     # Query the shader database for attribute information.
     # Using SQLite is much faster than iterating through the JSON dump.
@@ -65,41 +56,8 @@ def get_material_parameter_ids(shader_label: str) -> set[int]:
             """
         # The database has a single entry for each program, so don't include the render pass tag.
         return {row[0] for row in con.execute(sql, (shader_label[:len('SFX_PBS_0000000000000080')],)).fetchall()}
-    
-def get_param_id_to_property_values(sub_matl_data: SUB_PG_sub_matl_data) -> dict[int, Any]:
-    param_id_to_property_values = {}
-    sub_matl_bool: SUB_PG_matl_bool
-    sub_matl_float: SUB_PG_matl_float
-    sub_matl_vector: SUB_PG_matl_vector
-    sub_matl_texture: SUB_PG_matl_texture
-    sub_matl_sampler: SUB_PG_matl_sampler
-    sub_matl_blend_state: SUB_PG_matl_blend_state
-    sub_matl_rasterizer_state: SUB_PG_matl_rasterizer_state
-    for sub_matl_bool in sub_matl_data.bools:
-        param_id_to_property_values[bool.param_id_value]
-    for sub_matl_float in sub_matl_data.floats:
-        pass
-    for sub_matl_vector in sub_matl_data.vectors:
-        param_id_to_property_values[sub_matl_vector.param_id_value] = sub_matl_vector.value[0:4]
-    for sub_matl_texture in sub_matl_data.textures:
-        pass
-    for sub_matl_sampler in sub_matl_data.samplers:
-        pass
-    for sub_matl_blend_state in sub_matl_data.blend_states:
-        pass
-    for sub_matl_rasterizer_state in sub_matl_data.rasterizer_states:
-        pass
-    
 
-    return param_id_to_property_values
 
-def get_param_id_to_property(sub_matl_data: SUB_PG_sub_matl_data) -> dict[int, Any]:
-    pass
-
-from .matl_params import vector_param_id_values, param_id_to_ui_name, vector_param_id_value_to_default_value
-from ..export_model import default_texture
-from .matl_params import *
-from .create_blender_materials_from_matl import setup_blender_material_settings, setup_blender_material_node_tree
 def create_sub_matl_data_from_shader_label(material: bpy.types.Material, shader_label: str):
 
     sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
@@ -184,6 +142,12 @@ def create_sub_matl_data_from_shader_label(material: bpy.types.Material, shader_
             new_rasterizer_state.param_id_name = param_id.name
             new_rasterizer_state.param_id_value = param_id.value
 
+    # Refresh needed vertex attributes
+    sub_matl_data.vertex_attributes.clear()
+    attrs = get_vertex_attributes(shader_label)
+    print(attrs)
+    sub_matl_data.add_vertex_attributes(attrs)
+    
     # Relabel
     if len(shader_label) == len("SFX_PBS_0100000008008269"):
         shader_label = f'{shader_label}_opaque'

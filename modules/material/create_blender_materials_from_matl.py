@@ -1,6 +1,7 @@
 import bpy
+import sqlite3
 
-from bpy.types import ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial
+from bpy.types import ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial, ShaderNodeVertexColor
 from bpy_extras import image_utils
 
 import ssbh_data_py
@@ -30,7 +31,14 @@ generated_default_texture_name_value: dict[str, tuple[float, float, float, float
      "/common/shader/sfxpbs/default_white": (1.0, 1.0, 1.0, 1.0),
      "/common/shader/sfxpbs/fighter/default_normal": (0.5, 0.5, 1.0, 1.0),
      "/common/shader/sfxpbs/fighter/default_params": (0.0, 1.0, 1.0, 0.25),
+     "#replace_cubemap": (1,1,1,1), # Not correct, but it needs to be here in case the user wants to use it without importing a model first
 }
+
+def get_shader_db_file_path():
+    # This file was generated with duplicates removed to optimize space.
+    # https://github.com/ScanMountGoat/Smush-Material-Research#shader-database
+    this_file_path = Path(__file__)
+    return this_file_path.parent.parent.parent.joinpath('shader_file').joinpath('Nufx.db').resolve()
 
 def create_default_textures():
     for texture_name, value in generated_default_texture_name_value.items():
@@ -309,6 +317,9 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
     created_value_rows = 0
     vector: SUB_PG_matl_vector
     for vector_index, vector in enumerate(sub_matl_data.vectors):
+        if vector.param_id_name == ParamId.CustomVector47.name:
+            node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
+
         for axis_index, axis in enumerate(['X', 'Y', 'Z', 'W']):
             # Create the value node
             value_node: ShaderNodeValue = nodes.new('ShaderNodeValue')
@@ -342,6 +353,33 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
                     links.new(value_node.outputs[0], node.inputs[axis_index])
         created_value_rows = created_value_rows + 1
 
+    for vertex_attribute in sub_matl_data.vertex_attributes:
+        print(vertex_attribute.name)
+        if vertex_attribute.name == 'colorSet1':
+            # Create Node
+            vertex_color_node: ShaderNodeVertexColor = nodes.new('ShaderNodeVertexColor')
+            vertex_color_node.name = vertex_attribute.name
+            vertex_color_node.label = vertex_attribute.name
+            vertex_color_node.location = (-1300, 1000 - (texture_node_row_width * (created_node_rows-1)) - 300 - (100 * created_value_rows))
+            vertex_color_node.layer_name = 'colorSet1'
+            # Link Node
+            links.new(vertex_color_node.outputs[0], node_group_node.inputs['colorSet1 RGB'])
+            links.new(vertex_color_node.outputs[1], node_group_node.inputs['colorSet1 Alpha'])
+            # Adjust row counter (for proper placement in UI)
+            created_value_rows = created_value_rows + 1
+        elif vertex_attribute.name == 'colorSet5':
+            # Create Node
+            vertex_color_node: ShaderNodeVertexColor = nodes.new('ShaderNodeVertexColor')
+            vertex_color_node.name = vertex_attribute.name
+            vertex_color_node.label = vertex_attribute.name
+            vertex_color_node.location = (-1300, 1000 - (texture_node_row_width * (created_node_rows-1)) - 300 - (100 * created_value_rows))
+            vertex_color_node.layer_name = 'colorSet5'
+            # Link Node
+            links.new(vertex_color_node.outputs[0], node_group_node.inputs['colorSet5 RGB'])
+            links.new(vertex_color_node.outputs[1], node_group_node.inputs['colorSet5 Alpha'])
+            # Adjust row counter (for proper placement in UI)
+            created_value_rows = created_value_rows + 1
+
     sub_matl_float: SUB_PG_matl_float
     for sub_matl_float in sub_matl_data.floats:
         # Create Node
@@ -361,6 +399,21 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
             input.hide = True
 
 
+def get_vertex_attributes(shader_name:str)->list[str]:
+    # Query the shader database for attribute information.
+    # Using SQLite is much faster than iterating through the JSON dump.
+    with sqlite3.connect(get_shader_db_file_path()) as con:
+        # Construct a query to find all the vertex attributes for this shader.
+        # Invalid shaders will return an empty list.
+        sql = """
+            SELECT v.AttributeName 
+            FROM VertexAttribute v 
+            INNER JOIN ShaderProgram s ON v.ShaderProgramID = s.ID 
+            WHERE s.Name = ?
+            """
+        # The database has a single entry for each program, so don't include the render pass tag.
+        return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
+    
 def create_blender_materials_from_matl(ssbh_matl: ssbh_data_py.matl_data.MatlData) -> dict[str, bpy.types.Material]:
     '''
     Creates a blender material with the sub_matl_data filled out for every entry in the ssbh_matl.
@@ -385,6 +438,9 @@ def create_blender_materials_from_matl(ssbh_matl: ssbh_data_py.matl_data.MatlDat
         sub_matl_data.add_samplers(entry.samplers)
         sub_matl_data.add_blend_states(entry.blend_states)
         sub_matl_data.add_rasterizer_states(entry.rasterizer_states)
+        attrs = get_vertex_attributes(entry.shader_label)
+        print(attrs)
+        sub_matl_data.add_vertex_attributes(attrs)
  
     # Make the blender material settings
     for material_label, material in material_label_to_material.items():

@@ -960,6 +960,7 @@ def create_master_shader():
     inner_links.new(reroute_2.outputs[0], reroute_3.inputs[0])
     #reroute_3.Output -> reroute_4.Input
     inner_links.new(reroute_3.outputs[0], reroute_4.inputs[0])
+    inner_links.new(prm_multiply_prm_alpha.outputs[0], eevee_principled_shader.inputs['Specular'])
 
     # Each input node technically has all the group's inputs.
     # The duplicate node group input nodes are used to visually group inputs.

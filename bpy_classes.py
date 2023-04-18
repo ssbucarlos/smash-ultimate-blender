@@ -97,6 +97,7 @@ classes = [
     modules.material.sub_matl_data.SUB_PG_matl_sampler,
     modules.material.sub_matl_data.SUB_PG_matl_blend_state,
     modules.material.sub_matl_data.SUB_PG_matl_rasterizer_state,
+    modules.material.sub_matl_data.SUB_PG_matl_vertex_attribute,
     modules.material.sub_matl_data.SUB_PG_sub_matl_data,
     operators.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
     properties.SubSceneProperties,
