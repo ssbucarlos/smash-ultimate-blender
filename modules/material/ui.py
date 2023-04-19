@@ -126,7 +126,7 @@ class SUB_PT_matl_data_textures(MaterialPanel):
             tex_row = box.row()
             tex_name_subrow = tex_row.row()
             tex_name_subrow.alignment = 'EXPAND'
-            if texture.image.preview is not None:
+            if texture.image is not None and texture.image.preview is not None:
                 tex_name_subrow.label(text=texture.ui_name, translate=False, icon_value=texture.image.preview.icon_id)
             else:
                 tex_name_subrow.label(text=texture.ui_name, translate=False, icon="IMAGE_DATA")
