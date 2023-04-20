@@ -269,6 +269,11 @@ class SUB_PG_matl_vertex_attribute(PropertyGroup):
         description="The name of the vertex attribute"
     )
 
+class SUB_PG_matl_linked_material(PropertyGroup):
+    blender_material: PointerProperty(
+        description="The linked blender material",
+        type=bpy.types.Material
+    )
 
 class SUB_PG_sub_matl_data(PropertyGroup):
     bools: CollectionProperty(
@@ -298,6 +303,11 @@ class SUB_PG_sub_matl_data(PropertyGroup):
     shader_label: StringProperty(
         name="Shader Label",
         default="",
+    )
+    linked_materials: CollectionProperty(
+        type=SUB_PG_matl_linked_material,
+        name='Linked Materials',
+        description='Typically used for eye materials, the linked materials also get exported even if no mesh is assigned it'
     )
 
     def add_bool(self, bool_param: ssbh_data_py.matl_data.BooleanParam):

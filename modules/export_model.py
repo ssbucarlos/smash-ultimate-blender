@@ -464,7 +464,7 @@ def find_bone_index(bones, name):
     return None
 
 
-def default_ssbh_material(material_label):
+def default_ssbh_material(material_label:str) -> ssbh_data_py.matl_data.MatlEntryData:
     # Mario's phong0_sfx_0x9a011063_____VTC___TANGENT___BINORMAL_101 material.
     # This is a good default for fighters since the user can just assign textures in another application.
     entry = ssbh_data_py.matl_data.MatlEntryData(material_label, 'SFX_PBS_0100000008008269_opaque')

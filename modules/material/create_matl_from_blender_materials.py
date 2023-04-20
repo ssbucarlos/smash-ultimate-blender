@@ -4,13 +4,6 @@ import ssbh_data_py
 
 from .sub_matl_data import *
 
-def create_default_matl_entry(entry_name: str) -> ssbh_data_py.matl_data.MatlEntryData:
-    pass
-
-def create_matl_entry_from_sub_matl_data(material_label: str, sub_matl_data: SUB_PG_sub_matl_data) -> ssbh_data_py.matl_data.MatlEntryData:
-    new_matl_entry = ssbh_data_py.matl_data.MatlEntryData(sub_matl_data)
-    pass
-
 def get_blend_state(sub_matl_blend_state: SUB_PG_matl_blend_state) -> ssbh_data_py.matl_data.BlendStateParam:
     data=ssbh_data_py.matl_data.BlendStateData(
         source_color=ssbh_data_py.matl_data.BlendFactor.from_str(sub_matl_blend_state.source_color),
@@ -85,17 +78,6 @@ def get_samplers(samplers: list[SUB_PG_matl_sampler]) -> list[ssbh_data_py.matl_
     return [get_sampler(sub_matl_sampler) for sub_matl_sampler in samplers]
 
 def get_texture(sub_matl_texture: SUB_PG_matl_texture) -> ssbh_data_py.matl_data.TextureParam:
-    '''
-    The .numatb expects the filename, without the extension. 
-    So "alp_mario_001" instead of "alp_mario_001.nutexb"
-    The issue lies in that users in blender can name the images anything they want
-    ,with or without extensions
-    ,with or without random dots all over the place.
-    In addition, nothing is stopping a user from having multiple textures named the same, except
-    for the `.001` that blender adds to avoid duplicates. 
-    Trimming this .001, .002 could lead to incorrect behavior on export 
-    if the user had several poorly named textures.
-    '''
     return ssbh_data_py.matl_data.TextureParam(
         param_id=ssbh_data_py.matl_data.ParamId.from_str(sub_matl_texture.param_id_name),
         data=sub_matl_texture.image.name
@@ -104,68 +86,109 @@ def get_texture(sub_matl_texture: SUB_PG_matl_texture) -> ssbh_data_py.matl_data
 def get_textures(textures: list[SUB_PG_matl_texture]) -> list[ssbh_data_py.matl_data.TextureParam]:
     return [get_texture(sub_matl_texture) for sub_matl_texture in textures]
 
-def trim_name(name: str) -> str:
-    trimmed_name = re.split(r'\.\d\d\d$', name)[0]
-    return trimmed_name
+def has_sub_matl_data(material: bpy.types.Material) -> bool:
+    try:
+        sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+    except AttributeError:
+        return False
+    if sub_matl_data.shader_label == "":
+        return False
+    return True
 
-def are_material_names_unique(blender_materials: set[bpy.types.Material]) -> bool:
-    '''
-    Unique means that for instance, the user doesn't have a material called 'skin' and also a material called 'skin.001'
-    in the same model. 
-    Trimming can't be done on these, since we would end up with two different materials that are both called 'skin',
-    which wouldn't be usable in game.
-    '''
-    trimmed_names = {trim_name(mat.name) for mat in blender_materials}
-    print(trimmed_names)
-    print(f'{len(trimmed_names)}, {len(blender_materials)}')
-    return len(trimmed_names) == len(blender_materials)
+def get_linked_materials(materials: set[bpy.types.Material]) -> set[bpy.types.Material]:
+    linked_materials: set[bpy.types.Material] = set()
+    for material in materials:
+        if not has_sub_matl_data(material):
+            continue
+        sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+        for linked_material in sub_matl_data.linked_materials:
+            linked_materials.add(linked_material.blender_material)
+    return linked_materials
 
-def get_problematic_material_names(blender_materials: set[bpy.types.Material]) -> set[str]:
-    trimmed_name_to_og_names: dict[str, list[str]] = {trim_name(material.name) : [] for material in blender_materials}
 
-    for material in blender_materials:
-        trimmed_name_to_og_names[trim_name(material.name)].append(material.name)
+def create_default_matl_entry(material_label: str) -> ssbh_data_py.matl_data.MatlEntryData:
+    """
+    # TODO: What change stopped this error?
+    TypeError: 'MatlEntryData' object cannot be converted to 'MatlEntryData'
+    """
+    # Mario's phong0_sfx_0x9a011063_____VTC___TANGENT___BINORMAL_101 material.
+    # This is a good default for fighters since the user can just assign textures in another application.
+    entry = ssbh_data_py.matl_data.MatlEntryData(material_label, 'SFX_PBS_0100000008008269_opaque')
+    entry.blend_states = [ssbh_data_py.matl_data.BlendStateParam(
+        ssbh_data_py.matl_data.ParamId.BlendState0,
+        ssbh_data_py.matl_data.BlendStateData(
+            source_color=ssbh_data_py.matl_data.BlendFactor.from_str("One"),
+            destination_color=ssbh_data_py.matl_data.BlendFactor.from_str("Zero"),
+            alpha_sample_to_coverage=False
+        )
+    )]
+    entry.floats = [ssbh_data_py.matl_data.FloatParam(ssbh_data_py.matl_data.ParamId.CustomFloat0, 0.8)]
+    entry.booleans = [
+        ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.CustomBoolean1, True),
+        ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.CustomBoolean3, True),
+        ssbh_data_py.matl_data.BooleanParam(ssbh_data_py.matl_data.ParamId.CustomBoolean4, True),
+    ]
+    entry.vectors = [
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector0, [1.0, 0.0, 0.0, 0.0]),
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector13, [1.0, 1.0, 1.0, 1.0]),
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector14, [1.0, 1.0, 1.0, 1.0]),
+        ssbh_data_py.matl_data.Vector4Param(ssbh_data_py.matl_data.ParamId.CustomVector8, [1.0, 1.0, 1.0, 1.0]),
+    ]
+    data = ssbh_data_py.matl_data.RasterizerStateData()
+    data.cull_mode = ssbh_data_py.matl_data.CullMode.from_str('Back')
+    data.fill_mode = ssbh_data_py.matl_data.FillMode.from_str('Solid')
+    data.depth_bias = 0.0
+    entry.rasterizer_states = [ssbh_data_py.matl_data.RasterizerStateParam(
+        ssbh_data_py.matl_data.ParamId.RasterizerState0,
+        data
+    )]
+    data = ssbh_data_py.matl_data.SamplerData()
+    data.wrapr = ssbh_data_py.matl_data.WrapMode.from_str('Repeat')
+    data.wraps = ssbh_data_py.matl_data.WrapMode.from_str('Repeat')
+    data.wrapt = ssbh_data_py.matl_data.WrapMode.from_str('Repeat')
+    data.min_filter = ssbh_data_py.matl_data.MinFilter.from_str('Nearest')
+    data.mag_filter = ssbh_data_py.matl_data.MagFilter.from_str('Nearest')
+    data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str('One')
+    entry.samplers = [
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler0, data),
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler4, data),
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler6, data),
+        ssbh_data_py.matl_data.SamplerParam(ssbh_data_py.matl_data.ParamId.Sampler7, data),
+    ]
+    # Use magenta for the albedo/base color to avoid confusion with existing error colors like white, yellow, or red.
+    # Magenta is commonly used to indicate missing/invalid textures in applications and game engines.
+    entry.textures = [
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture0, '/common/shader/sfxpbs/default_params_r100_g025_b100'),
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture4, '/common/shader/sfxpbs/fighter/default_normal'),
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture6, '/common/shader/sfxpbs/fighter/default_params'),
+        ssbh_data_py.matl_data.TextureParam(ssbh_data_py.matl_data.ParamId.Texture7, '#replace_cubemap'),
+    ]
 
-    return [name for og_names in trimmed_name_to_og_names.values() for name in og_names if len(og_names) > 1]
+    return entry
+
+def create_matl_entry_from_sub_matl_data(material_label: str, sub_matl_data: SUB_PG_sub_matl_data) -> ssbh_data_py.matl_data.MatlEntryData:
+    return ssbh_data_py.matl_data.MatlEntryData(
+        material_label=material_label,
+        shader_label=sub_matl_data.shader_label,
+        blend_states=get_blend_states(sub_matl_data.blend_states),
+        floats=get_floats(sub_matl_data.floats),
+        booleans=get_booleans(sub_matl_data.bools),
+        vectors=get_vectors(sub_matl_data.vectors),
+        rasterizer_states=get_rasterizer_states(sub_matl_data.rasterizer_states),
+        samplers=get_samplers(sub_matl_data.samplers),
+        textures=get_textures(sub_matl_data.textures),
+    )
 
 def create_matl_from_blender_materials(operator: bpy.types.Operator, blender_materials: set[bpy.types.Material]) -> ssbh_data_py.matl_data.MatlData:
     matl = ssbh_data_py.matl_data.MatlData()
     
-    '''
-    can_trim_names = are_material_names_unique(blender_materials)
-    if can_trim_names is False:
-        message = f'Material names are not unique after trimming! So the material names will be exported as-is, without trimming!'
-        operator.report({'WARNING'}, message)
-        problem_material_names = get_problematic_material_names(blender_materials)
-        for problem_material_name in problem_material_names:
-            message = f'The material name of "{problem_material_name}" is not a unique name after trimming! (Trimmed name is "{trim_name(problem_material_name)}")'
-            operator.report({'WARNING'}, message)
-    '''
-
-    for material in blender_materials:
-        try:
-            sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
-        except AttributeError:
-            entry = create_default_matl_entry(material.name)
-            matl.entries.append(entry)
-            continue
-        if sub_matl_data.shader_label == "":
-            entry = create_default_matl_entry(material.name)
-            matl.entries.append(entry)
-            continue
-        
-        new_matl_entry = ssbh_data_py.matl_data.MatlEntryData(
-            #material_label=trim_name(material.name) if can_trim_names else material.name,
-            material_label=material.name,
-            shader_label=sub_matl_data.shader_label,
-            blend_states=get_blend_states(sub_matl_data.blend_states),
-            floats=get_floats(sub_matl_data.floats),
-            booleans=get_booleans(sub_matl_data.bools),
-            vectors=get_vectors(sub_matl_data.vectors),
-            rasterizer_states=get_rasterizer_states(sub_matl_data.rasterizer_states),
-            samplers=get_samplers(sub_matl_data.samplers),
-            textures=get_textures(sub_matl_data.textures),
-        )
+    linked_materials = get_linked_materials(blender_materials)
+    
+    for material in blender_materials | linked_materials:
+        if has_sub_matl_data(material):
+            new_matl_entry = create_matl_entry_from_sub_matl_data(material.name, material.sub_matl_data)
+        else:
+            new_matl_entry = create_default_matl_entry(material.name)
         matl.entries.append(new_matl_entry)
-       
+
     return matl

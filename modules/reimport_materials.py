@@ -113,27 +113,27 @@ class SUB_OP_reimport_materials(Operator):
         return {'FINISHED'}
 
 def reimport_materials(operator: Operator, context):
+    from .material.create_blender_materials_from_matl import create_blender_materials_from_matl
+    from .export_model import would_trimmed_names_be_unique, trim_name, get_problematic_names
+
     ssp: SubSceneProperties = context.scene.sub_scene_properties
     arma: bpy.types.Object = ssp.material_reimport_arma 
+    mesh_objects: set[bpy.types.Object] = {child for child in arma.children if child.type == 'MESH'}
+    materials: set[bpy.types.Material] = {material_slot.material for mesh_object in mesh_objects for material_slot in mesh_object.material_slots}
+    material_names: set[str] = {material.name for material in materials}
+    if not would_trimmed_names_be_unique(material_names):
+        problematic_names = get_problematic_names(material_names)
+        for problematic_name in problematic_names:
+            message = f'The material name of "{problematic_name}" is not a unique name after trimming! Cannot reimport Materials! (Trimmed name is "{trim_name(problematic_name)}")'
+            operator.report({'WARNING'}, message)
+        return
+    
     ssbh_matl = ssbh_data_py.matl_data.read_matl(str(ssp.material_reimport_numatb_path))
-    ssbh_matl_entries = {entry.material_label : entry for entry in ssbh_matl.entries}
-    meshes = [child for child in arma.children if child.type == 'MESH']
-    materials = {material_slot.material for mesh in meshes for material_slot in mesh.material_slots}
-    for material in materials:
-        blender_material_name = fix_blender_name(material.name)
-        ssbh_material_entry = ssbh_matl_entries.get(blender_material_name)
-        if not ssbh_material_entry:
-            continue
-        from .import_model import import_material_images, setup_blender_mat
-        texture_name_to_image_dict = import_material_images(ssbh_matl, ssp.material_reimport_folder)
-        setup_blender_mat(material, blender_material_name, ssbh_matl, texture_name_to_image_dict)
+    material_label_to_material = create_blender_materials_from_matl(operator, ssbh_matl)
+    for mesh_object in mesh_objects:
+        for material_slot in mesh_object.material_slots:
+            new_material = material_label_to_material.get(trim_name(material_slot.material.name))
+            if new_material is not None:
+                material_slot.material = new_material
 
-
-def fix_blender_name(blender_name:str) -> str:
-    regex = r"(.*)(\.\d\d\d)"
-    match = re.match(regex, blender_name)
-    if match:
-        return match.groups()[0]
-    else:
-        return blender_name
     

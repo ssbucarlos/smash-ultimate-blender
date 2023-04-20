@@ -62,6 +62,7 @@ class SUB_PT_matl_data_master(MaterialPanel):
 class SUB_PT_matl_data_bools(MaterialPanel):
     bl_label = "Bools"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
@@ -79,6 +80,7 @@ class SUB_PT_matl_data_bools(MaterialPanel):
 class SUB_PT_matl_data_floats(MaterialPanel):
     bl_label = "Floats"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
@@ -138,6 +140,7 @@ class SUB_PT_matl_data_textures(MaterialPanel):
 class SUB_PT_matl_data_samplers(MaterialPanel):
     bl_label = "Samplers"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
@@ -174,6 +177,7 @@ class SUB_PT_matl_data_samplers(MaterialPanel):
 class SUB_PT_matl_data_blend_states(MaterialPanel):
     bl_label = "Blend States"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
@@ -197,6 +201,7 @@ class SUB_PT_matl_data_blend_states(MaterialPanel):
 class SUB_PT_matl_data_rasterizer_states(MaterialPanel):
     bl_label = "Rasterizer States"
     bl_parent_id = SUB_PT_matl_data_master.bl_idname
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
@@ -215,6 +220,29 @@ class SUB_PT_matl_data_rasterizer_states(MaterialPanel):
             row = box.row()
             row.label(text="Fill Mode")
             row.prop(rasterizer_state, "fill_mode", text="")
+
+class SUB_PT_matl_data_linked_materials(MaterialPanel):
+    bl_label = "Linked Materials"
+    bl_parent_id = SUB_PT_matl_data_master.bl_idname
+    bl_options = {'DEFAULT_CLOSED'}
+    
+    def draw(self, context):
+        sub_matl_data: SUB_PG_sub_matl_data = context.object.active_material.sub_matl_data
+        layout = self.layout
+
+        box = layout.box()
+        if len(sub_matl_data.linked_materials) == 0:
+            row = box.row()
+            row.label(text="No extra materials linked to this material. (This is normal)")
+            return
+        
+        row = box.row()
+        row.label(text="The following materials are linked and will be exported even if no mesh is using them.")
+
+        for linked_material in sub_matl_data.linked_materials:
+            row = box.row()
+            row.label(text=f"Linked Blender Material: '{linked_material.blender_material.name}'", icon='MATERIAL')
+            # TODO: Allow Editing?
 
 
 class SUB_MT_material_specials(Menu):

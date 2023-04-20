@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 
 from .matl_params import texture_param_name_to_socket_params, vec4_param_name_to_socket_params
-from .sub_matl_data import SUB_PG_matl_blend_state, SUB_PG_matl_bool, SUB_PG_matl_float, SUB_PG_matl_rasterizer_state, SUB_PG_matl_sampler, SUB_PG_matl_texture, SUB_PG_matl_vector, SUB_PG_sub_matl_data
+from .sub_matl_data import *
 
 generated_default_texture_name_value: dict[str, tuple[float, float, float, float]] = {
      "/common/shader/sfxpbs/default_black": (0, 0, 0, 0),
@@ -443,9 +443,22 @@ def create_blender_materials_from_matl(operator: bpy.types.Operator, ssbh_matl: 
         sub_matl_data.add_blend_states(entry.blend_states)
         sub_matl_data.add_rasterizer_states(entry.rasterizer_states)
         attrs = get_vertex_attributes(entry.shader_label)
-        print(attrs)
         sub_matl_data.add_vertex_attributes(attrs)
- 
+        
+    # Eye materials implicitly use extra materials despite no mesh being explicitly assigned.
+    # Need to track these to preserve them on export.
+    for material_label, material in material_label_to_material.items():
+        if material_label in ('EyeL', 'EyeR'):
+            sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+            light_mat: bpy.types.Material = material_label_to_material.get(f'{material_label}L')
+            dark_mat: bpy.types.Material = material_label_to_material.get(f'{material_label}D')
+            glow_mat: bpy.types.Material = material_label_to_material.get(f'{material_label}G')
+            
+            for mat_to_link in (light_mat, dark_mat, glow_mat):
+                if mat_to_link is not None:
+                    new_linked_material: SUB_PG_matl_linked_material = sub_matl_data.linked_materials.add()
+                    new_linked_material.blender_material = mat_to_link
+                    
     # Make the blender material settings
     for material_label, material in material_label_to_material.items():
         setup_blender_material_settings(material)
