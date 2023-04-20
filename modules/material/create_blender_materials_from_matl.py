@@ -48,17 +48,21 @@ def create_default_textures():
             image.use_fake_user = True
             
 
-def import_material_images(ssbh_matl, dir) -> dict[str, bpy.types.Image]:
+def import_material_images(operator: bpy.types.Operator, ssbh_matl: ssbh_data_py.matl_data.MatlData, dir) -> dict[str, bpy.types.Image]:
     texture_name_to_image_dict = {}
-    texture_name_set = set()
-
-    for ssbh_mat_entry in ssbh_matl.entries:
-        for attribute in ssbh_mat_entry.textures:
-            texture_name_set.add(attribute.data)
-
-    for texture_name in texture_name_set:
-        image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
-        image.name = texture_name
+    texture_names_in_matl = {tex.data for mat in ssbh_matl.entries for tex in mat.textures}
+    default_texture_names = set(generated_default_texture_name_value.keys())
+    
+    for texture_name in texture_names_in_matl:
+        if texture_name in default_texture_names:
+            image = bpy.data.images[texture_name]
+        else:
+            image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
+            try: # TODO: Is this the only reliable way to see if an image wasn't loaded correctly?
+                image.update()
+            except RuntimeError:
+                operator.report({'WARNING'}, f"Failed to find PNG file for the texture '{texture_name}', the Material will look wrong! Please convert the NUTEXB to a PNG before importing.") 
+            image.name = texture_name
         texture_name_to_image_dict[texture_name] = image
 
     return texture_name_to_image_dict
@@ -414,7 +418,7 @@ def get_vertex_attributes(shader_name:str)->list[str]:
         # The database has a single entry for each program, so don't include the render pass tag.
         return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
     
-def create_blender_materials_from_matl(ssbh_matl: ssbh_data_py.matl_data.MatlData) -> dict[str, bpy.types.Material]:
+def create_blender_materials_from_matl(operator: bpy.types.Operator, ssbh_matl: ssbh_data_py.matl_data.MatlData) -> dict[str, bpy.types.Material]:
     '''
     Creates a blender material with the sub_matl_data filled out for every entry in the ssbh_matl.
     Returns a dictionary mapping the material_label to the created blender material to handle multiple models 
@@ -426,7 +430,7 @@ def create_blender_materials_from_matl(ssbh_matl: ssbh_data_py.matl_data.MatlDat
     material_label_to_material: dict[str, bpy.types.Material] = \
         {entry.material_label: bpy.data.materials.new(entry.material_label) for entry in ssbh_matl.entries}
     # Import the texture PNGs
-    texture_name_to_image_dict = import_material_images(ssbh_matl, bpy.context.scene.sub_scene_properties.model_import_folder_path)
+    texture_name_to_image_dict = import_material_images(operator, ssbh_matl, bpy.context.scene.sub_scene_properties.model_import_folder_path)
     # Fill out the sub_matl_data of each material
     for entry in ssbh_matl.entries:
         sub_matl_data: SUB_PG_sub_matl_data = material_label_to_material[entry.material_label].sub_matl_data

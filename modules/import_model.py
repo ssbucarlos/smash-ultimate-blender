@@ -198,7 +198,7 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
     material_label_to_material = {}
     if ssbh_matl is not None:
         try:
-            material_label_to_material = create_blender_materials_from_matl(ssbh_matl)
+            material_label_to_material = create_blender_materials_from_matl(operator, ssbh_matl)
         except Exception as e:
             operator.report({'ERROR'}, f'Failed to import materials; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
