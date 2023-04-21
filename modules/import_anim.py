@@ -93,11 +93,11 @@ class SUB_OP_import_anim(Operator, ImportHelper):
         return True
     
     def execute(self, context):
-        print('Starting anim import...')
-        start = time.perf_counter()
         obj: bpy.types.Object = context.object
         
         with cProfile.Profile() as pr:
+            use_keyframe_insert_auto = bpy.context.scene.tool_settings.use_keyframe_insert_auto
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False
             if obj.type == 'ARMATURE':
                 # Theres a bpy.ops in import_model_anim that requires being in pose mode
                 # The mode setting stuff should be removed when the bpy.ops is no longer required
@@ -109,12 +109,12 @@ class SUB_OP_import_anim(Operator, ImportHelper):
                 bpy.ops.object.mode_set(mode=old_mode, toggle=False)
             else:
                 import_camera_anim(self, context, self.filepath, self.first_blender_frame)
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = use_keyframe_insert_auto
         if self.use_debug_timer:
             stats = pstats.Stats(pr)
             stats.sort_stats(pstats.SortKey.TIME)
             stats.print_stats()
-        end = time.perf_counter()
-        print(f'Anim import finished in {end-start} seconds!')
+
         return {'FINISHED'}
   
 def poll_cameras(self, obj):
