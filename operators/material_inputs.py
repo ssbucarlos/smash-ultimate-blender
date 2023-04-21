@@ -96,7 +96,10 @@ vec4_param_to_inputs = {
     'CustomVector43': [('NodeSocketColor', 'CustomVector43', zeros)],
     'CustomVector44': [('NodeSocketColor', 'CustomVector44', zeros)],
     'CustomVector45': [('NodeSocketColor', 'CustomVector45', zeros)],
-    'CustomVector46': [('NodeSocketColor', 'CustomVector46', zeros)],
+    'CustomVector46': [
+        ('NodeSocketColor', 'CustomVector46 RGB', zeros),
+        ('NodeSocketFloat', 'CustomVector46 Alpha', 0.0),
+    ],
     'CustomVector47': [
         ('NodeSocketColor', 'CustomVector47 RGB', zeros),
         ('NodeSocketFloat', 'CustomVector47 Alpha', 0.0),

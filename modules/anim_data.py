@@ -220,7 +220,7 @@ class SUB_OP_mat_track_remove(Operator):
         i = sap.active_mat_track_index
         sap.active_mat_track_index = min(max(0,i-1),len(sap.mat_tracks))
         # Refresh Material Drivers
-        remove_material_drivers(context.object)
+        remove_anim_material_drivers(context.object)
         from .import_anim import setup_material_drivers
         setup_material_drivers(context.object)
         return {'FINISHED'}
@@ -262,7 +262,7 @@ class SUB_OP_mat_property_add(Operator):
 
 def refresh_material_drivers(context):
     from .import_anim import setup_material_drivers
-    remove_material_drivers(context.object)
+    remove_anim_material_drivers(context.object)
     setup_material_drivers(context.object)
 
 class SUB_OP_mat_property_remove(Operator):
@@ -522,10 +522,10 @@ class SUB_OP_auto_fill_vis_entries(Operator):
             match = re.match(regex, name)
             if match:
                 vis_names.add(match.groups()[0])
-        sap: SubAnimProperties = arma.data.sub_anim_properties
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
         for vis_name in vis_names:
             if vis_name not in sap.vis_track_entries:
-                new_entry: VisTrackEntry = sap.vis_track_entries.add()
+                new_entry: SUB_PG_vis_track_entry = sap.vis_track_entries.add()
                 new_entry.name = vis_name
                 new_entry.value = True
         return {'FINISHED'}
@@ -572,7 +572,7 @@ class SUB_OP_insert_all_vis_entry_keyframes(Operator):
     
     def execute(self, context):
         arma: bpy.types.Object = context.object
-        sap: SubAnimProperties = arma.data.sub_anim_properties
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
         for index, vis_entry in enumerate(sap.vis_track_entries):
             arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{index}].value', group='Visibility', options={'INSERTKEY_NEEDED'})
         return {'FINISHED'}
@@ -588,14 +588,20 @@ def remove_visibility_drivers(context):
             if any(d.data_path == s for s in ['hide_viewport', 'hide_render']):
                 drivers.remove(d)
 
-def remove_material_drivers(arma:bpy.types.Object):
+def remove_anim_material_drivers(arma:bpy.types.Object):
+    from .material.sub_matl_data import SUB_PG_sub_matl_data
+    from .material.create_blender_materials_from_matl import setup_sub_matl_data_node_drivers
     mesh_children = [child for child in arma.children if child.type == 'MESH']
     materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots}
     for material in materials:
         for node in material.node_tree.nodes:
-            for input in node.inputs:
-                if hasattr(input, 'default_value'):
-                    input.driver_remove('default_value')
+            for output in node.outputs:
+                if hasattr(output, 'default_value'):
+                    output.driver_remove('default_value')
+        
+        sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+        if sub_matl_data is not None:
+            setup_sub_matl_data_node_drivers(sub_matl_data)    
 
 class SUB_OP_mat_drivers_refresh(Operator):
     bl_idname = 'sub.mat_drivers_refresh'
@@ -610,7 +616,7 @@ class SUB_OP_mat_drivers_remove(Operator):
     bl_label = 'Remove Material Drivers'
 
     def execute(self, context):
-        remove_material_drivers(context.object)
+        remove_anim_material_drivers(context.object)
         return {'FINISHED'}  
 
 class SUB_MT_vis_entry_context_menu(Menu):
@@ -781,14 +787,14 @@ def dummy_update(self, context):
     '''
     pass
 
-class VisTrackEntry(PropertyGroup):
+class SUB_PG_vis_track_entry(PropertyGroup):
     name: StringProperty(
         name="Vis Name",
         default="Unknown",
         update=vis_track_name_update,)
     value: BoolProperty(name="Visible", default=False, update=dummy_update)
 
-class MatTrackProperty(PropertyGroup):
+class SUB_PG_mat_track_property(PropertyGroup):
     name: StringProperty(
         name="Property Name",
         default="Unknown",
@@ -804,16 +810,16 @@ class MatTrackProperty(PropertyGroup):
     pattern_index: IntProperty(name='Pattern Index', subtype='UNSIGNED')
     texture_transform: FloatVectorProperty(name='Texture Transform', size=5)
 
-class MatTrack(PropertyGroup):
+class SUB_PG_mat_track(PropertyGroup):
     name: StringProperty(
         name="Material Name",
         default="Unknown",
         update=mat_track_name_update,)
-    properties: CollectionProperty(type=MatTrackProperty)
+    properties: CollectionProperty(type=SUB_PG_mat_track_property)
     active_property_index: IntProperty(name='Active Mat Property Index', default=0, options={'HIDDEN'})
 
-class SubAnimProperties(PropertyGroup):
-    vis_track_entries: CollectionProperty(type=VisTrackEntry)
+class SUB_PG_sub_anim_data(PropertyGroup):
+    vis_track_entries: CollectionProperty(type=SUB_PG_vis_track_entry)
     active_vis_track_index: IntProperty(name='Active Vis Track Index', default=0, options={'HIDDEN'})
-    mat_tracks: CollectionProperty(type=MatTrack)
+    mat_tracks: CollectionProperty(type=SUB_PG_mat_track)
     active_mat_track_index: IntProperty(name='Active Mat Track Index', default=0, options={'HIDDEN'})

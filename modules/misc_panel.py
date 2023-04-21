@@ -4,7 +4,7 @@ from bpy.types import Panel
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .anim_data import SubAnimProperties
+    from .anim_data import SUB_PG_sub_anim_data
 
 class SUB_PT_misc(Panel):
     bl_space_type = 'VIEW_3D'
@@ -19,7 +19,7 @@ class SUB_PT_misc(Panel):
         return context.mode in modes
 
     def draw(self, context):
-        ssp: SubAnimProperties = context.scene.sub_scene_properties
+        ssp: SUB_PG_sub_anim_data = context.scene.sub_scene_properties
 
         layout = self.layout
         layout.use_property_split = False

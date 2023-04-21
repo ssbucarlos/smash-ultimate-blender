@@ -171,6 +171,60 @@ def model_export_arma_update(self, context):
     ssp.vanilla_nusktb = ''
     ssp.vanilla_update_prc = ''
 
+def trim_name(name: str) -> str:
+    trimmed_name = re.split(r'\.\d\d\d$', name)[0]
+    return trimmed_name
+
+def would_trimmed_names_be_unique(names_to_check: set[str]) -> bool:
+    trimmed_names = {trim_name(name) for name in names_to_check}
+    return len(trimmed_names) == len(names_to_check)
+
+def get_problematic_names(names_to_check: set[str]) -> set[str]:
+    trimmed_name_to_og_names: dict[str, list[str]] = {trim_name(name) : [] for name in names_to_check}
+
+    for name in names_to_check:
+        trimmed_name_to_og_names[trim_name(name)].append(name)
+    
+    problematic_names = []
+    for og_names in trimmed_name_to_og_names.values():
+        if len(og_names) > 1:
+            problematic_names.extend(og_names)
+    
+    return problematic_names
+    
+def trim_matl_texture_names(operator: Operator, ssbh_matl_data: ssbh_data_py.matl_data.MatlData):
+    texture_names: set[str]  = {texture.data for entry in ssbh_matl_data.entries for texture in entry.textures}
+    if would_trimmed_names_be_unique(texture_names) is not True:
+        message = f'Texture names are not unique after trimming! So the texture names will be exported as-is, without trimming!'
+        operator.report({'WARNING'}, message)
+        problematic_names = get_problematic_names(texture_names)
+        for problematic_name in problematic_names:
+            message = f'The texture name of "{problematic_name}" is not a unique name after trimming! (Trimmed name is "{trim_name(problematic_name)}")'
+            operator.report({'WARNING'}, message)
+        return
+    
+    for entry in ssbh_matl_data.entries:
+        for texture in entry.textures:
+            texture.data = trim_name(texture.data)
+
+def trim_material_labels(operator: Operator, ssbh_modl_data: ssbh_data_py.modl_data.ModlData, ssbh_matl_data: ssbh_data_py.matl_data.MatlData):
+    material_names: set[str] = {entry.material_label for entry in ssbh_matl_data.entries}
+    
+    if would_trimmed_names_be_unique(material_names) is not True:
+        message = f'Material names are not unique after trimming! So the material names will be exported as-is, without trimming!'
+        operator.report({'WARNING'}, message)
+        problematic_names = get_problematic_names(material_names)
+        for problematic_name in problematic_names:
+            message = f'The material name of "{problematic_name}" is not a unique name after trimming! (Trimmed name is "{trim_name(problematic_name)}")'
+            operator.report({'WARNING'}, message)
+        return
+    
+    for entry in ssbh_matl_data.entries:
+        entry.material_label = trim_name(entry.material_label)
+    
+    for entry in ssbh_modl_data.entries:
+        entry.material_label = trim_name(entry.material_label)
+
 def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
     # Prepare the scene for export and find the meshes to export.
     arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
@@ -231,15 +285,17 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
     folder = Path(directory)
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
+    ssbh_modl_data = None
     if include_numdlb:
         # TODO: Do we want to use exceptions instead of None for stopping export early?
         ssbh_modl_data = make_modl_data(operator, context, export_mesh_groups)
-        if ssbh_modl_data is not None:
+        
+        """if ssbh_modl_data is not None:
             path = str(folder.joinpath('model.numdlb'))
             try:
                 ssbh_modl_data.save(path)
             except Exception as e:
-                operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+                operator.report({'ERROR'}, f'Failed to save {path}: {e}')"""
 
     if include_numshb:
         path = str(folder.joinpath('model.numshb'))
@@ -252,8 +308,13 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
         create_and_save_skel(operator, context, linked_nusktb_settings, folder)
 
     if include_numatb:
-        create_and_save_matl(operator, folder, export_meshes)
-
+        #create_and_save_matl(operator, folder, export_meshes)
+        ssbh_matl = create_matl(operator, export_meshes)
+        if ssbh_matl is not None:
+            trim_matl_texture_names(operator, ssbh_matl)
+        if ssbh_modl_data is not None and ssbh_matl is not None:
+            trim_material_labels(operator, ssbh_modl_data, ssbh_matl)
+        
     if include_numshexb:
         create_and_save_meshex(operator, folder, ssbh_mesh_data)
 
@@ -262,6 +323,22 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
             create_and_save_nuhlpb(folder.joinpath('model.nuhlpb'), arma)
         except Exception as e:
             operator.report({'ERROR'}, f'Failed to create .nuhlpb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+
+    if include_numdlb:
+        if ssbh_modl_data is not None:
+            path = str(folder.joinpath('model.numdlb'))
+            try:
+                ssbh_modl_data.save(path)
+            except Exception as e:
+                operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+
+    if include_numatb:
+        if ssbh_matl is not None:
+            path = str(folder.joinpath('model.numatb'))
+            try:
+                ssbh_matl.save(path)
+            except Exception as e:
+                operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     end = time.time()
     print(f'Create and save export files in {end - start} seconds')
@@ -326,10 +403,23 @@ def get_mesh_materials(operator, export_meshes):
     return materials
 
 
+def create_matl(operator, export_meshes) -> ssbh_data_py.matl_data.MatlData | None:
+    from .material.create_matl_from_blender_materials import create_matl_from_blender_materials
+    try:
+        materials = get_mesh_materials(operator, export_meshes)
+        ssbh_matl = create_matl_from_blender_materials(operator, materials)
+    except RuntimeError as e:
+        operator.report({'ERROR'}, f'Failed to prepare .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+        return None
+    else:
+        return ssbh_matl
+
 def create_and_save_matl(operator, folder, export_meshes):
     try:
         materials = get_mesh_materials(operator, export_meshes)
-        ssbh_matl = make_matl(operator, materials)
+        #ssbh_matl = make_matl(operator, materials)
+        from .material.create_matl_from_blender_materials import create_matl_from_blender_materials
+        ssbh_matl = create_matl_from_blender_materials(operator, materials)
     except RuntimeError as e:
         operator.report({'ERROR'}, f'Failed to prepare .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
         return
@@ -340,7 +430,7 @@ def create_and_save_matl(operator, folder, export_meshes):
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
-        
+
 def get_material_label_from_mesh(operator, mesh):
     if len(mesh.material_slots) == 0:
         message = f'No material assigned for {mesh.name}. Cannot create model.numdlb. Assign a material or disable .NUMDLB export.'
@@ -353,7 +443,7 @@ def get_material_label_from_mesh(operator, mesh):
         message += ' Cannot create model.numdlb. Create a material or disable .NUMDLB export.'
         raise RuntimeError(message)
 
-    mat_label = None
+    """mat_label = None
     try:
         ultimate_node = find_ultimate_node(material)
         mat_label = ultimate_node.inputs['Material Name'].default_value
@@ -361,9 +451,9 @@ def get_material_label_from_mesh(operator, mesh):
         # Use the Blender material name as a fallback.
         mat_label = material.name
         message = f'Missing Smash Ultimate node group for the mesh {mesh.name}. Assigning {mat_label} by material name.'
-        operator.report({'WARNING'}, message)
+        operator.report({'WARNING'}, message)"""
 
-    return mat_label
+    return material.name
 
 
 def find_bone_index(bones, name):
@@ -374,7 +464,7 @@ def find_bone_index(bones, name):
     return None
 
 
-def default_ssbh_material(material_label):
+def default_ssbh_material(material_label:str) -> ssbh_data_py.matl_data.MatlEntryData:
     # Mario's phong0_sfx_0x9a011063_____VTC___TANGENT___BINORMAL_101 material.
     # This is a good default for fighters since the user can just assign textures in another application.
     entry = ssbh_data_py.matl_data.MatlEntryData(material_label, 'SFX_PBS_0100000008008269_opaque')
