@@ -84,7 +84,6 @@ def create_master_shader():
     master_shader_name = get_master_shader_name()
     # Check if already exists and just skip if it does
     if bpy.data.node_groups.get(master_shader_name, None) is not None:
-        print('Master shader already exists, skipping')
         return
 
     # Create a dummy material just for use in creation

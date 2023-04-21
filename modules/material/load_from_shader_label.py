@@ -145,7 +145,6 @@ def create_sub_matl_data_from_shader_label(material: bpy.types.Material, shader_
     # Refresh needed vertex attributes
     sub_matl_data.vertex_attributes.clear()
     attrs = get_vertex_attributes(shader_label)
-    print(attrs)
     sub_matl_data.add_vertex_attributes(attrs)
     
     # Relabel

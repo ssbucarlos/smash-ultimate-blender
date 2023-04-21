@@ -358,7 +358,6 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         created_value_rows = created_value_rows + 1
 
     for vertex_attribute in sub_matl_data.vertex_attributes:
-        print(vertex_attribute.name)
         if vertex_attribute.name == 'colorSet1':
             # Create Node
             vertex_color_node: ShaderNodeVertexColor = nodes.new('ShaderNodeVertexColor')

@@ -244,8 +244,8 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
     for selected_object in context.selected_objects:
         selected_object.select_set(False)
 
-    export_meshes = [child for child in arma.children if child.type == 'MESH']
-    export_meshes = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
+    export_meshes: list[bpy.types.Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] # Only Mesh Objects, Skip Empty Objects
+    # export_meshes: list[bpy.types.Object] = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
     # TODO: Is it possible to keep the correct order for non imported meshes?
     export_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
 
@@ -256,15 +256,18 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
     # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
     # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
     # Use a dictionary since we can't assume meshes with the same name are contiguous.
-    export_mesh_groups = {}
+    export_mesh_groups: dict[str, set[bpy.types.Object]] = {trim_name(mesh.name) : set() for mesh in export_meshes}
     for mesh in export_meshes:
-        name = re.split(r'\.\d\d\d', mesh.name)[0]
+        export_mesh_groups[trim_name(mesh.name)].add(mesh)
+    
+    """for mesh in export_meshes:
+        name = trim_name(name)
         if name in export_mesh_groups:
             export_mesh_groups[name].append(mesh)
         else:
-            export_mesh_groups[name] = [mesh]
+            export_mesh_groups[name] = [mesh]"""
 
-    export_mesh_groups = export_mesh_groups.items()
+    #export_mesh_groups = export_mesh_groups.items()
 
     start = time.time()
 
@@ -751,16 +754,28 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     return per_vertex
 
 
-def make_mesh_data(operator, context, export_mesh_groups):
+def make_mesh_data(operator: bpy.types.Operator, context: bpy.types.Context, export_mesh_groups: dict[str, set[bpy.types.Object]]) -> ssbh_data_py.mesh_data.MeshData:
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
-    for group_name, meshes in export_mesh_groups:
+    for group_name, meshes in export_mesh_groups.items():
         for i, mesh in enumerate(meshes):
             # TODO: Validate shape keys and degenerate geometry?
 
             # Make a copy of the mesh so that the original remains unmodified.
-            mesh_object_copy = mesh.copy()
-            mesh_object_copy.data = mesh.data.copy()
+            mesh_object_copy: bpy.types.Object = mesh.copy()
+            mesh_object_copy.data: bpy.types.Mesh = mesh.data.copy()
+
+            # Cleanup and dissolve degen
+            # https://blender.stackexchange.com/questions/139615/bmesh-ops-method-to-get-loose-vertices-edges-and-delete-from-that-list
+            # https://blender.stackexchange.com/questions/206751/set-the-context-to-run-dissolve-degenerate-from-the-python-shell
+            bm = bmesh.new()
+            bm.from_mesh(mesh_object_copy.data)
+            bmesh.ops.dissolve_degenerate(bm, dist=0.0001, edges=bm.edges)
+            unlinked_verts = [v for v in bm.verts if len(v.link_faces) == 0]
+            bmesh.ops.delete(bm, geom=unlinked_verts, context='VERTS')
+            bm.to_mesh(mesh_object_copy.data)
+            mesh_object_copy.data.update()
+            bm.clear()
 
             # Apply any transforms before exporting to preserve vertex positions.
             # Assume the meshes have no children that would inherit their transforms.
@@ -807,6 +822,14 @@ def make_mesh_data(operator, context, export_mesh_groups):
             # Blender stores normals and UVs per loop rather than per vertex.
             # Edges with more than one value per vertex need to be split.
             split_duplicate_loop_attributes(mesh_object_copy)
+            # Rarely this will create some loose verts
+            bm = bmesh.new()
+            bm.from_mesh(mesh_object_copy.data)
+            unlinked_verts = [v for v in bm.verts if len(v.link_faces) == 0]
+            bmesh.ops.delete(bm, geom=unlinked_verts, context='VERTS')
+            bm.to_mesh(mesh_object_copy.data)
+            mesh_object_copy.data.update()
+            bm.clear()
 
             # Extract the custom normals preserved in the color attribute.
             # Color attributes should not be affected by splitting or triangulating.
@@ -1092,7 +1115,7 @@ def split_duplicate_loop_attributes(mesh: bpy.types.Object):
     return len(edges_to_split) > 0
 
 
-def make_modl_data(operator, context, export_mesh_groups):
+def make_modl_data(operator, context, export_mesh_groups: dict[str, set[bpy.types.Object]]):
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
 
     ssbh_modl_data.model_name = 'model'
@@ -1101,7 +1124,7 @@ def make_modl_data(operator, context, export_mesh_groups):
     ssbh_modl_data.animation_file_name = None
     ssbh_modl_data.mesh_file_name = 'model.numshb'
 
-    for group_name, meshes in export_mesh_groups:
+    for group_name, meshes in export_mesh_groups.items():
         for i, mesh in enumerate(meshes):
             try:
                 mat_label = get_material_label_from_mesh(operator, mesh)
