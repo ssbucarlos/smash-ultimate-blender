@@ -1,7 +1,7 @@
 import bpy
 import re
-import ssbh_data_py
 
+from ... import ssbh_data_py
 from .sub_matl_data import *
 
 def get_blend_state(sub_matl_blend_state: SUB_PG_matl_blend_state) -> ssbh_data_py.matl_data.BlendStateParam:

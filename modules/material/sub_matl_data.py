@@ -1,5 +1,4 @@
 import bpy
-import ssbh_data_py
 
 from bpy.types import PropertyGroup, ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial
 from bpy.props import (
@@ -9,6 +8,8 @@ from bpy.props import (
 from bpy_extras import image_utils
 from enum import Enum
 from pathlib import Path
+
+from ... import ssbh_data_py
 from .matl_params import param_id_to_ui_name, texture_param_name_to_socket_params, vec4_param_name_to_socket_params
 from . import matl_enums, matl_params
 

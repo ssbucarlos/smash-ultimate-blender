@@ -1,4 +1,4 @@
-import ssbh_data_py
+from ... import ssbh_data_py
 from typing import NamedTuple
 
 ParamId = ssbh_data_py.matl_data.ParamId

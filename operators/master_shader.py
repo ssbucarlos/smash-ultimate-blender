@@ -1,9 +1,8 @@
 import bpy
-import ssbh_data_py
 
 from ..modules.material import matl_params
 from . import material_inputs
-
+from .. import ssbh_data_py
 
 from bpy.types import (
     Nodes, NodeLinks, NodeFrame, NodeGroupInput, ShaderNodeMath, ShaderNodeMixRGB,

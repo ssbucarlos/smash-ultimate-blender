@@ -1,9 +1,11 @@
 import bpy
-import ssbh_data_py
-from pathlib import Path
 import sqlite3
-from .sub_matl_data import *
+
+from pathlib import Path
 from typing import Any
+
+from ... import ssbh_data_py
+from .sub_matl_data import *
 from .matl_params import vector_param_id_values, param_id_to_ui_name, vector_param_id_value_to_default_value
 from ..export_model import default_texture
 from .matl_params import *

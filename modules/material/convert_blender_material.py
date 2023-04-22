@@ -1,5 +1,4 @@
 import bpy
-import ssbh_data_py
 
 from bpy.types import (
     ShaderNode, ShaderNodeOutputMaterial, ShaderNodeBsdfDiffuse, ShaderNodeEmission,ShaderNodeBsdfPrincipled,
@@ -7,6 +6,7 @@ from bpy.types import (
 
 from math import isclose
 
+from ... import ssbh_data_py
 from .load_from_shader_label import create_sub_matl_data_from_shader_label
 from .sub_matl_data import *
 from .create_blender_materials_from_matl import create_default_textures

@@ -4,11 +4,10 @@ import sqlite3
 from bpy.types import ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial, ShaderNodeVertexColor
 from bpy_extras import image_utils
 
-import ssbh_data_py
-
 from enum import Enum
 from pathlib import Path
 
+from ... import ssbh_data_py
 from .matl_params import texture_param_name_to_socket_params, vec4_param_name_to_socket_params
 from .sub_matl_data import *
 
