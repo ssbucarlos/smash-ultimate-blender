@@ -12,16 +12,18 @@ from pathlib import Path
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator, Panel, EditBone
-from .. import ssbh_data_py
-from .. import pyprc
 from mathutils import Vector, Matrix
-from ..operators import material_inputs
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from bpy.types import EditBone, Mesh, MeshVertex
     from .helper_bone_data import SubHelperBoneData, AimConstraint, OrientConstraint
     from ..properties import SubSceneProperties
+
+from .. import ssbh_data_py
+from .. import pyprc
+from ..operators import material_inputs
+
 
 class SUB_PT_export_model(Panel):
     bl_space_type = 'VIEW_3D'
@@ -156,6 +158,16 @@ class SUB_OP_model_exporter(Operator):
         default='ORDER_AND_VALUES',
     )
 
+    optimize_mesh_weights_to_parent_bone: EnumProperty(
+        name="Mesh Weights",
+        description="If a mesh is weighted to only one bone, this optimization improves performance. (Can cause issues if the mesh deforms!)",
+        items=(
+            ('ENABLED', "Optimize mesh weights by parenting to a bone where possible.", "This will improve performance, recommended for meshes that don't deform."),
+            ('DISABLED', "Don't optimize mesh weights", "Mesh Weights will be exported as-is. (Recommended on meshes that deform.)"),
+        ),
+        default='DISABLED',
+    )
+
     # Initially set the filename field to be nothing
     def invoke(self, context, _event):
         context.window_manager.fileselect_add(self)
@@ -163,7 +175,7 @@ class SUB_OP_model_exporter(Operator):
     
     def execute(self, context):
         export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
-                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings)
+                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings, self.optimize_mesh_weights_to_parent_bone)
         return {'FINISHED'}
 
 def model_export_arma_update(self, context):
@@ -225,7 +237,33 @@ def trim_material_labels(operator: Operator, ssbh_modl_data: ssbh_data_py.modl_d
     for entry in ssbh_modl_data.entries:
         entry.material_label = trim_name(entry.material_label)
 
-def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings):
+def weights_to_parent_bones(ssbh_mesh_data: ssbh_data_py.mesh_data.MeshData, ssbh_skel_data: ssbh_data_py.skel_data.SkelData):
+    # https://github.com/ScanMountGoat/ssbh_data_py/blob/main/examples/parent_bone_to_weights.py
+    bones: dict[str, ssbh_data_py.skel_data.BoneData] = {bone.name : bone for bone in ssbh_skel_data.bones}
+    for mesh_object in ssbh_mesh_data.objects:
+        if len(mesh_object.bone_influences) != 1:
+            continue
+        bone_name = mesh_object.bone_influences[0].bone_name
+        bone_data = bones.get(bone_name)
+        bone_matrix = ssbh_skel_data.calculate_world_transform(bone_data)
+        inverted_bone_matrix = np.linalg.inv(bone_matrix)
+        for position in mesh_object.positions:
+            position.data = ssbh_data_py.mesh_data.transform_points(position.data, inverted_bone_matrix)
+        
+        for normal in mesh_object.normals:
+            normal.data = ssbh_data_py.mesh_data.transform_vectors(normal.data, inverted_bone_matrix)
+
+        for tangent in mesh_object.tangents:
+            tangent.data = ssbh_data_py.mesh_data.transform_vectors(tangent.data, inverted_bone_matrix)
+
+        for binormal in mesh_object.binormals:
+            binormal.data = ssbh_data_py.mesh_data.transform_vectors(binormal.data, inverted_bone_matrix)
+        
+        mesh_object.parent_bone_name = bone_name
+        mesh_object.bone_influences.clear()
+            
+
+def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings, optimize_mesh_weights:str):
     # Prepare the scene for export and find the meshes to export.
     arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
     try:
@@ -267,13 +305,11 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
         else:
             export_mesh_groups[name] = [mesh]"""
 
-    #export_mesh_groups = export_mesh_groups.items()
-
     start = time.time()
 
     try:
         # TODO: The mesh is only needed for include_numshb or include_numshexb.
-        ssbh_mesh_data = make_mesh_data(operator, context, export_mesh_groups)
+        ssbh_mesh_data = make_mesh_data(operator, context, export_mesh_groups, optimize_mesh_weights)
     except RuntimeError as e:
         operator.report({'ERROR'}, str(e))
         return
@@ -300,6 +336,13 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
             except Exception as e:
                 operator.report({'ERROR'}, f'Failed to save {path}: {e}')"""
 
+    if include_nusktb:
+        ssbh_skel_data, prc = create_skel_and_prc(operator, context, linked_nusktb_settings, folder)
+
+    if ssbh_mesh_data is not None and ssbh_skel_data is not None:
+        if optimize_mesh_weights == 'ENABLED':
+            weights_to_parent_bones(ssbh_mesh_data, ssbh_skel_data)
+
     if include_numshb:
         path = str(folder.joinpath('model.numshb'))
         try:
@@ -308,8 +351,18 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
             operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
     if include_nusktb:
-        create_and_save_skel(operator, context, linked_nusktb_settings, folder)
-
+        if ssbh_skel_data is not None:
+            path = str(folder.joinpath('model.nusktb'))
+            try:
+                ssbh_skel_data.save(path)
+            except Exception as e:
+                operator.report({'ERROR'}, f'Failed to save .nusktb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+        prc_path = str(folder.joinpath('update.prc'))
+        if prc is not None:
+            try:
+                prc.save(prc_path)
+            except Exception as e:
+                operator.report({'ERROR'}, f'Failed to save update.prc, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
     if include_numatb:
         #create_and_save_matl(operator, folder, export_meshes)
         ssbh_matl = create_matl(operator, export_meshes)
@@ -350,7 +403,7 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
         from .import_anim import setup_visibility_drivers
         setup_visibility_drivers(arma)
 
-def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
+def create_skel_and_prc(operator, context, linked_nusktb_settings, folder) -> tuple[ssbh_data_py.skel_data.SkelData, Any]:
     try:
         ssbh_skel_data, prc = make_skel(operator, context, linked_nusktb_settings)
     except RuntimeError as e:
@@ -363,7 +416,7 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
         operator.report({'ERROR'}, f'{len(ssbh_skel_data.bones)} bones exceeds the maximum supported count of 511.')
         return
 
-    path = str(folder.joinpath('model.nusktb'))
+    """path = str(folder.joinpath('model.nusktb'))
     try:
         ssbh_skel_data.save(path)
     except Exception as e:
@@ -374,7 +427,9 @@ def create_and_save_skel(operator, context, linked_nusktb_settings, folder):
         try:
             prc.save(prc_path)
         except Exception as e:
-            operator.report({'ERROR'}, f'Failed to save update.prc, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+            operator.report({'ERROR'}, f'Failed to save update.prc, Error="{e}" ; Traceback=\n{traceback.format_exc()}')"""
+    
+    return (ssbh_skel_data, prc)
 
 
 def create_and_save_meshex(operator, folder, ssbh_mesh_data):
@@ -753,13 +808,12 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     per_vertex[vertex_indices] = per_loop.reshape((-1, cols))
     return per_vertex
 
-
-def make_mesh_data(operator: bpy.types.Operator, context: bpy.types.Context, export_mesh_groups: dict[str, set[bpy.types.Object]]) -> ssbh_data_py.mesh_data.MeshData:
+def make_mesh_data(operator: bpy.types.Operator, context: bpy.types.Context, export_mesh_groups: dict[str, set[bpy.types.Object]], optimize_mesh_weights: str) -> ssbh_data_py.mesh_data.MeshData:
     ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
 
     for group_name, meshes in export_mesh_groups.items():
         for i, mesh in enumerate(meshes):
-            # TODO: Validate shape keys and degenerate geometry?
+            # TODO: Validate shape keys?
 
             # Make a copy of the mesh so that the original remains unmodified.
             mesh_object_copy: bpy.types.Object = mesh.copy()
@@ -849,7 +903,7 @@ def make_mesh_data(operator: bpy.types.Operator, context: bpy.types.Context, exp
 
             try:
                 # Use the original mesh name since the copy will have strings like ".001" appended.
-                ssbh_mesh_object = make_mesh_object(operator, context, mesh_object_copy, group_name, i, mesh.name)
+                ssbh_mesh_object = make_mesh_object(operator, context, mesh_object_copy, group_name, i, mesh.name, optimize_mesh_weights)
             finally:
                 bpy.data.meshes.remove(mesh_object_copy.data)
 
@@ -858,7 +912,7 @@ def make_mesh_data(operator: bpy.types.Operator, context: bpy.types.Context, exp
     return ssbh_mesh_data
 
 
-def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, mesh_name):
+def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, mesh_name, optimize_mesh_weights:str):
     # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
     # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
@@ -944,7 +998,7 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
         # For example, fighter/miifighter/model/b_deacon_m weights vertices to effect bones.
         if len(weights) > 0:
             ssbh_mesh_object.bone_influences.append(ssbh_data_py.mesh_data.BoneInfluence(name, weights))
-    
+
     # Mesh version 1.10 only has 16-bit unsigned vertex indices for skin weights.
     # Meshes without vertex skinning can use the full range of 32-bit unsigned vertex indices.
     vertex_index = vertex_indices.max()
