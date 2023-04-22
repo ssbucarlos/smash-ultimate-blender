@@ -26,7 +26,7 @@ def register():
     print('Loading Smash Ultimate Blender Tools...')
 
     check_unsupported_blender_versions()
-
+    from . import ssbh_data_py
     from . import modules
     from . import operators
     from . import properties
