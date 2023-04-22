@@ -21,7 +21,7 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 ## In case of problems?
 1. Export Issues? Please go read the [export issues](https://github.com/ssbucarlos/smash-ultimate-blender/wiki/Read-this-if-you-have-export-issues.-Or-want-to-avoid-Export-Issues) wiki page and see if your issue gets fixed, if not...
 2. Please read the wiki to see if that issue is mentioned in the [List of Known Issues](https://github.com/ssbucarlos/smash-ultimate-blender/wiki/Known-Blender-Issues) wiki page, if not...
-3. Please go add a new issue in the Issues page so i can track the problem, or message me about it.
+3. Please go add a new issue in the Issues page so the issue can be tracked.
 
 ## Current Features
 1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
