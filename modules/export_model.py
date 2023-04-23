@@ -339,9 +339,10 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
     if include_nusktb:
         ssbh_skel_data, prc = create_skel_and_prc(operator, context, linked_nusktb_settings, folder)
 
-    if ssbh_mesh_data is not None and ssbh_skel_data is not None:
-        if optimize_mesh_weights == 'ENABLED':
-            weights_to_parent_bones(ssbh_mesh_data, ssbh_skel_data)
+    if include_numshb and include_nusktb:
+        if ssbh_mesh_data is not None and ssbh_skel_data is not None:
+            if optimize_mesh_weights == 'ENABLED':
+                weights_to_parent_bones(ssbh_mesh_data, ssbh_skel_data)
 
     if include_numshb:
         path = str(folder.joinpath('model.numshb'))
