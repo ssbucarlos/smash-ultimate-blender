@@ -132,7 +132,11 @@ class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
                 if amtpi < len(arma.sub_anim_properties.mat_tracks[amti].properties):
                     ap = arma.sub_anim_properties.mat_tracks[amti].properties[amtpi]
                     if ap.sub_type == 'VECTOR':
-                        c.prop(ap, "custom_vector", text="", emboss=False)
+                        c.prop(ap, "custom_vector", text="")
+                        c.prop(ap, "custom_vector", text="", index=0)
+                        c.prop(ap, "custom_vector", text="", index=1)
+                        c.prop(ap, "custom_vector", text="", index=2)
+                        c.prop(ap, "custom_vector", text="", index=3)
                     elif ap.sub_type == 'FLOAT':
                         c.prop(ap, "custom_float", text="", emboss=False)
                     elif ap.sub_type == 'BOOL':
@@ -804,7 +808,7 @@ class SUB_PG_mat_track_property(PropertyGroup):
         description='CustomVector or CustomFloat or CustomBool',
         items=mat_sub_types, 
         default='VECTOR',)
-    custom_vector: FloatVectorProperty(name='Custom Vector', size=4, update=dummy_update)
+    custom_vector: FloatVectorProperty(name='Custom Vector', size=4, update=dummy_update, subtype='COLOR_GAMMA', soft_min=0.0, soft_max=1.0)
     custom_bool: BoolProperty(name='Custom Bool')
     custom_float: FloatProperty(name='Custom Float')
     pattern_index: IntProperty(name='Pattern Index', subtype='UNSIGNED')
