@@ -17,7 +17,7 @@ def convert_from_no_nodes(operator: bpy.types.Operator, material: bpy.types.Mate
     metalness = material.metallic
     specular = material.specular_intensity
     roughness = material.roughness
-    create_sub_matl_data_from_shader_label(material, "SFX_PBS_010000000808ba68_opaque")
+    create_sub_matl_data_from_shader_label(material, "SFX_PBS_010000000800ba69_opaque") # Mesh-wide PRM, 1 Col, Nor, no ColorSet1
     sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
     cv47: SUB_PG_matl_vector = sub_matl_data.vectors.get(ParamId.CustomVector47.name)
     cv47.value = (metalness, roughness, 1.0, specular)

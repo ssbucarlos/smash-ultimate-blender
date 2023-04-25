@@ -7,16 +7,17 @@ import math
 import bmesh
 import re
 import traceback
+import cProfile
+import pstats
 
 from pathlib import Path
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
-from bpy.types import Operator, Panel, EditBone
+from bpy.types import Operator, Panel, EditBone, Object, Context, EditBone, Mesh, MeshVertex, ShapeKey
 from mathutils import Vector, Matrix
 
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from bpy.types import EditBone, Mesh, MeshVertex
     from .helper_bone_data import SubHelperBoneData, AimConstraint, OrientConstraint
     from ..properties import SubSceneProperties
 
@@ -42,6 +43,10 @@ class SUB_PT_export_model(Panel):
         row = layout.row(align=True)
         row.prop(ssp, 'model_export_arma', icon='ARMATURE_DATA')
         if not ssp.model_export_arma:
+            return
+        if ssp.model_export_arma.name not in context.view_layer.objects.keys():
+            row = layout.row(align=True)
+            row.label(text='Armature not in view layer!', icon='ERROR')
             return
         if '' == ssp.vanilla_nusktb:
             row = layout.row(align=True)
@@ -168,14 +173,65 @@ class SUB_OP_model_exporter(Operator):
         default='DISABLED',
     )
 
+    armature_position: EnumProperty(
+        name='Armature Pos.',
+        description="Select 'Rest' to use the Rest (T-Pose, A-Pose, etc...) Position.",
+        items=(
+            ('REST', 'Rest Position', 'Recommended, this is the expected behavior, select this unless you really intend to export the posed position.'),
+            ('POSE', 'Pose Position', 'Not Recommended, as this is probably not what you want, as any minor error with helper bones or other bone constraints will cause export issues'),
+        ),
+        default='REST',
+    )
+    apply_modifiers: EnumProperty(
+        name='Mesh Modifiers',
+        description='Ignore or Apply the Mesh Modifiers',
+        items=(
+            ('APPLY', 'Apply Modifiers', 'Applies any mesh modifiers. Remember that some modifiers work strangely with un-applied transforms, if you notice export issues please apply transforms before exporting.'),
+            ('IGNORE', 'Ignore Modifiers', 'Ignores the mesh modifiers.'),
+        ),
+        default='APPLY',
+    )
+    split_shape_keys: EnumProperty(
+        name='Shape Keys',
+        description="Ultimate doesn't support shape keys, so specify how to deal with blender shape keys.",
+        items=(
+            ('EXPORT_INCLUDE_ORIGINAL', 'Convert "_VIS" Keys to New Meshes, and still export the base mesh', 'Keys containing `_VIS` will become a new mesh, AND the base mesh will ALSO be exported'),
+            ('EXPORT_EXCULDE_ORIGINAL', 'Convert "_VIS" Keys to New Meshes, but no longer export the base mesh', 'Keys containing `_VIS` will become a new mesh, BUT the base mesh will NOT be exported.'),
+            ('IGNORE_SHAPEKEYS', 'Ignore Shapekeys','Shapekeys will be completely ignored. The current Mix will be ignored. Same as clearing the keys. '),
+        ),
+        default='IGNORE_SHAPEKEYS',
+    )
+
+    use_debug_timer: BoolProperty(
+        name='Print debug timing stats',
+        description='Prints advance import timing info to the console, useful for development of this plugin.',
+        default=False,
+    )
+
+    @classmethod
+    def poll(cls, context):
+        if not context.scene.sub_scene_properties.model_export_arma:
+            return False
+        return True
+
     # Initially set the filename field to be nothing
     def invoke(self, context, _event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     
     def execute(self, context):
-        export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
-                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings, self.optimize_mesh_weights_to_parent_bone)
+        start = time.perf_counter()
+        with cProfile.Profile() as pr:
+            export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
+                    self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings,
+                    self.optimize_mesh_weights_to_parent_bone, self.armature_position, self.apply_modifiers,
+                    self.split_shape_keys)
+        if self.use_debug_timer:
+            stats = pstats.Stats(pr)
+            stats.sort_stats(pstats.SortKey.TIME)
+            stats.print_stats()
+        end = time.perf_counter()
+        print(f"Model Export finished in {end - start} seconds!")
         return {'FINISHED'}
 
 def model_export_arma_update(self, context):
@@ -263,78 +319,95 @@ def weights_to_parent_bones(ssbh_mesh_data: ssbh_data_py.mesh_data.MeshData, ssb
         mesh_object.bone_influences.clear()
             
 
-def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb, include_numatb, include_nuhlpb, linked_nusktb_settings, optimize_mesh_weights:str):
+def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb,
+                include_numatb, include_nuhlpb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
+                apply_modifiers: str, split_shape_keys: str):
     # Prepare the scene for export and find the meshes to export.
     arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
-    try:
-        context.view_layer.objects.active = arma
-    except:
-        operator.report({'ERROR'}, f'{arma.name} is not a valid armature name. Please select a valid armature.')
-        return
+    context.view_layer.objects.active = arma
+
+    # Track old_pose_position to return armature to whatever setting the user had
+    old_pose_position = arma.data.pose_position
+    if armature_position == 'REST':
+        arma.data.pose_position = 'REST'
+    elif armature_position == 'POSE':
+        arma.data.pose_position = 'POSE'
+
     # Temporarily remove mesh vis drivers and un-hide them for export
     if arma.animation_data is not None:
         bpy.ops.sub.vis_drivers_remove()
     for child in arma.children:
         child.hide_viewport = False
         child.hide_render = False
-
-    # TODO: Investigate why export fails if meshes are selected before hitting export.
+    
+    # Unselect objects so they don't interfere with ops
     for selected_object in context.selected_objects:
         selected_object.select_set(False)
 
-    export_meshes: list[bpy.types.Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] # Only Mesh Objects, Skip Empty Objects
-    # export_meshes: list[bpy.types.Object] = [m for m in export_meshes if len(m.data.vertices) > 0] # Skip Empty Objects
-    # TODO: Is it possible to keep the correct order for non imported meshes?
-    export_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
-
-    if len(export_meshes) == 0:
-        message = f'No meshes are parented to the armature {arma.name}. Exported .NUMDLB, .NUMSHB, .NUMATB, and .NUMSHEXB files will have no entries.'
-        operator.report({'WARNING'}, message)
-
-    # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
-    # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
-    # Use a dictionary since we can't assume meshes with the same name are contiguous.
-    export_mesh_groups: dict[str, set[bpy.types.Object]] = {trim_name(mesh.name) : set() for mesh in export_meshes}
-    for mesh in export_meshes:
-        export_mesh_groups[trim_name(mesh.name)].add(mesh)
-    
-    """for mesh in export_meshes:
-        name = trim_name(name)
-        if name in export_mesh_groups:
-            export_mesh_groups[name].append(mesh)
-        else:
-            export_mesh_groups[name] = [mesh]"""
-
-    start = time.time()
-
-    try:
-        # TODO: The mesh is only needed for include_numshb or include_numshexb.
-        ssbh_mesh_data = make_mesh_data(operator, context, export_mesh_groups, optimize_mesh_weights)
-    except RuntimeError as e:
-        operator.report({'ERROR'}, str(e))
-        return
-
-    # Make sure this is a folder instead of a file.
-    # TODO: This doesn't work if the file path isn't actually a file on disk?
-    '''
-    folder = Path(filepath)
-    if folder.is_file():
-        folder = folder.parent
-    '''
     folder = Path(directory)
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
-    ssbh_modl_data = None
-    if include_numdlb:
-        # TODO: Do we want to use exceptions instead of None for stopping export early?
-        ssbh_modl_data = make_modl_data(operator, context, export_mesh_groups)
+    if include_numshb or include_numshexb or include_numatb or include_numdlb:
+        # Only Mesh Objects, Skip Empty Objects
+        unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] 
+        # TODO: Is it possible to keep the correct order for non imported meshes?
+        # TODO: Should users just re-order meshes in ssbh_editor instead?
+        unprocessed_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
+
+        if len(unprocessed_meshes) == 0:
+            message = f'No meshes are parented to the armature {arma.name}. Exported .NUMDLB, .NUMSHB, .NUMATB, and .NUMSHEXB files will have no entries.'
+            operator.report({'WARNING'}, message)
+
+        # Smash Ultimate groups mesh objects with the same name like 'c00BodyShape'.
+        # Blender appends numbers like '.001' to prevent duplicates, so we need to remove those before grouping.
+        # Use a dictionary since we can't assume meshes with the same name are contiguous.
+        group_name_to_unprocessed_meshes: dict[str, set[bpy.types.Object]] = {trim_name(mesh.name) : set() for mesh in unprocessed_meshes}
+        for mesh in unprocessed_meshes:
+            group_name_to_unprocessed_meshes[trim_name(mesh.name)].add(mesh)
         
-        """if ssbh_modl_data is not None:
-            path = str(folder.joinpath('model.numdlb'))
-            try:
-                ssbh_modl_data.save(path)
-            except Exception as e:
-                operator.report({'ERROR'}, f'Failed to save {path}: {e}')"""
+        ssbh_mesh_data = None
+        ssbh_modl_data = None
+        ssbh_matl_data = None
+        group_name_to_unprocessed_meshes_to_export_meshes, new_shape_key_meshes = get_processed_meshes(operator, context, group_name_to_unprocessed_meshes, apply_modifiers, split_shape_keys, armature_position)
+        try:
+            if include_numshb:
+                try:
+                    ssbh_mesh_data = make_ssbh_mesh_data(operator, context, group_name_to_unprocessed_meshes_to_export_meshes)
+                except Exception as e:
+                    operator.report({'ERROR'}, f'Failed to make ssbh mesh data, but will try to make the rest. Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+
+            if include_numdlb:
+                try:
+                    ssbh_modl_data = make_ssbh_modl_data(operator, context, group_name_to_unprocessed_meshes_to_export_meshes)
+                except Exception as e:
+                    operator.report({'ERROR'}, f'Failed to make modl_data (.NUMDLB), but will try to make the rest. Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+            
+            if include_numatb:
+                just_export_meshes = set()
+                for unprocessed_meshes_to_export_meshes in group_name_to_unprocessed_meshes_to_export_meshes.values():
+                    for export_meshes in unprocessed_meshes_to_export_meshes.values():
+                        for export_mesh in export_meshes:
+                            just_export_meshes.add(export_mesh)
+                
+                ssbh_matl_data = create_matl(operator, just_export_meshes)
+                if ssbh_matl_data is not None:
+                    trim_matl_texture_names(operator, ssbh_matl_data)
+                if ssbh_modl_data is not None and ssbh_matl_data is not None:
+                    trim_material_labels(operator, ssbh_modl_data, ssbh_matl_data)
+            
+            if include_numshexb:
+                if ssbh_mesh_data is not None:
+                    try:
+                        create_and_save_meshex(operator, folder, ssbh_mesh_data)
+                    except Exception as e:
+                        operator.report({'ERROR'}, f'Failed to make mesh ex data (.NUMSHEXB), but will try to make the rest. Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+        finally:
+            for group_name, unprocessed_meshes_to_export_meshes in group_name_to_unprocessed_meshes_to_export_meshes.items():
+                for unprocessed_mesh, export_meshes in unprocessed_meshes_to_export_meshes.items():
+                    for export_mesh in export_meshes:
+                        bpy.data.meshes.remove(export_mesh.data)
+            for new_shape_key_mesh in new_shape_key_meshes:
+                bpy.data.meshes.remove(new_shape_key_mesh.data)
 
     if include_nusktb:
         ssbh_skel_data, prc = create_skel_and_prc(operator, context, linked_nusktb_settings, folder)
@@ -345,11 +418,12 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
                 weights_to_parent_bones(ssbh_mesh_data, ssbh_skel_data)
 
     if include_numshb:
-        path = str(folder.joinpath('model.numshb'))
-        try:
-            ssbh_mesh_data.save(path)
-        except Exception as e:
-            operator.report({'ERROR'}, f'Failed to save {path}: {e}')
+        if ssbh_mesh_data is not None:
+            path = str(folder.joinpath('model.numshb'))
+            try:
+                ssbh_mesh_data.save(path)
+            except Exception as e:
+                operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
     if include_nusktb:
         if ssbh_skel_data is not None:
@@ -364,16 +438,6 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
                 prc.save(prc_path)
             except Exception as e:
                 operator.report({'ERROR'}, f'Failed to save update.prc, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-    if include_numatb:
-        #create_and_save_matl(operator, folder, export_meshes)
-        ssbh_matl = create_matl(operator, export_meshes)
-        if ssbh_matl is not None:
-            trim_matl_texture_names(operator, ssbh_matl)
-        if ssbh_modl_data is not None and ssbh_matl is not None:
-            trim_material_labels(operator, ssbh_modl_data, ssbh_matl)
-        
-    if include_numshexb:
-        create_and_save_meshex(operator, folder, ssbh_mesh_data)
 
     if include_nuhlpb:
         try:
@@ -390,19 +454,18 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
                 operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
     if include_numatb:
-        if ssbh_matl is not None:
+        if ssbh_matl_data is not None:
             path = str(folder.joinpath('model.numatb'))
             try:
-                ssbh_matl.save(path)
+                ssbh_matl_data.save(path)
             except Exception as e:
                 operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-
-    end = time.time()
-    print(f'Create and save export files in {end - start} seconds')
 
     if arma.animation_data is not None:
         from .import_anim import setup_visibility_drivers
         setup_visibility_drivers(arma)
+
+    arma.data.pose_position = old_pose_position
 
 def create_skel_and_prc(operator, context, linked_nusktb_settings, folder) -> tuple[ssbh_data_py.skel_data.SkelData, Any]:
     try:
@@ -809,111 +872,249 @@ def per_loop_to_per_vertex(per_loop, vertex_indices, dim):
     per_vertex[vertex_indices] = per_loop.reshape((-1, cols))
     return per_vertex
 
-def make_mesh_data(operator: bpy.types.Operator, context: bpy.types.Context, export_mesh_groups: dict[str, set[bpy.types.Object]], optimize_mesh_weights: str) -> ssbh_data_py.mesh_data.MeshData:
-    ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
+def split_mesh_shape_keys_to_new_meshes(operator: Operator, context: Context, mesh_object: Object) -> set[Object]:
+    if mesh_object.data.shape_keys is None:
+        return set()
+    if mesh_object.data.shape_keys.key_blocks is None:
+        return set()
+    shape_keys_to_split: set[ShapeKey] = {sk for sk in mesh_object.data.shape_keys.key_blocks if "_VIS" in sk.name}
+    if len(shape_keys_to_split) == 0:
+        return set()
+    
+    new_meshes: set[Object] = set()
+    for shape_key_to_split in shape_keys_to_split:
+        shape_key_mesh_copy: Object = mesh_object.copy()
+        shape_key_mesh_copy.data: Mesh = mesh_object.data.copy()
+        shape_key_mesh_copy.name = shape_key_to_split.name
+        shape_key_mesh_copy.show_only_shape_key = True
+        shape_key_mesh_copy.active_shape_key_index = shape_key_mesh_copy.data.shape_keys.key_blocks.find(shape_key_to_split.name)
+        shape_key_mesh_copy.shape_key_add(name="_smush_blender_combined_key", from_mix=True)
+        for sk in shape_key_mesh_copy.data.shape_keys.key_blocks:
+            shape_key_mesh_copy.shape_key_remove(sk)
+        context.collection.objects.link(shape_key_mesh_copy)
+        
+        new_meshes.add(shape_key_mesh_copy)
+    print(f'{new_meshes=}')
+    return new_meshes
 
-    for group_name, meshes in export_mesh_groups.items():
-        for i, mesh in enumerate(meshes):
-            # TODO: Validate shape keys?
+def process_mesh(operator: Operator, context: Context, mesh_object_copy: Object, mesh_name_in_errors: str,
+                apply_modifiers: str, armature_position: str) -> set[Object]:
+    """
+    Always returns at least one mesh, but since processing a mesh may split it by material, more than one mesh could be returned. 
+    """
 
+    # Apply any transforms before exporting to preserve vertex positions.
+    # Assume the meshes have no children that would inherit their transforms.
+    mesh_object_copy.data.transform(mesh_object_copy.matrix_basis)
+    mesh_object_copy.matrix_basis.identity()
+
+    # Remove shapekeys 
+    mesh_object_copy.shape_key_clear()
+    
+    # Apply Modifiers
+    if apply_modifiers == 'APPLY':
+        override = context.copy()
+        override['object'] = mesh_object_copy
+        override['active_object'] = mesh_object_copy
+        override['selected_objects'] = [mesh_object_copy]
+        with context.temp_override(**override):
+            for modifier in mesh_object_copy.modifiers:
+                if armature_position == 'REST': # Optimization to speed up export when the user doesn't want to export armature changes anyways
+                    if modifier.type != 'ARMATURE':
+                        bpy.ops.object.modifier_apply(modifier=modifier.name)
+                else:
+                    bpy.ops.object.modifier_apply(modifier=modifier.name)
+
+    # Cleanup and dissolve degen
+    # https://blender.stackexchange.com/questions/139615/bmesh-ops-method-to-get-loose-vertices-edges-and-delete-from-that-list
+    # https://blender.stackexchange.com/questions/206751/set-the-context-to-run-dissolve-degenerate-from-the-python-shell
+    bm = bmesh.new()
+    bm.from_mesh(mesh_object_copy.data)
+    bmesh.ops.dissolve_degenerate(bm, dist=0.0001, edges=bm.edges)
+    unlinked_verts = [v for v in bm.verts if len(v.link_faces) == 0]
+    bmesh.ops.delete(bm, geom=unlinked_verts, context='VERTS')
+    bm.to_mesh(mesh_object_copy.data)
+    mesh_object_copy.data.update()
+    bm.clear()
+    
+    # Get the custom normals from the original mesh.
+    # We use the copy here since applying transforms alters the normals.
+    mesh_object_copy.data.calc_normals_split()
+    loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 3, dtype=np.float32)
+    mesh_object_copy.data.loops.foreach_get('normal', loop_normals)
+
+    # Pad to 4 components for fitting in the color attribute.
+    loop_normals = loop_normals.reshape((-1, 3))
+    loop_normals = np.append(loop_normals, np.zeros((loop_normals.shape[0],1)), axis=1)
+    loop_normals = loop_normals.flatten()
+
+    # Transfer the original normals to a custom attribute.
+    # This allows us to edit the mesh without affecting custom normals.
+    # Use FLOAT_COLOR since FLOAT_VECTOR doesn't add a key for some reason.
+    # TODO: Is it ok to always assume FLOAT_COLOR will allow signed values?
+    normals_color = mesh_object_copy.data.color_attributes.new(name='_smush_blender_custom_normals', type='FLOAT_COLOR', domain='CORNER')
+    normals_color.data.foreach_set('color', loop_normals)
+
+    # Check if any of the faces are not tris, and converts them into tris
+    if any(len(f.vertices) != 3 for f in mesh_object_copy.data.polygons):
+        operator.report({'WARNING'}, f'Mesh {mesh_name_in_errors} has non triangular faces. Triangulating a temporary mesh for export.')
+
+        # https://blender.stackexchange.com/questions/45698
+        me = mesh_object_copy.data
+        # Get a BMesh representation
+        bm = bmesh.new()
+        bm.from_mesh(me)
+
+        bmesh.ops.triangulate(bm, faces=bm.faces[:])
+
+        # Finish up, write the bmesh back to the mesh
+        bm.to_mesh(me)
+        bm.free()
+
+    # Blender stores normals and UVs per loop rather than per vertex.
+    # Edges with more than one value per vertex need to be split.
+    split_duplicate_loop_attributes(mesh_object_copy)
+    # Rarely this will create some loose verts
+    bm = bmesh.new()
+    bm.from_mesh(mesh_object_copy.data)
+    unlinked_verts = [v for v in bm.verts if len(v.link_faces) == 0]
+    bmesh.ops.delete(bm, geom=unlinked_verts, context='VERTS')
+    bm.to_mesh(mesh_object_copy.data)
+    mesh_object_copy.data.update()
+    bm.clear()
+
+    # Split mesh by material
+    bm = bmesh.new()
+    bm.from_mesh(mesh_object_copy.data)
+    material_indices: set[int] = {f.material_index for f in bm.faces}
+    #bm.to_mesh(mesh_object_copy.data)
+    #mesh_object_copy.data.update()
+    bm.clear()
+    split_meshes: set[Object] = set()
+    for material_index in material_indices:
+        dest_obj: bpy.types.Object = mesh_object_copy.copy()
+        dest_obj.data: bpy.types.Mesh = mesh_object_copy.data.copy()
+        dest_bm = bmesh.new()
+        dest_bm.from_mesh(dest_obj.data)
+        dest_faces_to_split = [f for f in dest_bm.faces if f.material_index != material_index]
+        if len(dest_faces_to_split) > 0:
+            bmesh.ops.delete(dest_bm, geom=dest_faces_to_split, context='FACES')
+            dest_bm.to_mesh(dest_obj.data)
+        dest_bm.clear()
+        dest_obj.data.update()
+        mat = dest_obj.material_slots[material_index].material
+        dest_obj.data.materials.clear()
+        dest_obj.data.materials.append(mat)
+        split_meshes.add(dest_obj)
+    
+    for split_mesh in split_meshes:
+        # Extract the custom normals preserved in the color attribute.
+        # Color attributes should not be affected by splitting or triangulating.
+        # This avoids the datatransfer modifier not handling vertices at the same position.
+        loop_normals = np.zeros(len(split_mesh.data.loops) * 4, dtype=np.float32)
+        normals_color = split_mesh.data.color_attributes['_smush_blender_custom_normals']
+        normals_color.data.foreach_get('color', loop_normals)
+
+        # Remove the dummy fourth component.
+        loop_normals = loop_normals.reshape((-1, 4))[:,:3]
+
+        # Assign the preserved custom normals to the temp mesh.
+        split_mesh.data.normals_split_custom_set(loop_normals)
+        split_mesh.data.use_auto_smooth = True
+        split_mesh.data.calc_normals_split()
+        split_mesh.data.update()
+
+    return split_meshes
+
+def get_processed_meshes(operator: bpy.types.Operator, context: bpy.types.Context,
+                    group_name_to_unprocessed_meshes: dict[str, set[bpy.types.Object]],
+                    apply_modifiers: str, split_shape_keys: str, armature_position: str) -> tuple[dict[str, dict[Object, set[Object]]], set[object]]:
+    '''
+    Splitting by shape key and by material may add more meshes to export, so need to track the new meshes.
+    In addition the new shapekeys could be named completely differently
+    Example:
+    group_name_to_export_meshes_to_temp_meshes: dict[str, dict[Mesh, set[Mesh]]]
+    |-> Cube             "Group Name"       # This is the trimmed name that will show up in the numshb
+        |-> Cube.001     "Unprocessed Mesh" # This is the mesh in blender un-modified with its un-trimmed name and shape keys that the user wants to export.
+            |-> Cube.003 "Export Mesh"      # Every blender mesh will make at least one temporary "Export Mesh". This is the mesh that has been modified and cleaned up.
+            |-> Cube.004 "Export Mesh"      # Maybe this one has two export meshes because it had more than one material
+            |-> Cube.005 "Export Mesh"      # Or maybe it had shape keys
+        |-> Cube.002     "Unprocessed Mesh" # For proper error reporting, unprocessed meshes need to be tracked as well
+            |-> Cube.006 "Export Mesh"      # Since saying "Cube.006 Failed" would not be helpful when "Cube.006" is not a mesh the user made
+        |-> Cube.003
+            |-> Cube.007 "Export Mesh"
+    |-> Sphere           "Group Name"
+        |-> ....
+    |-> C_VIS            "Group Name"        # New group name for new shape key mesh name
+        |-> C_VIS        "Unprocessed Mesh"  # This is the shape key mesh, split off from its original mesh, but it still has modifiers
+            |-> C_VIS.001"Export Mesh"       # This is the shape key mesh after processing, applied modifiers, split materials, etc.
+            |-> C_VIS.002"Export Mesh"
+    '''
+    # Meshes with shape keys will make more "groups" with more "unprocessed meshes"
+    new_shape_key_meshes: set[Object] = set()
+    # If a mesh was succesfully split into multiple shapekey
+    meshes_that_split_into_shapekeys: set[Object] = set()
+    if split_shape_keys in ('EXPORT_INCLUDE_ORIGINAL', 'EXPORT_EXCULDE_ORIGINAL'):
+        for group_name, unprocessed_meshes in group_name_to_unprocessed_meshes.items():
+            for unprocessed_mesh in unprocessed_meshes:
+                meshes = split_mesh_shape_keys_to_new_meshes(operator, context, unprocessed_mesh)
+                if len(meshes) > 0:
+                    new_shape_key_meshes |= meshes
+                    meshes_that_split_into_shapekeys.add(unprocessed_mesh)
+    
+        # Remove the split shapekey meshes if needed
+        if split_shape_keys == 'EXPORT_EXCULDE_ORIGINAL':
+            group_names = group_name_to_unprocessed_meshes.keys()
+            for group_name in group_names:
+                unprocessed_meshes = group_name_to_unprocessed_meshes[group_name]
+                group_name_to_unprocessed_meshes[group_name] = unprocessed_meshes - meshes_that_split_into_shapekeys
+    
+        group_names = group_name_to_unprocessed_meshes.keys()
+        new_group_names = {trim_name(new_shape_key_mesh.name) for new_shape_key_mesh in new_shape_key_meshes}
+        for missing_name in new_group_names - group_names:
+            group_name_to_unprocessed_meshes[missing_name] = set()
+        
+        for new_shape_key_mesh in new_shape_key_meshes:
+            group_name = trim_name(new_shape_key_mesh.name)
+            group_name_to_unprocessed_meshes[group_name].add(new_shape_key_mesh)
+    
+
+    # Return Dictionary initialization
+    group_name_to_unprocessed_meshes_to_export_meshes: dict[str, dict[Object, set[Object]]] = {}
+    for group_name, unprocessed_meshes in group_name_to_unprocessed_meshes.items():
+        group_name_to_unprocessed_meshes_to_export_meshes[group_name] = {}
+        for unprocessed_mesh in unprocessed_meshes:
+            group_name_to_unprocessed_meshes_to_export_meshes[group_name][unprocessed_mesh] = set() 
+
+    # Process meshes
+    for group_name, unprocessed_meshes in group_name_to_unprocessed_meshes.items():
+        for unprocessed_mesh in unprocessed_meshes:
             # Make a copy of the mesh so that the original remains unmodified.
-            mesh_object_copy: bpy.types.Object = mesh.copy()
-            mesh_object_copy.data: bpy.types.Mesh = mesh.data.copy()
-
-            # Cleanup and dissolve degen
-            # https://blender.stackexchange.com/questions/139615/bmesh-ops-method-to-get-loose-vertices-edges-and-delete-from-that-list
-            # https://blender.stackexchange.com/questions/206751/set-the-context-to-run-dissolve-degenerate-from-the-python-shell
-            bm = bmesh.new()
-            bm.from_mesh(mesh_object_copy.data)
-            bmesh.ops.dissolve_degenerate(bm, dist=0.0001, edges=bm.edges)
-            unlinked_verts = [v for v in bm.verts if len(v.link_faces) == 0]
-            bmesh.ops.delete(bm, geom=unlinked_verts, context='VERTS')
-            bm.to_mesh(mesh_object_copy.data)
-            mesh_object_copy.data.update()
-            bm.clear()
-
-            # Apply any transforms before exporting to preserve vertex positions.
-            # Assume the meshes have no children that would inherit their transforms.
-            mesh_object_copy.data.transform(mesh_object_copy.matrix_basis)
-            mesh_object_copy.matrix_basis.identity()
-
-            # Get the custom normals from the original mesh.
-            # We use the copy here since applying transforms alters the normals.
-            mesh_object_copy.data.calc_normals_split()
-            loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 3, dtype=np.float32)
-            mesh_object_copy.data.loops.foreach_get('normal', loop_normals)
-
-            # Pad to 4 components for fitting in the color attribute.
-            loop_normals = loop_normals.reshape((-1, 3))
-            loop_normals = np.append(loop_normals, np.zeros((loop_normals.shape[0],1)), axis=1)
-            loop_normals = loop_normals.flatten()
-
-            # Transfer the original normals to a custom attribute.
-            # This allows us to edit the mesh without affecting custom normals.
-            # Use FLOAT_COLOR since FLOAT_VECTOR doesn't add a key for some reason.
-            # TODO: Is it ok to always assume FLOAT_COLOR will allow signed values?
-            normals_color = mesh_object_copy.data.color_attributes.new(name='_smush_blender_custom_normals', type='FLOAT_COLOR', domain='CORNER')
-            normals_color.data.foreach_set('color', loop_normals)
-
-            # Check if any of the faces are not tris, and converts them into tris
-            if any(len(f.vertices) != 3 for f in mesh_object_copy.data.polygons):
-                operator.report({'WARNING'}, f'Mesh {mesh.name} has non triangular faces. Triangulating a temporary mesh for export.')
-
-                # https://blender.stackexchange.com/questions/45698
-                me = mesh_object_copy.data
-                # Get a BMesh representation
-                bm = bmesh.new()
-                bm.from_mesh(me)
-
-                bmesh.ops.triangulate(bm, faces=bm.faces[:])
-
-                # Finish up, write the bmesh back to the mesh
-                bm.to_mesh(me)
-                bm.free()
-
-            context.collection.objects.link(mesh_object_copy)
-            context.view_layer.update()
-
-            # Blender stores normals and UVs per loop rather than per vertex.
-            # Edges with more than one value per vertex need to be split.
-            split_duplicate_loop_attributes(mesh_object_copy)
-            # Rarely this will create some loose verts
-            bm = bmesh.new()
-            bm.from_mesh(mesh_object_copy.data)
-            unlinked_verts = [v for v in bm.verts if len(v.link_faces) == 0]
-            bmesh.ops.delete(bm, geom=unlinked_verts, context='VERTS')
-            bm.to_mesh(mesh_object_copy.data)
-            mesh_object_copy.data.update()
-            bm.clear()
-
-            # Extract the custom normals preserved in the color attribute.
-            # Color attributes should not be affected by splitting or triangulating.
-            # This avoids the datatransfer modifier not handling vertices at the same position.
-            loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 4, dtype=np.float32)
-            normals_color = mesh_object_copy.data.color_attributes['_smush_blender_custom_normals']
-            normals_color.data.foreach_get('color', loop_normals)
-
-            # Remove the dummy fourth component.
-            loop_normals = loop_normals.reshape((-1, 4))[:,:3]
-
-            # Assign the preserved custom normals to the temp mesh.
-            mesh_object_copy.data.normals_split_custom_set(loop_normals)
-            mesh_object_copy.data.use_auto_smooth = True
-            mesh_object_copy.data.calc_normals_split()
-            mesh_object_copy.data.update()
-
+            # The copy is out here so that is deleted regardless of error
+            unprocessed_mesh_copy: bpy.types.Object = unprocessed_mesh.copy()
+            unprocessed_mesh_copy.data: bpy.types.Mesh = unprocessed_mesh.data.copy()
+            # This is needed for split_duplicate_loop_attributes()
+            context.collection.objects.link(unprocessed_mesh_copy)
             try:
-                # Use the original mesh name since the copy will have strings like ".001" appended.
-                ssbh_mesh_object = make_mesh_object(operator, context, mesh_object_copy, group_name, i, mesh.name, optimize_mesh_weights)
+                group_name_to_unprocessed_meshes_to_export_meshes[group_name][unprocessed_mesh] |= process_mesh(operator, context, unprocessed_mesh_copy, unprocessed_mesh.name, apply_modifiers, armature_position)
             finally:
-                bpy.data.meshes.remove(mesh_object_copy.data)
+                bpy.data.meshes.remove(unprocessed_mesh_copy.data)
 
-            ssbh_mesh_data.objects.append(ssbh_mesh_object)
 
+    return group_name_to_unprocessed_meshes_to_export_meshes, new_shape_key_meshes
+    
+def make_ssbh_mesh_data(operator: Operator, context: Context, group_name_to_unprocessed_meshes_to_export_meshes: dict[str, dict[Object, set[Object]]]) -> ssbh_data_py.mesh_data.MeshData:
+    ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
+    for group_name, unprocessed_meshes_to_export_meshes in group_name_to_unprocessed_meshes_to_export_meshes.items():
+        subindex = 0
+        for unprocessed_mesh, export_meshes in unprocessed_meshes_to_export_meshes.items():
+            for export_mesh in export_meshes:
+                ssbh_mesh_object = make_mesh_object(operator, context, export_mesh, group_name, subindex, unprocessed_mesh.name)
+                ssbh_mesh_data.objects.append(ssbh_mesh_object)
+                subindex += 1
     return ssbh_mesh_data
 
-
-def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, mesh_name, optimize_mesh_weights:str):
+def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, mesh_name):
     # ssbh_data_py accepts lists, tuples, or numpy arrays for AttributeData.data.
     # foreach_get and foreach_set provide substantially faster access to property collections in Blender.
     # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
@@ -1170,7 +1371,7 @@ def split_duplicate_loop_attributes(mesh: bpy.types.Object):
     return len(edges_to_split) > 0
 
 
-def make_modl_data(operator, context, export_mesh_groups: dict[str, set[bpy.types.Object]]):
+def make_ssbh_modl_data(operator, context, group_name_to_unprocessed_meshes_to_export_meshes: dict[str, dict[Object, set[Object]]]):
     ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
 
     ssbh_modl_data.model_name = 'model'
@@ -1179,16 +1380,14 @@ def make_modl_data(operator, context, export_mesh_groups: dict[str, set[bpy.type
     ssbh_modl_data.animation_file_name = None
     ssbh_modl_data.mesh_file_name = 'model.numshb'
 
-    for group_name, meshes in export_mesh_groups.items():
-        for i, mesh in enumerate(meshes):
-            try:
-                mat_label = get_material_label_from_mesh(operator, mesh)
-                ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, i, mat_label)
+    for group_name, unprocessed_meshes_to_export_meshes in group_name_to_unprocessed_meshes_to_export_meshes.items():
+        sub_index = 0
+        for unprocessed_mesh, export_meshes in unprocessed_meshes_to_export_meshes.items():
+            for export_mesh in export_meshes:
+                mat_label = get_material_label_from_mesh(operator, export_mesh)
+                ssbh_modl_entry = ssbh_data_py.modl_data.ModlEntryData(group_name, sub_index, mat_label)
                 ssbh_modl_data.entries.append(ssbh_modl_entry)
-            except RuntimeError as e:
-                # TODO: Should this stop exporting entirely?
-                operator.report({'ERROR'}, str(e))
-                return None
+                sub_index += 1
 
     return ssbh_modl_data
 
@@ -1237,22 +1436,6 @@ def get_ssbh_bone(blender_bone: bpy.types.EditBone, parent_index):
         m = list(list(r) for r in get_smash_root_transform(blender_bone))
         #return ssbh_data_py.skel_data.BoneData(blender_bone.name, get_smash_root_transform(blender_bone), None)
         return ssbh_data_py.skel_data.BoneData(blender_bone.name, m, None)
-
-
-def bone_order(bones, name):
-    # Preserve the existing bone index if possible.
-    # Set the bone index to a large value for added bones.
-    # Sort added bones by the bone group based on prefix.
-    i = find_bone_index(bones, name)
-    group = 0
-    if 'S_' in name:
-        group = 0
-    elif '_eff' in name or '_offset' in name:
-        group = 1
-    elif 'H_' in name:
-        group = 2
-
-    return (10000, group) if i is None else (i, group)
     
 def get_parent_first_ordered_bones(arma: bpy.types.Object) -> list[bpy.types.EditBone]:
     ''' Edit Bones are not guaranteed to appear in such a way where the child appears after its parent
