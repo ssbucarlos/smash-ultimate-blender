@@ -319,7 +319,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
         for bone in animated_pose_bones:
             node = ssbh_data_py.anim_data.NodeData(bone.name)
             track = ssbh_data_py.anim_data.TrackData('Transform')
-            track.scale_options = ssbh_data_py.anim_data.ScaleOptions(False, False)
+            track.compensate_scale = False
             node.tracks.append(track)
             trans_group.nodes.append(node)
 
@@ -513,13 +513,6 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                 elif all(value == track.values[0] for value in track.values):
                     track.values = [track.values[0]]
     
-    # fix for the error `ssbh_data_py.AnimDataError: Scale options of ScaleOptions { inherit_scale: false, compensate_scale: false } cannot be preserved for a uncompressed track.`
-    for group in ssbh_anim_data.groups:
-        for node in group.nodes:
-            for track in node.tracks:
-                if len(track.values) <= 5:
-                    track.scale_options = ssbh_data_py.anim_data.ScaleOptions(True, False)
-
     # Done!
     ssbh_anim_data.save(filepath)        
                 
