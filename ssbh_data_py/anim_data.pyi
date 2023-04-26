@@ -61,29 +61,18 @@ class NodeData:
 
 class TrackData:
     name: str
-    values: Union[list[UvTransform], list[Transform],
-                  list[float], list[bool], list[int], list[list[float]]]
-    scale_options: ScaleOptions
+    compensate_scale: bool
     transform_flags: TransformFlags
+    values: Union[list[UvTransform], list[Transform],
+                      list[float], list[bool], list[int], list[list[float]]]
 
     def __init__(
         self,
         name: str,
+        compensate_scale: bool = False,
+        transform_flags: TransformFlags = TransformFlags(),
         values: Union[list[UvTransform], list[Transform],
-                  list[float], list[bool], list[int], list[list[float]]] = [],
-        scale_options: ScaleOptions = ScaleOptions(),
-        transform_flags: TransformFlags = TransformFlags()
-    ) -> None: ...
-
-
-class ScaleOptions:
-    inherit_scale: bool
-    compensate_scale: bool
-
-    def __init__(
-        self,
-        inherit_scale: bool = False,
-        compensate_scale: bool = False
+                      list[float], list[bool], list[int], list[list[float]]] = []
     ) -> None: ...
 
 
@@ -116,14 +105,17 @@ class UvTransform:
         translate_v: float
     ) -> None: ...
 
+
 class TransformFlags:
     override_translation: bool
     override_rotation: bool
     override_scale: bool
+    override_compensate_scale: bool
 
     def __init__(
         self,
         override_translation: bool = False,
         override_rotation: bool = False,
-        override_scale: bool = False
+        override_scale: bool = False,
+        override_compensate_scale: bool = False
     ) -> None: ...

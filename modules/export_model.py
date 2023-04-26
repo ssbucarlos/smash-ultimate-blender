@@ -34,57 +34,69 @@ class SUB_PT_export_model(Panel):
     bl_label = 'Model Exporter'
     bl_options = {'DEFAULT_CLOSED'}
 
+
     def draw(self, context):
         ssp: SubSceneProperties = context.scene.sub_scene_properties
         layout = self.layout
         layout.use_property_split = False
-        row = layout.row(align=True)
-        row.label(text='Select an armature. The armature + its meshes will be exported')
-        row = layout.row(align=True)
-        row.prop(ssp, 'model_export_arma', icon='ARMATURE_DATA')
+
+        layout.row().label(text='Select an armature. The armature + its meshes will be exported')
+        layout.row().prop(ssp, 'model_export_arma', icon='ARMATURE_DATA')
         if not ssp.model_export_arma:
             return
         if ssp.model_export_arma.name not in context.view_layer.objects.keys():
-            row = layout.row(align=True)
-            row.label(text='Armature not in view layer!', icon='ERROR')
+            layout.row().label(text='Armature not in view layer!', icon='ERROR')
             return
         if '' == ssp.vanilla_nusktb:
-            row = layout.row(align=True)
-            row.label(text='Please select the vanilla .nusktb for the exporter to reference!')
-            row = layout.row(align=True)
-            row.label(text='Impossible to accurately replace an existing ultimate fighter skeleton without it...')
-            row = layout.row(align=True)
-            row.label(text='If you know you really dont need to link it, then go ahead and skip this step and export...')
-            row = layout.row(align=True)
-            row.operator('sub.vanilla_nusktb_selector', icon='FILE', text='Select Vanilla Nusktb')
-        else:
-            new_bones_made = check_if_new_bones_made(ssp.model_export_arma, ssp.vanilla_nusktb)
-            if new_bones_made:
-                if '' == ssp.vanilla_update_prc:
-                    row = layout.row()
-                    row.label(text='New Standard Bones Detected!')
-                    row = layout.row()
-                    row.label(text='An updated "update.prc" file is needed or the skeleton will glitch in game!')
-                    row = layout.row()
-                    row.label(text='The new "update.prc" file does NOT go with the rest of the model files!')
-                    row = layout.row()
-                    row.label(text='The new "update.prc" file goes in the motion folder!(e.g fighter/demon/motion/body/c00/update.prc)')
-                    row = layout.row()
-                    row.label(text='Please select the vanilla "update.prc" file to properly generate the new one.')
-                    row = layout.row()
-                    row.operator('sub.vanilla_update_prc_selector', icon='FILE', text='Select Vanilla update.prc')
-                else:
-                    row = layout.row()
-                    row.label(text=f'Selected reference update.prc: {ssp.vanilla_update_prc}')
-                    row = layout.row()
-                    row.operator('sub.vanilla_update_prc_selector', icon='FILE', text='Re-Select Vanilla update.prc')
-            row = layout.row(align=True)
-            row.label(text='Selected reference .nusktb: ' + ssp.vanilla_nusktb)
-            row = layout.row(align=True)
-            row.operator('sub.vanilla_nusktb_selector', icon='FILE', text='Re-Select Vanilla Nusktb')
+            layout.row().label(text='Select the vanilla .nusktb for the exporter to reference!')
+            row = layout.row()
+            row.alert = True
+            row.label(text='Character Mods need to do this!')
+            layout.row().label(text="If you know you don't need it then export anyways.")
+            layout.row().operator('sub.vanilla_nusktb_selector', icon='FILE', text='Select Vanilla Nusktb')
+            layout.row().operator('sub.model_exporter', icon='EXPORT', text='Export Model Files Anyways...')
+            return
+        
+        new_bones, missing_bones = get_standard_bone_changes(ssp.model_export_arma, ssp.vanilla_nusktb)
+        if any(len(s) > 0 for s in (new_bones, missing_bones)):
+            layout.row().label(text='Change in "Standard Bones" detected!')
+            if len(new_bones) > 0:
+                row = layout.row()
+                row.label(text='New Bones')
+                if len(new_bones) > 5:
+                    row.prop(ssp, 'model_export_show_all_new_bones')
+                box = layout.row().box()
+                for index, new_bone in enumerate(new_bones):
+                    if index > 4 and not ssp.model_export_show_all_new_bones:
+                        box.row().label(text=f'Only showed 5. Total = {len(new_bones)}')
+                        break
+                    box.row().label(text=f'{new_bone}', icon='BONE_DATA')
 
-        row = layout.row(align=True)
-        row.operator('sub.model_exporter', icon='EXPORT', text='Export Model Files to a Folder')
+            if len(missing_bones) > 0:
+                row = layout.row()
+                row.label(text='Missing Bones')
+                if len(missing_bones) > 5:
+                    row.prop(ssp, 'model_export_show_all_missing_bones')
+                box = layout.row().box()
+                for index, missing_bone in enumerate(missing_bones):
+                    if index > 4 and not ssp.model_export_show_all_missing_bones:
+                        box.row().label(text=f'Only showed 5. Total = {len(missing_bones)}')
+                        break
+                    box.row().label(text=f'{missing_bone}', icon='BONE_DATA')
+            layout.row().label(text='A new "update.prc" file is needed or the skeleton will glitch in game!')
+            layout.row().label(text='The new "update.prc" file does NOT go with the rest of the model files!')
+            layout.row().label(text='The new "update.prc" file goes in the motion folder!')
+            layout.row().label(text='example: fighter/demon/motion/body/c00/update.prc')
+            if '' == ssp.vanilla_update_prc:
+                layout.row().label(text='Please select the vanilla "update.prc" file to properly generate the new one.')
+                layout.row().operator('sub.vanilla_update_prc_selector', icon='FILE', text='Select Vanilla update.prc')
+            else:
+                layout.row().label(text=f'Selected reference update.prc: {ssp.vanilla_update_prc}')
+                layout.row().operator('sub.vanilla_update_prc_selector', icon='FILE', text='Re-Select Vanilla update.prc')
+        layout.row().label(text='Selected reference .nusktb: ' + ssp.vanilla_nusktb)
+        layout.row().operator('sub.vanilla_nusktb_selector', icon='FILE', text='Re-Select Vanilla Nusktb')
+
+        layout.row().operator('sub.model_exporter', icon='EXPORT', text='Export Model Files to a Folder')
     
 class SUB_OP_vanilla_update_prc_selector(Operator, ImportHelper):
     bl_idname = 'sub.vanilla_update_prc_selector'
@@ -195,13 +207,22 @@ class SUB_OP_model_exporter(Operator):
         name='Shape Keys',
         description="Ultimate doesn't support shape keys, so specify how to deal with blender shape keys.",
         items=(
-            ('EXPORT_INCLUDE_ORIGINAL', 'Convert "_VIS" Keys to New Meshes, and still export the base mesh', 'Keys containing `_VIS` will become a new mesh, AND the base mesh will ALSO be exported'),
-            ('EXPORT_EXCULDE_ORIGINAL', 'Convert "_VIS" Keys to New Meshes, but no longer export the base mesh', 'Keys containing `_VIS` will become a new mesh, BUT the base mesh will NOT be exported.'),
+            ('EXPORT_INCLUDE_ORIGINAL', 'Convert "VIS" Keys to New Meshes, and still export the base mesh', 'Keys whose name contain `_VIS` (e.g "Happy_VIS") will become a new mesh, AND the base mesh will ALSO be exported'),
+            ('EXPORT_EXCULDE_ORIGINAL', 'Convert "VIS" Keys to New Meshes, but no longer export the base mesh', 'Keys whose name contain `_VIS` (e.g "Happy_VIS") will become a new mesh, BUT the base mesh will NOT be exported.'),
             ('IGNORE_SHAPEKEYS', 'Ignore Shapekeys','Shapekeys will be completely ignored. The current Mix will be ignored. Same as clearing the keys. '),
         ),
         default='IGNORE_SHAPEKEYS',
     )
 
+    ignore_underscore_meshes: EnumProperty(
+        name='Ignore Meshes',
+        description="You can choose to not export some meshes on the model",
+        items=(
+            ('IGNORE_STARTING_UNDERSCORE', 'Ignore Meshes whose name starts with an Underscore "_"', 'For example, a mesh whose name is "_test" will not be exported.'),
+            ('NONE', "Don't Ignore Any Meshes", "Won't ignore any meshes"),
+        ),
+        default='IGNORE_STARTING_UNDERSCORE',
+    )
     use_debug_timer: BoolProperty(
         name='Print debug timing stats',
         description='Prints advance import timing info to the console, useful for development of this plugin.',
@@ -225,7 +246,7 @@ class SUB_OP_model_exporter(Operator):
             export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings,
                     self.optimize_mesh_weights_to_parent_bone, self.armature_position, self.apply_modifiers,
-                    self.split_shape_keys)
+                    self.split_shape_keys, self.ignore_underscore_meshes)
         if self.use_debug_timer:
             stats = pstats.Stats(pr)
             stats.sort_stats(pstats.SortKey.TIME)
@@ -321,7 +342,7 @@ def weights_to_parent_bones(ssbh_mesh_data: ssbh_data_py.mesh_data.MeshData, ssb
 
 def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb,
                 include_numatb, include_nuhlpb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
-                apply_modifiers: str, split_shape_keys: str):
+                apply_modifiers: str, split_shape_keys: str, ignore_underscore_meshes:str):
     # Prepare the scene for export and find the meshes to export.
     arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
     context.view_layer.objects.active = arma
@@ -349,7 +370,10 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
     # Users can avoid errors in generating a file by disabling export for that file.
     if include_numshb or include_numshexb or include_numatb or include_numdlb:
         # Only Mesh Objects, Skip Empty Objects
-        unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] 
+        if ignore_underscore_meshes == 'IGNORE_STARTING_UNDERSCORE':
+            unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0 and not child.name.startswith("_")] 
+        else:
+            unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] 
         # TODO: Is it possible to keep the correct order for non imported meshes?
         # TODO: Should users just re-order meshes in ssbh_editor instead?
         unprocessed_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
@@ -460,7 +484,22 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
                 ssbh_matl_data.save(path)
             except Exception as e:
                 operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-
+    
+    # Create adjb, if needed
+    if include_numdlb and include_numshb and include_numatb:
+        if all(data is not None for data in (ssbh_matl_data, ssbh_modl_data, ssbh_mesh_data)):
+            renormal_meshes: list[tuple[str, int]] = [(entry.mesh_object_name, entry.mesh_object_subindex) for entry in ssbh_modl_data.entries if entry.material_label.startswith("RENORMAL")]
+            if len(renormal_meshes) > 0:
+                ssbh_adj_data = ssbh_data_py.adj_data.AdjData()
+                for mesh_object_index, mesh_object in enumerate(ssbh_mesh_data.objects):
+                    if (mesh_object.name, mesh_object.subindex) in renormal_meshes:
+                        ssbh_adj_data.entries.append(ssbh_data_py.adj_data.AdjEntryData.from_mesh_object(mesh_object_index, mesh_object))
+                path = str(folder.joinpath('model.adjb'))
+                try:
+                    ssbh_adj_data.save(path)
+                except Exception as e:
+                    operator.report({'ERROR'}, f'Failed to save .adjb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+                    
     if arma.animation_data is not None:
         from .import_anim import setup_visibility_drivers
         setup_visibility_drivers(arma)
@@ -1450,16 +1489,16 @@ def get_parent_first_ordered_bones(arma: bpy.types.Object) -> list[bpy.types.Edi
             parent_first_ordered_bones.extend(child for child in bone.children_recursive)
     return parent_first_ordered_bones
 
-def check_if_new_bones_made(arma: bpy.types.Object, vanilla_nusktb: Path) -> bool:
+def get_standard_bone_changes(arma: bpy.types.Object, vanilla_nusktb: Path) -> tuple[set[str], set[str]]:
     vanilla_skel: ssbh_data_py.skel_data.SkelData = read_vanilla_nusktb(vanilla_nusktb, None)
-    vanilla_bone_names = [bone.name for bone in vanilla_skel.bones]
-    for blender_bone in arma.data.bones:
-        blender_bone: bpy.types.Bone
-        if blender_bone.name.startswith('H_') or blender_bone.name.startswith('S_'):
-            continue
-        if blender_bone.name not in vanilla_bone_names:
-            return True
-    return False
+    non_standard_bone_regex = r"^[SH]_"
+    standard_vanilla_bones: set[str] = {bone.name for bone in vanilla_skel.bones if not re.match(non_standard_bone_regex, bone.name)}
+    standard_blender_bones: set[str] = {bone.name for bone in arma.data.bones if not re.match(non_standard_bone_regex, bone.name)}
+
+    new_bones = standard_blender_bones - standard_vanilla_bones
+    missing_bones = standard_vanilla_bones - standard_blender_bones
+
+    return new_bones, missing_bones
 
 def make_update_prc(operator: Operator, context, bones_not_in_vanilla: list[EditBone]):
     ssp: SubSceneProperties = context.scene.sub_scene_properties

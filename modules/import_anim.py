@@ -480,7 +480,7 @@ def get_raw_matrix(bone_to_node, bone, index, node):
     rm = Matrix.Rotation(qr.angle, 4, qr.axis)
     # Blender doesn't have this built in for some reason.
     scale_matrix = Matrix.Diagonal((scale[0], scale[1], scale[2], 1.0))
-    compensate_scale = node.tracks[0].scale_options.compensate_scale
+    compensate_scale = node.tracks[0].compensate_scale
     scale_compensation = get_scale_compensation(bone_to_node, bone, index, compensate_scale)
 
     return tm @ scale_compensation @ rm @ scale_matrix

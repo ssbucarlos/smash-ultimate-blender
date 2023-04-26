@@ -18,14 +18,14 @@ class MeshExData:
 
 
 class MeshObjectGroupData:
-    bounding_sphere: list[float]
+    bounding_sphere: BoundingSphere
     mesh_object_name: str
     mesh_object_full_name: str
     entry_flags: list[MeshObjectGroupData]
 
     def __init__(
         self,
-        bounding_sphere: list[float],
+        bounding_sphere: BoundingSphere,
         mesh_object_name: str,
         mesh_object_full_name: str,
         entry_flags: list[MeshObjectGroupData]
@@ -40,4 +40,15 @@ class EntryFlags:
         self,
         draw_model: bool,
         cast_shadow: bool
+    ) -> None: ...
+
+
+class BoundingSphere:
+    center: list[float]
+    radius: float
+
+    def __init__(
+        self,
+        center: list[float],
+        radius: float
     ) -> None: ...
