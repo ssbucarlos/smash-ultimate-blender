@@ -207,13 +207,22 @@ class SUB_OP_model_exporter(Operator):
         name='Shape Keys',
         description="Ultimate doesn't support shape keys, so specify how to deal with blender shape keys.",
         items=(
-            ('EXPORT_INCLUDE_ORIGINAL', 'Convert "_VIS" Keys to New Meshes, and still export the base mesh', 'Keys containing `_VIS` will become a new mesh, AND the base mesh will ALSO be exported'),
-            ('EXPORT_EXCULDE_ORIGINAL', 'Convert "_VIS" Keys to New Meshes, but no longer export the base mesh', 'Keys containing `_VIS` will become a new mesh, BUT the base mesh will NOT be exported.'),
+            ('EXPORT_INCLUDE_ORIGINAL', 'Convert "VIS" Keys to New Meshes, and still export the base mesh', 'Keys whose name contain `_VIS` (e.g "Happy_VIS") will become a new mesh, AND the base mesh will ALSO be exported'),
+            ('EXPORT_EXCULDE_ORIGINAL', 'Convert "VIS" Keys to New Meshes, but no longer export the base mesh', 'Keys whose name contain `_VIS` (e.g "Happy_VIS") will become a new mesh, BUT the base mesh will NOT be exported.'),
             ('IGNORE_SHAPEKEYS', 'Ignore Shapekeys','Shapekeys will be completely ignored. The current Mix will be ignored. Same as clearing the keys. '),
         ),
         default='IGNORE_SHAPEKEYS',
     )
 
+    ignore_underscore_meshes: EnumProperty(
+        name='Ignore Meshes',
+        description="You can choose to not export some meshes on the model",
+        items=(
+            ('IGNORE_STARTING_UNDERSCORE', 'Ignore Meshes whose name starts with an Underscore "_"', 'For example, a mesh whose name is "_test" will not be exported.'),
+            ('NONE', "Don't Ignore Any Meshes", "Won't ignore any meshes"),
+        ),
+        default='IGNORE_STARTING_UNDERSCORE',
+    )
     use_debug_timer: BoolProperty(
         name='Print debug timing stats',
         description='Prints advance import timing info to the console, useful for development of this plugin.',
@@ -237,7 +246,7 @@ class SUB_OP_model_exporter(Operator):
             export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings,
                     self.optimize_mesh_weights_to_parent_bone, self.armature_position, self.apply_modifiers,
-                    self.split_shape_keys)
+                    self.split_shape_keys, self.ignore_underscore_meshes)
         if self.use_debug_timer:
             stats = pstats.Stats(pr)
             stats.sort_stats(pstats.SortKey.TIME)
@@ -333,7 +342,7 @@ def weights_to_parent_bones(ssbh_mesh_data: ssbh_data_py.mesh_data.MeshData, ssb
 
 def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb,
                 include_numatb, include_nuhlpb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
-                apply_modifiers: str, split_shape_keys: str):
+                apply_modifiers: str, split_shape_keys: str, ignore_underscore_meshes:str):
     # Prepare the scene for export and find the meshes to export.
     arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
     context.view_layer.objects.active = arma
@@ -361,7 +370,10 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
     # Users can avoid errors in generating a file by disabling export for that file.
     if include_numshb or include_numshexb or include_numatb or include_numdlb:
         # Only Mesh Objects, Skip Empty Objects
-        unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] 
+        if ignore_underscore_meshes == 'IGNORE_STARTING_UNDERSCORE':
+            unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0 and not child.name.startswith("_")] 
+        else:
+            unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] 
         # TODO: Is it possible to keep the correct order for non imported meshes?
         # TODO: Should users just re-order meshes in ssbh_editor instead?
         unprocessed_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
