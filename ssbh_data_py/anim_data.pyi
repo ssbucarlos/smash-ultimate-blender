@@ -64,13 +64,15 @@ class TrackData:
     values: Union[list[UvTransform], list[Transform],
                   list[float], list[bool], list[int], list[list[float]]]
     scale_options: ScaleOptions
+    transform_flags: TransformFlags
 
     def __init__(
         self,
         name: str,
         values: Union[list[UvTransform], list[Transform],
                   list[float], list[bool], list[int], list[list[float]]] = [],
-        scale_options: ScaleOptions = ScaleOptions()
+        scale_options: ScaleOptions = ScaleOptions(),
+        transform_flags: TransformFlags = TransformFlags()
     ) -> None: ...
 
 
@@ -112,4 +114,16 @@ class UvTransform:
         rotation: float,
         translate_u: float,
         translate_v: float
+    ) -> None: ...
+
+class TransformFlags:
+    override_translation: bool
+    override_rotation: bool
+    override_scale: bool
+
+    def __init__(
+        self,
+        override_translation: bool = False,
+        override_rotation: bool = False,
+        override_scale: bool = False
     ) -> None: ...

@@ -5,185 +5,61 @@ bl_info = {
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
     'version': (0, 9, 0),
-    'blender': (2, 93, 0),
+    'blender': (3, 3, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
     'tracker_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/issues',
     'special thanks': 'SMG for making SSBH_DATA_PY, which none of this would be possible without. and also the rokoko plugin for being the reference used to make this UI'
 }
 
-import bpy, sys
-
-from . import modules
-from . import operators
-from . import properties
-from . import shaders
-from . import properties
+import bpy
+import sys
+import traceback
+import nodeitems_utils
 
 def check_unsupported_blender_versions():
-    if bpy.app.version < (2, 93):
-        unregister()
-        sys.tracebacklimit = 0 # TODO: research what this does
-        raise ImportError('Cant use a Blender version older than 2.93, please use 2.93 or later')
-         
-classes = [
-    modules.import_model.SUB_PT_import_model,
-    modules.import_model.SUB_OP_select_model_import_folder,
-    modules.import_model.SUB_OP_import_model,
-    modules.export_model.SUB_PT_export_model,
-    modules.export_model.SUB_OP_model_exporter,
-    modules.export_model.SUB_OP_vanilla_nusktb_selector,
-    modules.export_model.SUB_OP_vanilla_update_prc_selector,
-    modules.exo_skel.SUB_OP_build_bone_list,
-    modules.exo_skel.SUB_OP_populate_bone_list,
-    modules.exo_skel.SUB_OP_update_bone_list,
-    modules.exo_skel.SUB_OP_rename_other_bones,
-    modules.exo_skel.SUB_PT_ultimate_exo_skel,
-    modules.exo_skel.BoneListItem,
-    modules.exo_skel.PairableBoneListItem,
-    modules.exo_skel.SUB_UL_BoneList,
-    modules.exo_skel.SUB_OP_make_combined_skeleton,
-    modules.import_anim.SUB_PT_import_anim,
-    modules.import_anim.SUB_OP_import_model_anim,
-    modules.import_anim.SUB_OP_import_camera_anim,
-    modules.export_anim.SUB_PT_export_anim,
-    modules.export_anim.SUB_OP_export_model_anim,
-    modules.export_anim.SUB_OP_export_camera_anim,
-    modules.anim_data.SUB_PT_sub_smush_anim_data_master,
-    modules.anim_data.SUB_PT_sub_smush_anim_data_vis_tracks,
-    modules.anim_data.SUB_PT_sub_smush_anim_data_mat_tracks,
-    modules.anim_data.SUB_UL_vis_track_entries,
-    modules.anim_data.SUB_UL_mat_tracks,
-    modules.anim_data.SUB_UL_mat_properties,
-    modules.anim_data.SUB_OP_mat_track_add,
-    modules.anim_data.SUB_OP_mat_track_remove,
-    modules.anim_data.SUB_OP_mat_property_add,
-    modules.anim_data.SUB_OP_mat_property_remove,
-    modules.anim_data.SUB_OP_mat_drivers_refresh,
-    modules.anim_data.SUB_OP_mat_drivers_remove,
-    modules.anim_data.SUB_OP_vis_entry_add,
-    modules.anim_data.SUB_OP_vis_entry_remove,
-    modules.anim_data.SUB_OP_vis_drivers_refresh,
-    modules.anim_data.SUB_OP_vis_drivers_remove,
-    modules.anim_data.SUB_MT_vis_entry_context_menu,
-    modules.anim_data.SUB_MT_mat_entry_context_menu,
-    modules.anim_data.VisTrackEntry,
-    modules.anim_data.MatTrackProperty,
-    modules.anim_data.MatTrack,
-    modules.anim_data.SubAnimProperties,
-    modules.helper_bone_data.SUB_PT_helper_bone_data_master,
-    modules.helper_bone_data.SUB_PT_helper_bone_data_aim_entries,
-    modules.helper_bone_data.SUB_PT_helper_bone_data_interpolation_entries,
-    modules.helper_bone_data.SUB_PT_helper_bone_data_version_info,
-    modules.helper_bone_data.SUB_UL_aim_entries,
-    modules.helper_bone_data.SUB_UL_interpolation_entries,
-    modules.helper_bone_data.SUB_OP_add_interpolation_entry,
-    modules.helper_bone_data.SUB_OP_remove_interpolation_entry,
-    modules.helper_bone_data.SUB_OP_add_aim_entry,
-    modules.helper_bone_data.SUB_OP_remove_aim_entry,
-    modules.helper_bone_data.SUP_OP_helper_bone_constraints_remove,
-    modules.helper_bone_data.SUP_OP_helper_bone_constraints_refresh,
-    modules.helper_bone_data.SUB_MT_interpolation_entry_context_menu,
-    modules.helper_bone_data.AimEntry,
-    modules.helper_bone_data.InterpolationEntry,
-    modules.helper_bone_data.SubHelperBoneData,
-    modules.reimport_materials.SUB_PT_reimport_materials,
-    modules.reimport_materials.SUB_OP_mat_reimport_directory_selector,
-    modules.reimport_materials.SUB_OP_mat_reimport_numatb_selector,
-    modules.reimport_materials.SUB_OP_reimport_materials,
-    modules.swing.ArmatureSwingBone,
-    modules.swing.ArmatureSwingBoneChildren,
-    modules.swing.SUB_PT_swing_io,
-    modules.swing.SUB_PT_active_bone_swing_info,
-    modules.swing.SUB_PT_swing_data_master,
-    modules.swing.SUB_PT_swing_bone_chains,
-    modules.swing.SUB_UL_swing_bone_chains,
-    modules.swing.SUB_UL_swing_bones,
-    modules.swing.SUB_UL_swing_bone_collisions,
-    modules.swing.SUB_OP_swing_bone_chain_add,
-    modules.swing.SUB_OP_swing_bone_chain_remove,
-    modules.swing.SUB_OP_swing_bone_chain_length_edit,
-    modules.swing.SUB_MT_swing_bone_collision_add,
-    modules.swing.SUB_OP_swing_bone_collision_add_sphere,
-    modules.swing.SUB_OP_swing_bone_collision_add_oval,
-    modules.swing.SUB_OP_swing_bone_collision_add_ellipsoid,
-    modules.swing.SUB_OP_swing_bone_collision_add_capsule,
-    modules.swing.SUB_OP_swing_bone_collision_add_plane,
-    modules.swing.SUB_OP_swing_bone_collision_remove,
-    modules.swing.SUB_PT_swing_data_spheres,
-    modules.swing.SUB_OP_swing_data_sphere_add,
-    modules.swing.SUB_OP_swing_data_sphere_remove,
-    modules.swing.SUB_UL_swing_data_spheres,
-    modules.swing.SUB_MT_swing_data_spheres_context_menu,
-    modules.swing.SUB_PT_swing_data_ovals,
-    modules.swing.SUB_OP_swing_data_oval_add,
-    modules.swing.SUB_OP_swing_data_oval_remove,
-    modules.swing.SUB_UL_swing_data_ovals,
-    modules.swing.SUB_MT_swing_data_ovals_context_menu,
-    modules.swing.SUB_PT_swing_data_ellipsoids,
-    modules.swing.SUB_OP_swing_data_ellipsoid_add,
-    modules.swing.SUB_OP_swing_data_ellipsoid_remove,
-    modules.swing.SUB_UL_swing_data_ellipsoids,
-    modules.swing.SUB_MT_swing_data_ellipsoids_context_menu,
-    modules.swing.SUB_PT_swing_data_capsules,
-    modules.swing.SUB_OP_swing_data_capsule_add,
-    modules.swing.SUB_OP_swing_data_capsule_remove,
-    modules.swing.SUB_UL_swing_data_capsules,
-    modules.swing.SUB_MT_swing_data_capsules_context_menu,
-    modules.swing.SUB_PT_swing_data_planes,
-    modules.swing.SUB_OP_swing_data_plane_add,
-    modules.swing.SUB_OP_swing_data_plane_remove,
-    modules.swing.SUB_UL_swing_data_planes,
-    modules.swing.SUB_MT_swing_data_planes_context_menu,
-    modules.swing.SUB_PT_swing_data_connections,
-    modules.swing.SUB_OP_swing_data_connection_add,
-    modules.swing.SUB_OP_swing_data_connection_remove,
-    modules.swing.SUB_UL_swing_data_connections,
-    modules.swing.SUB_MT_swing_data_connections_context_menu,
-    modules.swing.SUB_OP_swing_import,
-    modules.swing.SUB_OP_swing_export,
-    modules.swing.SwingBoneCollision,
-    modules.swing.SwingBone,
-    modules.swing.SwingBoneChain,
-    modules.swing.Sphere,
-    modules.swing.Oval,
-    modules.swing.Ellipsoid,
-    modules.swing.Capsule,
-    modules.swing.Plane,
-    modules.swing.Connection,
-    modules.swing.SubSwingData,
-    modules.swing.SubSwingBlenderBoneData,
-    modules.misc_panel.SUB_PT_misc,
-    operators.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
-    properties.SubSceneProperties,
-]
+    if bpy.app.version < (3, 3):
+        #sys.tracebacklimit = 0 # TODO: research what this does
+        raise ImportError('Cant use a Blender version older than 3.3, please use 3.3 or later')
 
 def register():
     print('Loading Smash Ultimate Blender Tools...')
 
     check_unsupported_blender_versions()
-
-    for index, cls in enumerate(classes):
-        try:
-            bpy.utils.register_class(cls)
-        except Exception as e:
-            print(f'Error registering class{cls=}, {index=}. Re-raising exception')
-            raise e
+    
+    from . import modules
+    from . import operators
+    from . import properties
+    from . import shader_nodes
+    from . import properties
+    
+    from .bpy_classes import classes
+    for cls in classes:
+        bpy.utils.register_class(cls)
 
     properties.register()
-    shaders.custom_sampler_node.register()
+    
+    nodeitems_utils.register_node_categories('CUSTOM_ULTIMATE_NODES', shader_nodes.node_categories.node_categories)
+
     print('Loaded Smash Ultimate Blender Tools!')
 
 def unregister():
     print('Unloading Smash Ultimate Blender Tools')
 
-    shaders.custom_sampler_node.unregister()
+    from . import modules
+    from . import operators
+    from . import properties
+    from . import shader_nodes
+    from . import properties
+
+    nodeitems_utils.unregister_node_categories('CUSTOM_ULTIMATE_NODES')
+
+    from .bpy_classes import classes
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
-        except RuntimeError:
-            print('So this runtime error happened when unregistering ')
+        except RuntimeError as e:
+            print(f'Failed to unregister smash_ultimate_blender; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
             
-
 if __name__ == '__main__':
     register()

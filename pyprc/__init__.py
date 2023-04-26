@@ -8,12 +8,8 @@ if platform.startswith('win'):
 elif platform.startswith('lin'):
     from .linux.pyprc import *
 elif platform.startswith('dar'):
-    '''
-    pyprc doesnt have arm64 macos support
-    
     try:
+        # The Apple Silicon wheel is built manually from source.
         from .macos.arm64.pyprc import *
     except:
         from .macos.x86.pyprc import *
-    '''
-    from .macos.x86.pyprc import * 

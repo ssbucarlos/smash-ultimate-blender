@@ -20,8 +20,8 @@ class SUB_PT_helper_bone_data_master(Panel):
         shbd: SubHelperBoneData = arma.data.sub_helper_bone_data
         layout = self.layout
 
-class SUB_PT_helper_bone_data_aim_entries(Panel):
-    bl_label = "Aim Entries"
+class SUB_PT_helper_bone_data_aim_constraints(Panel):
+    bl_label = "Aim Constraints"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "data"
@@ -41,22 +41,22 @@ class SUB_PT_helper_bone_data_aim_entries(Panel):
         layout = self.layout
         row = layout.row()
         row.template_list(
-            "SUB_UL_aim_entries",
+            SUB_UL_aim_constraints.__name__,
             "",
             shbd,
-            "aim_entries",
+            "aim_constraints",
             shbd,
-            "active_aim_entry_index",
+            "active_aim_constraint_index",
         )
         col = row.column(align=True)
-        col.operator('sub.add_aim_entry', icon='ADD', text="")
-        col.operator('sub.remove_aim_entry', icon='REMOVE', text="")
+        col.operator(SUB_OP_aim_constraint_add.bl_idname, icon='ADD', text="")
+        col.operator(SUB_OP_aim_constraint_remove.bl_idname, icon='REMOVE', text="")
         col.separator()
-        col.menu('SUB_MT_interpolation_entry_context_menu',icon='DOWNARROW_HLT', text='')
-        active_index = shbd.active_aim_entry_index 
-        if active_index >= len(shbd.aim_entries):
+        col.menu(SUB_MT_helper_bone_constraint_context_menu.__name__,icon='DOWNARROW_HLT', text='')
+        active_index = shbd.active_aim_constraint_index 
+        if active_index >= len(shbd.aim_constraints):
             return
-        active_entry = shbd.aim_entries[active_index]
+        active_entry = shbd.aim_constraints[active_index]
         row = layout.row()
         row.prop(active_entry, 'aim_bone_name1')
         row = layout.row()
@@ -78,8 +78,8 @@ class SUB_PT_helper_bone_data_aim_entries(Panel):
         row = layout.row()
         row.prop(active_entry, 'quat2')
 
-class SUB_PT_helper_bone_data_interpolation_entries(Panel):
-    bl_label = "Interpolation Entries"
+class SUB_PT_helper_bone_data_orient_constraints(Panel):
+    bl_label = "Orient Constraints"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "data"
@@ -99,22 +99,22 @@ class SUB_PT_helper_bone_data_interpolation_entries(Panel):
         layout = self.layout
         row = layout.row()
         row.template_list(
-            "SUB_UL_interpolation_entries",
+            SUB_UL_orient_constraints.__name__,
             "",
             shbd,
-            "interpolation_entries",
+            "orient_constraints",
             shbd,
-            "active_interpolation_entry_index",
+            "active_orient_constraint_index",
         )
         col = row.column(align=True)
-        col.operator('sub.add_interpolation_entry', icon='ADD', text="")
-        col.operator('sub.remove_interpolation_entry', icon='REMOVE', text="")
+        col.operator(SUB_OP_orient_constraint_add.bl_idname, icon='ADD', text="")
+        col.operator(SUB_OP_orient_constraint_remove.bl_idname, icon='REMOVE', text="")
         col.separator()
-        col.menu('SUB_MT_interpolation_entry_context_menu',icon='DOWNARROW_HLT', text='')
-        active_index = shbd.active_interpolation_entry_index 
-        if active_index >= len(shbd.interpolation_entries):
+        col.menu(SUB_MT_helper_bone_constraint_context_menu.__name__, icon='DOWNARROW_HLT', text='')
+        active_index = shbd.active_orient_constraint_index 
+        if active_index >= len(shbd.orient_constraints):
             return
-        active_entry = shbd.interpolation_entries[active_index]
+        active_entry = shbd.orient_constraints[active_index]
         row = layout.row()
         row.prop(active_entry, 'parent_bone_name1')
         row = layout.row()
@@ -161,7 +161,7 @@ class SUB_PT_helper_bone_data_version_info(Panel):
         row = layout.row()
         row.prop(shbd, 'major_version')
 
-class SUB_UL_aim_entries(UIList):
+class SUB_UL_aim_constraints(UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         obj = active_data
         entry = item
@@ -172,7 +172,7 @@ class SUB_UL_aim_entries(UIList):
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
-class SUB_UL_interpolation_entries(UIList):
+class SUB_UL_orient_constraints(UIList):
     def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         obj = active_data
         entry = item
@@ -183,66 +183,66 @@ class SUB_UL_interpolation_entries(UIList):
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
-class SUB_OP_add_interpolation_entry(Operator):
-    bl_idname = 'sub.add_interpolation_entry'
-    bl_label = 'Add Interpolation Entry'
+class SUB_OP_orient_constraint_add(Operator):
+    bl_idname = 'sub.orient_constraint_add'
+    bl_label = 'Add Orient Constraint'
 
     def execute(self, context):
         shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
-        entries = shbd.interpolation_entries
-        entry: InterpolationEntry = entries.add()
+        entries = shbd.orient_constraints
+        entry: OrientConstraint = entries.add()
         entry.name = 'nuHelperBoneRotateInterp999'
         # Entries are not gauranteed to be unique so find the index
         insertion_index = len(entries) - 1
-        shbd.active_interpolation_entry_index = insertion_index
+        shbd.active_orient_constraint_index = insertion_index
         return {'FINISHED'} 
 
-class SUB_OP_remove_interpolation_entry(Operator):
-    bl_idname = 'sub.remove_interpolation_entry'
-    bl_label = 'Remove Interpolation Entry'
+class SUB_OP_orient_constraint_remove(Operator):
+    bl_idname = 'sub.orient_constraint_remove'
+    bl_label = 'Remove Orient Constraint'
 
     @classmethod
     def poll(cls, context):
         shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
-        return len(shbd.interpolation_entries) > 0
+        return len(shbd.orient_constraints) > 0
 
     def execute(self, context):
         shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
-        entries = shbd.interpolation_entries
-        entries.remove(shbd.active_interpolation_entry_index)
-        i = shbd.active_interpolation_entry_index
-        shbd.active_interpolation_entry_index= max(0 , min(i-1, len(entries)-1))
+        entries = shbd.orient_constraints
+        entries.remove(shbd.active_orient_constraint_index)
+        i = shbd.active_orient_constraint_index
+        shbd.active_orient_constraint_index= max(0 , min(i-1, len(entries)-1))
         return {'FINISHED'} 
 
-class SUB_OP_add_aim_entry(Operator):
-    bl_idname = 'sub.add_aim_entry'
-    bl_label = 'Add Aim Entry'
+class SUB_OP_aim_constraint_add(Operator):
+    bl_idname = 'sub.aim_constraint_add'
+    bl_label = 'Add Aim Constraint'
 
     def execute(self, context):
         shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
-        entries = shbd.aim_entries
-        entry: AimEntry = entries.add()
+        entries = shbd.aim_constraints
+        entry: AimConstraint = entries.add()
         entry.name = 'nuHelperBoneRotateAim999'
         # Entries are not gauranteed to be unique so find the index
         insertion_index = len(entries) - 1
-        shbd.active_aim_entry_index = insertion_index
+        shbd.active_aim_constraint_index = insertion_index
         return {'FINISHED'} 
 
-class SUB_OP_remove_aim_entry(Operator):
-    bl_idname = 'sub.remove_aim_entry'
-    bl_label = 'Remove Aim Entry'
+class SUB_OP_aim_constraint_remove(Operator):
+    bl_idname = 'sub.aim_constraint_remove'
+    bl_label = 'Remove Aim Constraint'
 
     @classmethod
     def poll(cls, context):
         shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
-        return len(shbd.aim_entries) > 0
+        return len(shbd.aim_constraints) > 0
 
     def execute(self, context):
         shbd: SubHelperBoneData = context.object.data.sub_helper_bone_data
-        entries = shbd.aim_entries
-        entries.remove(shbd.active_aim_entry_index)
-        i = shbd.active_aim_entry_index
-        shbd.active_aim_entry_index = max(0 , min(i-1, len(entries)-1))
+        entries = shbd.aim_constraints
+        entries.remove(shbd.active_aim_constraint_index)
+        i = shbd.active_aim_constraint_index
+        shbd.active_aim_constraint_index = max(0 , min(i-1, len(entries)-1))
         return {'FINISHED'} 
 
 class SUP_OP_helper_bone_constraints_remove(Operator):
@@ -265,15 +265,15 @@ class SUP_OP_helper_bone_constraints_refresh(Operator):
         setup_helper_bone_constraints(context.object)
         return {'FINISHED'} 
 
-class SUB_MT_interpolation_entry_context_menu(Menu):
-    bl_label = "Interpolation Entry Specials"
+class SUB_MT_helper_bone_constraint_context_menu(Menu):
+    bl_label = "Helper Bone Constraint Specials"
 
     def draw(self, context):
         layout = self.layout
         layout.operator('sub.helper_bone_constraints_refresh', icon='FILE_REFRESH', text='Refresh Helper Bone Constraints')
         layout.operator('sub.helper_bone_constraints_remove', icon='X', text='Remove Helper Bone Constraints')
 
-class AimEntry(PropertyGroup):
+class AimConstraint(PropertyGroup):
     name: StringProperty(default="")
     aim_bone_name1: StringProperty(default="")
     aim_bone_name2: StringProperty(default="")
@@ -281,8 +281,8 @@ class AimEntry(PropertyGroup):
     aim_type2: StringProperty(default="")
     target_bone_name1: StringProperty(default="")
     target_bone_name2: StringProperty(default="")
-    unk1: IntProperty(default=0) # always 0, dont expose in UI
-    unk2: IntProperty(default=1) # always 1, dont expose in UI
+    #unk1: IntProperty(default=0) # always 0, dont expose in UI
+    #unk2: IntProperty(default=1) # always 1, dont expose in UI
     aim: FloatVectorProperty(
         size=3,
         subtype='XYZ',
@@ -303,14 +303,14 @@ class AimEntry(PropertyGroup):
         subtype='QUATERNION',
         default=(0.0, 0.0, 0.0, 0.0),
     ) # unks 13 14 15 16
-    unk17: FloatProperty(default=0.0) # always 0, dont expose in UI
-    unk18: FloatProperty(default=0.0) # always 0, dont expose in UI
-    unk19: FloatProperty(default=0.0) # always 0, dont expose in UI
-    unk20: FloatProperty(default=0.0) # always 0, dont expose in UI
-    unk21: FloatProperty(default=0.0) # always 0, dont expose in UI
-    unk22: FloatProperty(default=0.0) # always 0, dont expose in UI
+    #unk17: FloatProperty(default=0.0) # always 0, dont expose in UI
+    #unk18: FloatProperty(default=0.0) # always 0, dont expose in UI
+    #unk19: FloatProperty(default=0.0) # always 0, dont expose in UI
+    #unk20: FloatProperty(default=0.0) # always 0, dont expose in UI
+    #unk21: FloatProperty(default=0.0) # always 0, dont expose in UI
+    #unk22: FloatProperty(default=0.0) # always 0, dont expose in UI
 
-class InterpolationEntry(PropertyGroup):
+class OrientConstraint(PropertyGroup):
     name: StringProperty(default="")
     parent_bone_name1: StringProperty(name='parent_bone_name1', default="")
     parent_bone_name2: StringProperty(name='parent_bone_name2', default="")
@@ -352,28 +352,28 @@ class SubHelperBoneData(PropertyGroup):
         name='Minor Version',
         default=1,
     )
-    aim_entries: CollectionProperty(
-        type=AimEntry,
+    aim_constraints: CollectionProperty(
+        type=AimConstraint,
     )
-    interpolation_entries: CollectionProperty(
-        type=InterpolationEntry,
+    orient_constraints: CollectionProperty(
+        type=OrientConstraint,
     )
     # The below are just for the UI
-    active_aim_entry_index: IntProperty(name='Active Aim Entry Index', default=0)
-    active_interpolation_entry_index:  IntProperty(name='Active Interpolation Entry Index', default=0)
+    active_aim_constraint_index: IntProperty(name='Active Aim Entry Index', default=0)
+    active_orient_constraint_index:  IntProperty(name='Active Interpolation Entry Index', default=0)
 
 def copy_helper_bone_data(src_arma: bpy.types.Object, dst_arma: bpy.types.Object):
     src_shbd:SubHelperBoneData = src_arma.data.sub_helper_bone_data
     dst_shbd:SubHelperBoneData = dst_arma.data.sub_helper_bone_data
     dst_shbd.major_version = src_shbd.major_version
     dst_shbd.minor_version = src_shbd.minor_version
-    for src_aim_entry in src_shbd.aim_entries:
-        dst_aim_entry = dst_shbd.aim_entries.add()
+    for src_aim_entry in src_shbd.aim_constraints:
+        dst_aim_entry = dst_shbd.aim_constraints.add()
         for k,v in src_aim_entry.items():
             dst_aim_entry[k] = v
-    for src_interpolation_entry in src_shbd.interpolation_entries:
-        dst_interpolation_entry = dst_shbd.interpolation_entries.add()
+    for src_interpolation_entry in src_shbd.orient_constraints:
+        dst_interpolation_entry = dst_shbd.orient_constraints.add()
         for k,v in src_interpolation_entry.items():
             dst_interpolation_entry[k] = v
-    dst_shbd.active_aim_entry_index = src_shbd.active_aim_entry_index
-    dst_shbd.active_interpolation_entry_index = src_shbd.active_interpolation_entry_index
+    dst_shbd.active_aim_constraint_index = src_shbd.active_aim_constraint_index
+    dst_shbd.active_orient_constraint_index = src_shbd.active_orient_constraint_index

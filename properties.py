@@ -1,19 +1,22 @@
 import bpy
 import re
-from bpy.types import Scene, Object, Armature, PropertyGroup, Camera, Bone
+from bpy.types import Scene, Object, Armature, PropertyGroup, Camera, Material, Bone
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty
+from .modules.material import sub_matl_data
 from .modules import exo_skel, import_anim, helper_bone_data, anim_data, export_model, swing
-
 def register():
     Armature.sub_anim_properties = PointerProperty(
-        type=anim_data.SubAnimProperties
+        type=anim_data.SUB_PG_sub_anim_data
     )
     Scene.sub_scene_properties = PointerProperty(
         type=SubSceneProperties
     )
     Armature.sub_helper_bone_data = PointerProperty(
         type=helper_bone_data.SubHelperBoneData
+    )
+    Material.sub_matl_data = PointerProperty(
+        type=sub_matl_data.SUB_PG_sub_matl_data
     )
     Armature.sub_swing_data = PointerProperty(
         type=swing.SubSwingData
@@ -23,30 +26,6 @@ def register():
     )
 
 class SubSceneProperties(PropertyGroup):
-    anim_import_arma: PointerProperty(
-        name='Armature',
-        description='Select the Armature',
-        type=Object,
-        poll=exo_skel.poll_armatures,  
-    )
-    anim_export_arma: PointerProperty(
-        name='Armature',
-        description='Select the Armature',
-        type=Object,
-        poll=exo_skel.poll_armatures,   
-    )
-    anim_import_camera: PointerProperty(
-        name='Camera',
-        description='Select the Camera',
-        type=Object,
-        poll=import_anim.poll_cameras,
-    )
-    anim_export_camera: PointerProperty(
-        name='Camera',
-        description='Select the Camera',
-        type=Object,
-        poll=import_anim.poll_cameras,
-    )
     model_export_arma: PointerProperty(
         name='Armature',
         description='Select the Armature',

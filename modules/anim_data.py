@@ -55,14 +55,17 @@ class SUB_PT_sub_smush_anim_data_vis_tracks(Panel):
             "vis_track_entries",
             arma.sub_anim_properties,
             "active_vis_track_index",
-            rows=3,
+            rows=5,
             maxrows=10,
             )
         col = row.column(align=True)
-        col.operator('sub.vis_entry_add', icon='ADD', text="")
-        col.operator('sub.vis_entry_remove', icon='REMOVE', text="")
+        col.operator(SUB_OP_vis_entry_add.bl_idname, icon='ADD', text="")
+        col.operator(SUB_OP_vis_entry_remove.bl_idname, icon='REMOVE', text="")
         col.separator()
         col.menu("SUB_MT_vis_entry_context_menu", icon='DOWNARROW_HLT', text="")
+        col.separator()
+        col.operator(SUB_OP_vis_entry_shift.bl_idname, icon='TRIA_UP', text='').shift_direction = 'UP'
+        col.operator(SUB_OP_vis_entry_shift.bl_idname, icon='TRIA_DOWN', text='').shift_direction = 'DOWN'
 
 class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
     bl_label = "Ultimate Material Tracks"
@@ -128,7 +131,11 @@ class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
                 if amtpi < len(arma.sub_anim_properties.mat_tracks[amti].properties):
                     ap = arma.sub_anim_properties.mat_tracks[amti].properties[amtpi]
                     if ap.sub_type == 'VECTOR':
-                        c.prop(ap, "custom_vector", text="", emboss=False)
+                        c.prop(ap, "custom_vector", text="")
+                        c.prop(ap, "custom_vector", text="", index=0)
+                        c.prop(ap, "custom_vector", text="", index=1)
+                        c.prop(ap, "custom_vector", text="", index=2)
+                        c.prop(ap, "custom_vector", text="", index=3)
                     elif ap.sub_type == 'FLOAT':
                         c.prop(ap, "custom_float", text="", emboss=False)
                     elif ap.sub_type == 'BOOL':
@@ -151,6 +158,8 @@ class SUB_PT_sub_smush_anim_data_mat_tracks(Panel):
         sr = split.row(align=True)
         sr.operator(SUB_OP_mat_property_add.bl_idname, text='+')
         sr.operator(SUB_OP_mat_property_remove.bl_idname, text='-')
+        sr.operator(SUB_OP_mat_property_shift.bl_idname, icon='TRIA_UP', text='').shift_direction = 'UP'
+        sr.operator(SUB_OP_mat_property_shift.bl_idname, icon='TRIA_DOWN', text='').shift_direction = 'DOWN'
         # Sub 3
         split = split.split()
         sr = split.row(align=True)
@@ -214,7 +223,7 @@ class SUB_OP_mat_track_remove(Operator):
         i = sap.active_mat_track_index
         sap.active_mat_track_index = min(max(0,i-1),len(sap.mat_tracks))
         # Refresh Material Drivers
-        remove_material_drivers(context.object)
+        remove_anim_material_drivers(context.object)
         from .import_anim import setup_material_drivers
         setup_material_drivers(context.object)
         return {'FINISHED'}
@@ -253,6 +262,11 @@ class SUB_OP_mat_property_add(Operator):
     def invoke(self, context, event):
         context.window_manager.invoke_search_popup(self)
         return {'RUNNING_MODAL'}
+
+def refresh_material_drivers(context):
+    from .import_anim import setup_material_drivers
+    remove_anim_material_drivers(context.object)
+    setup_material_drivers(context.object)
 
 class SUB_OP_mat_property_remove(Operator):
     bl_idname = 'sub.mat_prop_remove'
@@ -307,11 +321,80 @@ class SUB_OP_mat_property_remove(Operator):
         i = amt.active_property_index
         amt.active_property_index = min(max(0,i-1), len(amt.properties)-1)
         # Refresh Material Drivers
-        remove_material_drivers(context.object)
-        from .import_anim import setup_material_drivers
-        setup_material_drivers(context.object)
+        refresh_material_drivers(context)
         return {'FINISHED'}
 
+def change_mat_property_fcurve_target_index(fcurve, new_property_index):
+    regex = r"sub_anim_properties\.mat_tracks\[(\d+)\]\.properties\[(\d+)\](\.\w+)"
+    matches = re.match(regex, fcurve.data_path)
+    if matches is None:
+        return
+    if len(matches.groups()) < 3:
+        return
+    mat_track_index = int(matches.groups()[0])
+    _property_index = int(matches.groups()[1])
+    suffix = matches.groups()[2]
+    new_data_path = f"sub_anim_properties.mat_tracks[{mat_track_index}].properties[{new_property_index}]{suffix}"
+    fcurve.data_path = new_data_path
+
+def swap_mat_property_fcurve_target_indices(fcurves, sap, index_a, index_b):
+    amti = sap.active_mat_track_index
+
+    a_data_path = f"sub_anim_properties.mat_tracks[{amti}].properties[{index_a}]"
+    a_fcurves = [fc for fc in fcurves if fc.data_path.startswith(a_data_path)]
+    
+    b_data_path = f"sub_anim_properties.mat_tracks[{amti}].properties[{index_b}]"
+    b_fcurves = [fc for fc in fcurves if fc.data_path.startswith(b_data_path)]
+    
+    for fc in a_fcurves:
+        change_mat_property_fcurve_target_index(fc, index_b)
+    for fc in b_fcurves:
+        change_mat_property_fcurve_target_index(fc, index_a)
+          
+class SUB_OP_mat_property_shift(Operator):
+    bl_idname = 'sub.mat_property_shift'
+    bl_label = 'Shift Mat Propery'
+
+    shift_direction: EnumProperty(
+        name='Shift Direction',
+        description='The direction to shift',
+        items=[('UP', 'Up', 'Shift it up'),
+                ('DOWN', 'Down', 'Shift it down')])
+    
+    @classmethod
+    def poll(cls, context):
+        sap = context.object.data.sub_anim_properties
+        if len(sap.mat_tracks) >= 1:
+            active_track = sap.mat_tracks[sap.active_mat_track_index]
+            if len(active_track.properties) >= 2:
+                return True
+        return False
+    
+    def execute(self, context):
+        sap = context.object.data.sub_anim_properties
+        active_mat = sap.mat_tracks[sap.active_mat_track_index]
+        active_property_index = active_mat.active_property_index
+            
+        if (self.shift_direction == 'UP' and active_property_index == 0) or \
+           (self.shift_direction == 'DOWN' and active_property_index == len(active_mat.properties)-1):
+                return {'CANCELLED'}
+        
+        other_index = active_property_index-1 if self.shift_direction == 'UP' else active_property_index+1
+            
+        # Getting fcurves without throwing an exception is hard, so rather than do 3 "is not None" checks do one "try"    
+        try:
+            fcurves = context.object.data.animation_data.action.fcurves
+        except AttributeError: # Theres no fcurves
+            pass
+        else: # Theres fcurves
+            swap_mat_property_fcurve_target_indices(fcurves, sap, active_property_index, other_index)
+
+        active_mat.properties.move(active_property_index, other_index)
+        active_mat.active_property_index = other_index
+        # Refresh Material Drivers
+        refresh_material_drivers(context)
+        return {'FINISHED'}
+    
 class SUB_OP_vis_entry_add(Operator):
     bl_idname = 'sub.vis_entry_add'
     bl_label = 'Add Vis Track Entry'
@@ -325,6 +408,11 @@ class SUB_OP_vis_entry_add(Operator):
         sap.active_vis_track_index = entries.find(entry.name)
         return {'FINISHED'} 
 
+def refresh_visibility_drivers(context):
+    from .import_anim import setup_visibility_drivers
+    remove_visibility_drivers(context)
+    setup_visibility_drivers(context.object)
+
 class SUB_OP_vis_entry_remove(Operator):
     bl_idname = 'sub.vis_entry_remove'
     bl_label = 'Remove Vis Track Entry'
@@ -336,46 +424,78 @@ class SUB_OP_vis_entry_remove(Operator):
 
     def execute(self, context):
         sap = context.object.data.sub_anim_properties
-        # Find matching Fcurve and Remove
+        active_vis_track_index = sap.active_vis_track_index
+        
         try:
             fcurves = context.object.data.animation_data.action.fcurves
         except AttributeError:
-            sap.vis_track_entries.remove(sap.active_vis_track_index)
-            i = sap.active_vis_track_index
-            sap.active_vis_track_index = min(max(0,i-1),len(sap.vis_track_entries))
-            return {'FINISHED'}
-        for fc in fcurves:
-            avti = sap.active_vis_track_index
-            if fc.data_path.startswith(f"sub_anim_properties.vis_track_entries[{avti}]"):
-                fcurves.remove(fc)
-        fcurves = context.object.data.animation_data.action.fcurves
-        for fc in fcurves:
-            regex = r"sub_anim_properties\.vis_track_entries\[(\d+)\]\.value"
-            matches = re.match(regex, fc.data_path)
-            if matches is None:
-                continue
-            cvtei = int(matches.groups()[0])
-            avtei = sap.active_vis_track_index
-            if cvtei < avtei:
-                continue
-            new_data_path = f'sub_anim_properties.vis_track_entries[{cvtei-1}].value'
-            fc.data_path = new_data_path
-        sap.vis_track_entries.remove(sap.active_vis_track_index)
-        i = sap.active_vis_track_index
+            pass
+        else:
+            fcurve_to_remove = fcurves.find(f'sub_anim_properties.vis_track_entries[{active_vis_track_index}].value')
+            if fcurve_to_remove is not None:
+                fcurves.remove(fcurve_to_remove)
+            for index in range(active_vis_track_index+1, len(sap.vis_track_entries)):
+                fcurve_to_decrement = fcurves.find(f'sub_anim_properties.vis_track_entries[{index}].value')
+                if fcurve_to_decrement is not None:
+                    fcurve_to_decrement.data_path = f'sub_anim_properties.vis_track_entries[{index-1}].value'
+        
+        sap.vis_track_entries.remove(active_vis_track_index)
+        i = active_vis_track_index
         sap.active_vis_track_index = min(max(0, i-1), len(sap.vis_track_entries))
 
-        remove_visibility_drivers(context)
-        from .import_anim import setup_visibility_drivers
-        setup_visibility_drivers(context.object)        
+        refresh_visibility_drivers(context)       
         return {'FINISHED'} 
+    
+class SUB_OP_vis_entry_shift(Operator):
+    bl_idname = 'sub.vis_entry_shift'
+    bl_label = 'Shift Vis Entry'
+
+    shift_direction: EnumProperty(
+        name='Shift Direction',
+        description='The direction to shift',
+        items=[('UP', 'Up', 'Shift it up'),
+                ('DOWN', 'Down', 'Shift it down')])
+    
+    @classmethod
+    def poll(cls, context):
+        sap = context.object.data.sub_anim_properties
+        return len(sap.vis_track_entries) > 1
+    
+    def execute(self, context):
+        sap = context.object.data.sub_anim_properties
+        vis_entries = sap.vis_track_entries
+        active_vis_entry_index = sap.active_vis_track_index
+            
+        if (self.shift_direction == 'UP' and active_vis_entry_index == 0) or \
+           (self.shift_direction == 'DOWN' and active_vis_entry_index == len(vis_entries)-1):
+                return {'CANCELLED'}
+        
+        other_index = active_vis_entry_index-1 if self.shift_direction == 'UP' else active_vis_entry_index+1
+            
+        # Getting fcurves without throwing an exception is hard, so rather than do 3 "is not None" checks do one "try"    
+        try:
+            fcurves = context.object.data.animation_data.action.fcurves
+        except AttributeError: # Theres no fcurves
+            pass
+        else: # Theres fcurves
+            active_fcurve = fcurves.find(f"sub_anim_properties.vis_track_entries[{active_vis_entry_index}].value")
+            other_fcurve = fcurves.find(f"sub_anim_properties.vis_track_entries[{other_index}].value")
+            if active_fcurve is not None:
+                active_fcurve.data_path = f"sub_anim_properties.vis_track_entries[{other_index}].value"
+            if other_fcurve is not None:
+                other_fcurve.data_path = f"sub_anim_properties.vis_track_entries[{active_vis_entry_index}].value"
+
+        vis_entries.move(active_vis_entry_index, other_index)
+        sap.active_vis_track_index = other_index
+        refresh_visibility_drivers(context)
+        return {'FINISHED'}
 
 class SUB_OP_vis_drivers_refresh(Operator):
     bl_idname = 'sub.vis_drivers_refresh'
     bl_label = 'Refresh Visibility Drivers'
 
     def execute(self, context):
-        from .import_anim import setup_visibility_drivers
-        setup_visibility_drivers(context.object)
+        refresh_visibility_drivers(context)
         return {'FINISHED'} 
 
 class SUB_OP_vis_drivers_remove(Operator):
@@ -384,7 +504,81 @@ class SUB_OP_vis_drivers_remove(Operator):
 
     def execute(self, context):
         remove_visibility_drivers(context)
-        return {'FINISHED'}    
+        return {'FINISHED'}
+
+class SUB_OP_auto_fill_vis_entries(Operator):
+    bl_idname = 'sub.auto_fill_vis_entries'
+    bl_label = 'Auto Fill Vis Entries'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+
+    def execute(self, context):
+        arma: bpy.types.Object = context.object
+        mesh_names = {child.name for child in arma.children if child.type == 'MESH'}
+        vis_names: set[str] = set()
+        for name in mesh_names:
+            regex = r"(.*)\_VIS\_.*"
+            match = re.match(regex, name)
+            if match:
+                vis_names.add(match.groups()[0])
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
+        for vis_name in vis_names:
+            if vis_name not in sap.vis_track_entries:
+                new_entry: SUB_PG_vis_track_entry = sap.vis_track_entries.add()
+                new_entry.name = vis_name
+                new_entry.value = True
+        return {'FINISHED'}
+
+class SUB_OP_set_all_vis_entries_false(Operator):
+    bl_idname = 'sub.set_all_vis_entries_false'
+    bl_label = 'Set All Vis Entries False'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+    
+    def execute(self, context):
+        for vis_entry in context.object.data.sub_anim_properties.vis_track_entries:
+            vis_entry.value = False
+        return {'FINISHED'}
+
+class SUB_OP_set_all_vis_entries_true(Operator):
+    bl_idname = 'sub.set_all_vis_entries_true'
+    bl_label = 'Set All Vis Entries True'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+    
+    def execute(self, context):
+        for vis_entry in context.object.data.sub_anim_properties.vis_track_entries:
+            vis_entry.value = True
+        return {'FINISHED'}
+
+class SUB_OP_insert_all_vis_entry_keyframes(Operator):
+    bl_idname = 'sub.insert_all_vis_entry_keyframes'
+    bl_label = 'Insert All Vis Entry Keyframes'
+
+    @classmethod
+    def poll(cls, context):
+        if not context.object:
+            return False
+        return context.object.type == 'ARMATURE'
+    
+    def execute(self, context):
+        arma: bpy.types.Object = context.object
+        sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
+        for index, vis_entry in enumerate(sap.vis_track_entries):
+            arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{index}].value', group='Visibility', options={'INSERTKEY_NEEDED'})
+        return {'FINISHED'}
 
 def remove_visibility_drivers(context):
     arma = context.object
@@ -397,23 +591,27 @@ def remove_visibility_drivers(context):
             if any(d.data_path == s for s in ['hide_viewport', 'hide_render']):
                 drivers.remove(d)
 
-def remove_material_drivers(arma:bpy.types.Object):
+def remove_anim_material_drivers(arma:bpy.types.Object):
+    from .material.sub_matl_data import SUB_PG_sub_matl_data
+    from .material.create_blender_materials_from_matl import setup_sub_matl_data_node_drivers
     mesh_children = [child for child in arma.children if child.type == 'MESH']
     materials = {material_slot.material for mesh in mesh_children for material_slot in mesh.material_slots}
     for material in materials:
         for node in material.node_tree.nodes:
-            for input in node.inputs:
-                if hasattr(input, 'default_value'):
-                    input.driver_remove('default_value')
+            for output in node.outputs:
+                if hasattr(output, 'default_value'):
+                    output.driver_remove('default_value')
+        
+        sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+        if sub_matl_data is not None:
+            setup_sub_matl_data_node_drivers(sub_matl_data)    
 
 class SUB_OP_mat_drivers_refresh(Operator):
     bl_idname = 'sub.mat_drivers_refresh'
     bl_label = 'Refresh Material Drivers'   
 
     def execute(self, context):
-        remove_material_drivers(context.object)
-        from .import_anim import setup_material_drivers
-        setup_material_drivers(context.object)
+        refresh_material_drivers(context)
         return {'FINISHED'}  
 
 class SUB_OP_mat_drivers_remove(Operator):
@@ -421,7 +619,7 @@ class SUB_OP_mat_drivers_remove(Operator):
     bl_label = 'Remove Material Drivers'
 
     def execute(self, context):
-        remove_material_drivers(context.object)
+        remove_anim_material_drivers(context.object)
         return {'FINISHED'}  
 
 class SUB_MT_vis_entry_context_menu(Menu):
@@ -431,7 +629,13 @@ class SUB_MT_vis_entry_context_menu(Menu):
         layout = self.layout
         layout.operator('sub.vis_drivers_refresh', icon='FILE_REFRESH', text='Refresh Visibility Drivers')
         layout.operator('sub.vis_drivers_remove', icon='X', text='Remove Visibility Drivers')
-
+        layout.separator()
+        layout.operator('sub.auto_fill_vis_entries', icon='SHADERFX', text='Autofill Visibility Entries')
+        layout.operator('sub.insert_all_vis_entry_keyframes', icon='KEY_HLT', text='Insert Keyframes for All Entries')
+        layout.separator()
+        layout.operator('sub.set_all_vis_entries_false', icon='HIDE_ON', text='Set All Entries Off')
+        layout.operator('sub.set_all_vis_entries_true', icon='HIDE_OFF', text='Set All Entries On')
+        
 class SUB_MT_mat_entry_context_menu(Menu):
     bl_label = "Mat Entry Specials"
 
@@ -586,14 +790,14 @@ def dummy_update(self, context):
     '''
     pass
 
-class VisTrackEntry(PropertyGroup):
+class SUB_PG_vis_track_entry(PropertyGroup):
     name: StringProperty(
         name="Vis Name",
         default="Unknown",
         update=vis_track_name_update,)
-    value: BoolProperty(name="Visible", default=False)
+    value: BoolProperty(name="Visible", default=False, update=dummy_update)
 
-class MatTrackProperty(PropertyGroup):
+class SUB_PG_mat_track_property(PropertyGroup):
     name: StringProperty(
         name="Property Name",
         default="Unknown",
@@ -603,22 +807,22 @@ class MatTrackProperty(PropertyGroup):
         description='CustomVector or CustomFloat or CustomBool',
         items=mat_sub_types, 
         default='VECTOR',)
-    custom_vector: FloatVectorProperty(name='Custom Vector', size=4, update=dummy_update)
+    custom_vector: FloatVectorProperty(name='Custom Vector', size=4, update=dummy_update, subtype='COLOR_GAMMA', soft_min=0.0, soft_max=1.0)
     custom_bool: BoolProperty(name='Custom Bool')
     custom_float: FloatProperty(name='Custom Float')
     pattern_index: IntProperty(name='Pattern Index', subtype='UNSIGNED')
     texture_transform: FloatVectorProperty(name='Texture Transform', size=5)
 
-class MatTrack(PropertyGroup):
+class SUB_PG_mat_track(PropertyGroup):
     name: StringProperty(
         name="Material Name",
         default="Unknown",
         update=mat_track_name_update,)
-    properties: CollectionProperty(type=MatTrackProperty)
-    active_property_index: IntProperty(name='Active Mat Property Index', default=0)
+    properties: CollectionProperty(type=SUB_PG_mat_track_property)
+    active_property_index: IntProperty(name='Active Mat Property Index', default=0, options={'HIDDEN'})
 
-class SubAnimProperties(PropertyGroup):
-    vis_track_entries: CollectionProperty(type=VisTrackEntry)
-    active_vis_track_index: IntProperty(name='Active Vis Track Index', default=0)
-    mat_tracks: CollectionProperty(type=MatTrack)
-    active_mat_track_index: IntProperty(name='Active Mat Track Index', default=0)
+class SUB_PG_sub_anim_data(PropertyGroup):
+    vis_track_entries: CollectionProperty(type=SUB_PG_vis_track_entry)
+    active_vis_track_index: IntProperty(name='Active Vis Track Index', default=0, options={'HIDDEN'})
+    mat_tracks: CollectionProperty(type=SUB_PG_mat_track)
+    active_mat_track_index: IntProperty(name='Active Mat Track Index', default=0, options={'HIDDEN'})
