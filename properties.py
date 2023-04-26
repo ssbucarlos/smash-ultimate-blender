@@ -27,6 +27,16 @@ class SubSceneProperties(PropertyGroup):
         poll=exo_skel.poll_armatures,
         update=export_model.model_export_arma_update,
     )
+    model_export_show_all_new_bones: BoolProperty(
+        name='Show All',
+        description='True if more than the first 5 bones should be displayed',
+        default=False,
+    )
+    model_export_show_all_missing_bones: BoolProperty(
+        name='Show All',
+        description='True if more than the first 5 bones should be displayed',
+        default=False,
+    )
     vanilla_nusktb: StringProperty(
         name='Vanilla .NUSKTB file path',
         description='The path to the vanilla nusktb file',
