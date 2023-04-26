@@ -484,7 +484,22 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
                 ssbh_matl_data.save(path)
             except Exception as e:
                 operator.report({'ERROR'}, f'Failed to save .numatb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-
+    
+    # Create adjb, if needed
+    if include_numdlb and include_numshb and include_numatb:
+        if all(data is not None for data in (ssbh_matl_data, ssbh_modl_data, ssbh_mesh_data)):
+            renormal_meshes: list[tuple[str, int]] = [(entry.mesh_object_name, entry.mesh_object_subindex) for entry in ssbh_modl_data.entries if entry.material_label.startswith("RENORMAL")]
+            if len(renormal_meshes) > 0:
+                ssbh_adj_data = ssbh_data_py.adj_data.AdjData()
+                for mesh_object_index, mesh_object in enumerate(ssbh_mesh_data.objects):
+                    if (mesh_object.name, mesh_object.subindex) in renormal_meshes:
+                        ssbh_adj_data.entries.append(ssbh_data_py.adj_data.AdjEntryData.from_mesh_object(mesh_object_index, mesh_object))
+                path = str(folder.joinpath('model.adjb'))
+                try:
+                    ssbh_adj_data.save(path)
+                except Exception as e:
+                    operator.report({'ERROR'}, f'Failed to save .adjb, Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+                    
     if arma.animation_data is not None:
         from .import_anim import setup_visibility_drivers
         setup_visibility_drivers(arma)
