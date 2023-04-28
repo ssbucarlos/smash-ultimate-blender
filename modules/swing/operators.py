@@ -1,37 +1,18 @@
+# BPY Imports
 import bpy
-import re
-
-from .. import pyprc
-from ..operators import create_meshes
 from bpy.types import (
-    Panel,
-    Operator,
-    PropertyGroup,
-    Context,
-    UIList,
-    CopyTransformsConstraint,
-    Menu,
-    CopyLocationConstraint,
-    CopyRotationConstraint,
-    TrackToConstraint,
-    )
+    Operator, Context, CopyTransformsConstraint, CopyLocationConstraint, TrackToConstraint,)
 from bpy.props import (
-    IntProperty,
-    StringProperty,
-    EnumProperty,
-    BoolProperty,
-    FloatProperty,
-    CollectionProperty,
-    PointerProperty,
-    FloatVectorProperty
-   )
+    IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty, FloatVectorProperty)
+# Standard Library Imports
+from pathlib import Path
 from math import radians, degrees
 from mathutils import Vector
-from pathlib import Path
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from ..properties import SubSceneProperties
-
+# 3rd Party Imports
+from ... import pyprc
+# Local Project Imports
+from ...operators import create_meshes
+from .sub_swing_data import *
 
 ''' # TODOS:
 1.) Capsule Offset
@@ -40,7 +21,7 @@ if TYPE_CHECKING:
 '''
 # Hack workaround since prop_search has no filter
 def fill_armature_swing_bones(context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
     ssd.armature_swing_bones.clear()
     arma_data: bpy.types.Armature = context.object.data
     bone: bpy.types.Bone
@@ -49,291 +30,33 @@ def fill_armature_swing_bones(context):
             armature_swing_bone = ssd.armature_swing_bones.add()
             armature_swing_bone.name = bone.name
 
-class ArmatureSwingBone(PropertyGroup):
-    name: StringProperty('Armature Swing Bone Name')
-
 def fill_armature_swing_bone_children(context: Context, swing_bone_name: str):
-    ssd: SubSwingData = context.object.data.sub_swing_data
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
     ssd.armature_swing_bone_children.clear()
+    # Re-add the original back into the list, since a chain of 1 is valid.
+    swing_bone_child = ssd.armature_swing_bone_children.add()
+    swing_bone_child.name = swing_bone_name
     arma_data: bpy.types.Armature = context.object.data
     bone: bpy.types.Bone
     for bone in arma_data.bones[swing_bone_name].children_recursive:
         if bone.name.startswith('S_') and not bone.name.endswith('_null'):
             swing_bone_child = ssd.armature_swing_bone_children.add()
             swing_bone_child.name = bone.name
-class ArmatureSwingBoneChildren(PropertyGroup):
-    name: StringProperty('Armature Swing Bone Child Name')
-
-class SUB_PT_swing_io(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_context = "objectmode"
-    bl_category = 'Ultimate'
-    bl_label = 'Swing'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        layout = self.layout
-        layout.use_property_split = False
-
-        if not context.object:
-            row = layout.row(align=True)
-            row.label(text='Please select an armature in the 3D viewport')
-            return
-        if context.object.type != 'ARMATURE' or \
-           context.object.name not in context.view_layer.objects.selected:
-            row = layout.row(align=True)
-            row.label(text='Please select an armature in the 3D viewport')
-            return
-
-        row = layout.row(align=True)
-        row.operator('sub.swing_import', icon='IMPORT')  
-        row = layout.row(align=True)
-        row.operator('sub.swing_export', icon='EXPORT')
-
-class SUB_PT_active_bone_swing_info(Panel):
-    bl_label = 'Ultimate Swing Data'
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = 'bone'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        return context.active_bone
-
-    def draw(self, context):
-        active_bone: bpy.types.Bone = context.active_object.data.bones.get(context.active_bone.name) 
-        sub_swing_data: SubSwingData = context.object.data.sub_swing_data
-        sub_swing_blender_bone_data: SubSwingBlenderBoneData = active_bone.sub_swing_blender_bone_data
-        layout = self.layout
-        col = layout.column()
-        chain_index = sub_swing_blender_bone_data.swing_bone_chain_index
-        if not active_bone.name.startswith('S_'):
-            col.label(text='This bone does not start with "S_",')
-            col.label(text='so it cannot be part of a swing bone chain')
-            return
-        if active_bone.name.endswith('_null'):
-            col.label(text='This is a "null" swing bone,') 
-            col.label(text='so it contains no swing info,')
-            col.label(text='but it is needed for the swing chain to properly function.')
-            return
-        if chain_index == -1:
-            col.label(text='This swing bone is not part of a swing bone chain')
-            return
-        swing_bone_chain: SwingBoneChain = sub_swing_data.swing_bone_chains[chain_index]
-        col.label(text=f'Swing Bone Chain Name: {swing_bone_chain.name}')
-        swing_bone: SwingBone = swing_bone_chain.swing_bones[sub_swing_blender_bone_data.swing_bone_index]
-        col.label(text=f'Swing Bone Collisions')
-        col.template_list(
-                        'SUB_UL_swing_bone_collisions',
-                        '',
-                        swing_bone,
-                        'collisions',
-                        swing_bone,
-                        'active_collision_index',
-                        rows=5,
-                        maxrows=5,
-                    )
-        col.label(text='Swing Bone Props:')
-        col.prop(swing_bone, 'air_resistance')
-        col.prop(swing_bone, 'water_resistance')
-        col.prop(swing_bone, 'angle_z')
-        col.prop(swing_bone, 'angle_y')
-        col.prop(swing_bone, 'collision_size')
-        col.prop(swing_bone, 'friction_rate')
-        col.prop(swing_bone, 'goal_strength')
-        col.prop(swing_bone, 'unk_11')
-        col.prop(swing_bone, 'local_gravity')
-        col.prop(swing_bone, 'fall_speed_scale')
-        col.prop(swing_bone, 'ground_hit')
-        col.prop(swing_bone, 'wind_affect')
-
-class SwingPropertyPanel: # Mix-in for the swing info property panel classes
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "data"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        if not context.object:
-            return False
-        return context.object.type == 'ARMATURE'
-
-class SUB_PT_swing_data_master(Panel, SwingPropertyPanel):
-    bl_label = "Ultimate Swing Data"
-
-    def draw(self, context):
-        layout = self.layout
-        arma = context.object
-
-class SUB_PT_swing_bone_chains(Panel, SwingPropertyPanel):
-    bl_label = "Swing Bone Chains"
-    bl_parent_id = "SUB_PT_swing_data_master"
-    
-    def draw(self, context):
-        layout = self.layout
-        sub_swing_data: SubSwingData = context.object.data.sub_swing_data
-        col = layout.column()
-        row = col.row()
-        split = row.split(factor=.33)
-        c = split.column()
-        c.label(text='Swing Bone Chains')
-        c.template_list(
-            "SUB_UL_swing_bone_chains",
-            "",
-            sub_swing_data,
-            "swing_bone_chains",
-            sub_swing_data,
-            "active_swing_bone_chain_index",
-            rows=5,
-            maxrows=5,
-            )
-        split = split.split(factor=.5)
-        c = split.column()
-        c.label(text='Swing Bones')
-        if len(sub_swing_data.swing_bone_chains) > 0:
-            active_swing_bone_chain = sub_swing_data.swing_bone_chains[sub_swing_data.active_swing_bone_chain_index]
-            c.template_list(
-                'SUB_UL_swing_bones',
-                '',
-                active_swing_bone_chain,
-                'swing_bones',
-                active_swing_bone_chain,
-                'active_swing_bone_index',
-                rows=5,
-                maxrows=5,
-            )        
-        else:
-            c.enabled = False
-        split = split.split()
-        c = split.column()
-        c.enabled = False
-        c.label(text="Bone's Collisions")
-        if len(sub_swing_data.swing_bone_chains) > 0:
-            if len(active_swing_bone_chain.swing_bones) > 0:
-                active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
-                if len(active_swing_bone.collisions) > 0:
-                    c.template_list(
-                        'SUB_UL_swing_bone_collisions',
-                        '',
-                        active_swing_bone,
-                        'collisions',
-                        active_swing_bone,
-                        'active_collision_index',
-                        rows=5,
-                        maxrows=5,
-                    )
-                    c.enabled = True
-
-        # Button Row, composed of 3 Sub Rows algined with the above columns
-        row = layout.row()
-        # Sub Row 1
-        split = row.split(factor=.33)
-        sr = split.row(align=True)
-        sr.operator(SUB_OP_swing_bone_chain_add.bl_idname, text='+')
-        sr.operator(SUB_OP_swing_bone_chain_remove.bl_idname, text='-')
-        # Sub Row 2
-        split = split.split(factor=.5)
-        sr = split.row(align=True)
-        sr.operator(SUB_OP_swing_bone_chain_length_edit.bl_idname, text='Edit Chain Start/End')
-        # Sub Row 3
-        split = split.split()
-        sr = split.row(align=True)
-        sr.menu('SUB_MT_swing_bone_collision_add', text='+')
-        sr.operator(SUB_OP_swing_bone_collision_remove.bl_idname, text='-')  
-
-        # Swing Bone Chain & Bone Info Area
-        if len(sub_swing_data.swing_bone_chains) == 0:
-            return
-        active_swing_bone_chain: SwingBoneChain = sub_swing_data.swing_bone_chains[sub_swing_data.active_swing_bone_chain_index]
-        if len(active_swing_bone_chain.swing_bones) == 0:
-            return
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
-
-        row = layout.row()
-        split = row.split(factor=.5)
-        c = split.column()
-        c.label(text='Bone Chain Info')
-        c.prop(active_swing_bone_chain, 'is_skirt')
-        c.prop(active_swing_bone_chain, 'rotate_order')
-        c.prop(active_swing_bone_chain, 'curve_rotate_x')
-        c.prop(active_swing_bone_chain, 'has_unk_8')
-        if active_swing_bone_chain.has_unk_8:
-            c.prop(active_swing_bone_chain, 'unk_8')
-        split = split.split()
-        c = split.column()
-        c.label(text='Bone Info')
-        c.prop(active_swing_bone, 'air_resistance')
-        c.prop(active_swing_bone, 'water_resistance')
-        c.prop(active_swing_bone, 'angle_z')
-        c.prop(active_swing_bone, 'angle_y')
-        c.prop(active_swing_bone, 'collision_size')
-        c.prop(active_swing_bone, 'friction_rate')
-        c.prop(active_swing_bone, 'goal_strength')
-        c.prop(active_swing_bone, 'unk_11')
-        c.prop(active_swing_bone, 'local_gravity')
-        c.prop(active_swing_bone, 'fall_speed_scale')
-        c.prop(active_swing_bone, 'ground_hit')
-        c.prop(active_swing_bone, 'wind_affect')
-        return
-
-class SUB_UL_swing_bone_chains(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            row.prop(entry, "name", text="", emboss=False, icon='GROUP_BONE')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_UL_swing_bones(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            #row.prop(entry, "name", text="", emboss=False)
-            row.label(text=f'{entry.name}', icon='BONE_DATA')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_UL_swing_bone_collisions(UIList):
-    def draw_item(self, context, layout: bpy.types.UILayout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        entry: SwingBoneCollision = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            if entry.collision_type == 'SPHERE':
-                collision = ssd.spheres[entry.collision_index]
-                icon = 'SPHERE'
-            elif entry.collision_type == 'OVAL':
-                collision = ssd.ovals[entry.collision_index]
-                icon = 'MESH_CYLINDER'
-            elif entry.collision_type == 'ELLIPSOID':
-                collision = ssd.ellipsoids[entry.collision_index]
-                icon = 'META_ELLIPSOID'
-            elif entry.collision_type == 'CAPSULE':
-                collision = ssd.capsules[entry.collision_index]
-                icon = 'META_CAPSULE'
-            elif entry.collision_type == 'PLANE':
-                collision = ssd.planes[entry.collision_index]
-                icon = 'MESH_PLANE'
-            row.label(text=f'{collision.name}', icon=icon)
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
 
 def start_bone_name_update(self, context):
     if self.start_bone_name != '':
         fill_armature_swing_bone_children(context, self.start_bone_name)
+
+def is_one_child_only_chain(bone: bpy.types.Bone) -> tuple[bool, bpy.types.Bone]:
+    if len(bone.children) == 0:
+        return True, None
+    if len(bone.children) != 1:
+        return False, bone
+    return is_one_child_only_chain(bone.children[0])
+
+def is_end_bone_valid(end_bone: bpy.types.Bone) -> bool:
+    return len(end_bone.children) == 1
+
 class SUB_OP_swing_bone_chain_add(Operator):
     bl_idname = 'sub.swing_bone_chain_add'
     bl_label = 'Add Swing Bone Chain'
@@ -350,7 +73,7 @@ class SUB_OP_swing_bone_chain_add(Operator):
         return wm.invoke_props_dialog(self)
 
     def draw(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
         layout = self.layout
         row = layout.row()
         row.prop_search(self, 'start_bone_name', ssd, 'armature_swing_bones', text='Start Bone', icon='BONE_DATA')
@@ -361,13 +84,54 @@ class SUB_OP_swing_bone_chain_add(Operator):
         row.prop_search(self, 'end_bone_name', ssd, 'armature_swing_bone_children', text='End Bone', icon='BONE_DATA')
 
     def execute(self, context):
+        if any(bone_name == '' for bone_name in (self.start_bone_name, self.end_bone_name)):
+            self.report({'ERROR'}, 'Start Bone or End Bone not specified, cancelling.')
+            return {'CANCELLED'}
         
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        arma_data: bpy.types.Armature = context.object.data
+        start_bone: bpy.types.Bone = arma_data.bones.get(self.start_bone_name)
+        end_bone = arma_data.bones.get(self.end_bone_name)
+        if start_bone is None:
+            self.report({'ERROR'}, f'Somehow the specified start bone {self.start_bone_name} is no longer in the armature.')
+            return {'CANCELLED'}
+        if end_bone is None:
+            self.report({'ERROR'}, f'Somehow the specified end bone {self.end_bone} is no longer in the armature.')
+            return {'CANCELLED'}
+        
+        is_valid_chain, problematic_bone = is_one_child_only_chain(start_bone)
+        if not is_valid_chain:
+            self.report({'ERROR'}, f"Chain can't start at {start_bone.name}, the bone {problematic_bone.name} has multiple children!")
+            return {'CANCELLED'}
+        
+        end_bone = arma_data.bones.get(self.end_bone_name)
+        if not is_end_bone_valid(end_bone):
+            self.report({'ERROR'}, f"Chain can't end at {end_bone.name}, that bone has no child! (Add a '_null' swing bone if its the last bone in the chain)")
+            return {'CANCELLED'}
+
+        new_chain: SUB_PG_swing_bone_chain = sub_swing_data.swing_bone_chains.add()
+        new_chain.name = self.start_bone_name[2:].lower()
+
+        for bone_index, blender_bone in enumerate([start_bone] + start_bone.children_recursive):
+            if blender_bone.name == end_bone.children[0].name:
+                break
+            new_swing_bone: SUB_PG_swing_bone = new_chain.swing_bones.add()
+            new_swing_bone.name = blender_bone.name
+            sub_blender_bone_data: SUB_PG_blender_bone_data = blender_bone.sub_swing_blender_bone_data
+            sub_blender_bone_data.swing_bone_chain_index = sub_swing_data.swing_bone_chains.find(new_chain.name)
+            sub_blender_bone_data.swing_bone_index = bone_index
+
         return {'FINISHED'}
 
 class SUB_OP_swing_bone_chain_remove(Operator):
     bl_idname = 'sub.swing_bone_chain_remove'
     bl_label = 'Remove Swing Bone Chain'
 
+    @classmethod
+    def poll(cls, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        return len(sub_swing_data.swing_bone_chains) > 0
+    
     def execute(self, context):
         return {'FINISHED'}
 
@@ -377,27 +141,12 @@ class SUB_OP_swing_bone_chain_length_edit(Operator):
 
     def execute(self, context):
         return {'FINISHED'}  
+    
 
-class SUB_MT_swing_bone_collision_add(Menu):
-    bl_label = "Add from existing collision"
-
-    def draw(self, context):
-        layout = self.layout
-        row = layout.row()
-        row = layout.operator(SUB_OP_swing_bone_collision_add_sphere.bl_idname, text='Sphere', icon='SPHERE')
-        row = layout.row()
-        row = layout.operator(SUB_OP_swing_bone_collision_add_oval.bl_idname, text='Oval', icon='MESH_CYLINDER')
-        row = layout.row()
-        row = layout.operator(SUB_OP_swing_bone_collision_add_ellipsoid.bl_idname, text='Ellipsoid', icon='META_ELLIPSOID')
-        row = layout.row()
-        row = layout.operator(SUB_OP_swing_bone_collision_add_capsule.bl_idname, text='Capsule', icon='META_CAPSULE')
-        row = layout.row()
-        row = layout.operator(SUB_OP_swing_bone_collision_add_plane.bl_idname, text='Plane', icon='MESH_PLANE')
-        
 def get_spheres_enum(self, context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
-    active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-    active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+    active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+    active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
     existing_indices = {c.collision_index for c in active_swing_bone.collisions if c.collision_type == 'SPHERE'}
     return [(s.name, s.name, s.name) for index, s in enumerate(ssd.spheres) if index not in existing_indices]
 
@@ -408,25 +157,35 @@ class SUB_OP_swing_bone_collision_add_sphere(Operator):
     
     sphere: EnumProperty(items=get_spheres_enum)
 
+    @classmethod
+    def poll(cls, context):
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
+            return False
+        else:
+            return len(sub_swing_data.spheres) > 0
+        
+
     def invoke(self, context: Context, event):
         wm = context.window_manager
         wm.invoke_search_popup(self)
         return {'FINISHED'}
 
     def execute(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+        active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
         sphere_index = ssd.spheres.find(self.sphere)
-        new_collision: SwingBoneCollision = active_swing_bone.collisions.add()
+        new_collision: SUB_PG_swing_bone_collision = active_swing_bone.collisions.add()
         new_collision.collision_type = 'SPHERE'
         new_collision.collision_index = sphere_index
         return {'FINISHED'}
 
 def get_ovals_enum(self, context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
-    active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-    active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+    active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+    active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
     existing_indices = {c.collision_index for c in active_swing_bone.collisions if c.collision_type == 'OVAL'}
     return [(s.name, s.name, s.name) for index, s in enumerate(ssd.ovals) if index not in existing_indices]
 
@@ -437,25 +196,34 @@ class SUB_OP_swing_bone_collision_add_oval(Operator):
     
     oval: EnumProperty(items=get_ovals_enum)
 
+    @classmethod
+    def poll(cls, context):
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
+            return False
+        else:
+            return len(sub_swing_data.ovals) > 0
+        
     def invoke(self, context: Context, event):
         wm = context.window_manager
         wm.invoke_search_popup(self)
         return {'FINISHED'}
 
     def execute(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+        active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
         oval_index = ssd.ovals.find(self.oval)
-        new_collision: SwingBoneCollision = active_swing_bone.collisions.add()
+        new_collision: SUB_PG_swing_bone_collision = active_swing_bone.collisions.add()
         new_collision.collision_type = 'OVAL'
         new_collision.collision_index = oval_index
         return {'FINISHED'}
 
 def get_ellipsoids_enum(self, context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
-    active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-    active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+    active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+    active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
     existing_indices = {c.collision_index for c in active_swing_bone.collisions if c.collision_type == 'ELLIPSOID'}
     return [(s.name, s.name, s.name) for index, s in enumerate(ssd.ellipsoids) if index not in existing_indices]
 
@@ -466,25 +234,34 @@ class SUB_OP_swing_bone_collision_add_ellipsoid(Operator):
     
     ellipsoid: EnumProperty(items=get_ellipsoids_enum)
 
+    @classmethod
+    def poll(cls, context):
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
+            return False
+        else:
+            return len(sub_swing_data.ellipsoids) > 0
+        
     def invoke(self, context: Context, event):
         wm = context.window_manager
         wm.invoke_search_popup(self)
         return {'FINISHED'}
 
     def execute(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+        active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
         ellipsoid_index = ssd.ellipsoids.find(self.ellipsoid)
-        new_collision: SwingBoneCollision = active_swing_bone.collisions.add()
+        new_collision: SUB_PG_swing_bone_collision = active_swing_bone.collisions.add()
         new_collision.collision_type = 'ELLIPSOID'
         new_collision.collision_index = ellipsoid_index
         return {'FINISHED'}
 
 def get_capsules_enum(self, context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
-    active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-    active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+    active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+    active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
     existing_indices = {c.collision_index for c in active_swing_bone.collisions if c.collision_type == 'CAPSULE'}
     return [(s.name, s.name, s.name) for index, s in enumerate(ssd.capsules) if index not in existing_indices]
 
@@ -495,25 +272,34 @@ class SUB_OP_swing_bone_collision_add_capsule(Operator):
     
     capsule: EnumProperty(items=get_capsules_enum)
 
+    @classmethod
+    def poll(cls, context):
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
+            return False
+        else:
+            return len(sub_swing_data.capsules) > 0
+
     def invoke(self, context: Context, event):
         wm = context.window_manager
         wm.invoke_search_popup(self)
         return {'FINISHED'}
 
     def execute(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+        active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
         capsule_index = ssd.capsules.find(self.capsule)
-        new_collision: SwingBoneCollision = active_swing_bone.collisions.add()
+        new_collision: SUB_PG_swing_bone_collision = active_swing_bone.collisions.add()
         new_collision.collision_type = 'CAPSULE'
         new_collision.collision_index = capsule_index
         return {'FINISHED'}
 
 def get_planes_enum(self, context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
-    active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-    active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+    active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+    active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
     existing_indices = {c.collision_index for c in active_swing_bone.collisions if c.collision_type == 'PLANE'}
     return [(s.name, s.name, s.name) for index, s in enumerate(ssd.planes) if index not in existing_indices]
 
@@ -524,17 +310,26 @@ class SUB_OP_swing_bone_collision_add_plane(Operator):
     
     plane: EnumProperty(items=get_planes_enum)
 
+    @classmethod
+    def poll(cls, context):
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
+            return False
+        else:
+            return len(sub_swing_data.planes) > 0
+
     def invoke(self, context: Context, event):
         wm = context.window_manager
         wm.invoke_search_popup(self)
         return {'FINISHED'}
 
     def execute(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+        active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
         plane_index = ssd.planes.find(self.plane)
-        new_collision: SwingBoneCollision = active_swing_bone.collisions.add()
+        new_collision: SUB_PG_swing_bone_collision = active_swing_bone.collisions.add()
         new_collision.collision_type = 'PLANE'
         new_collision.collision_index = plane_index
         return {'FINISHED'}               
@@ -545,54 +340,23 @@ class SUB_OP_swing_bone_collision_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        try:
+            active_swing_bone_chain: SUB_PG_swing_bone_chain = sub_swing_data.swing_bone_chains[sub_swing_data.active_swing_bone_chain_index]
+            active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        except (IndexError, AttributeError):
+            return False
         return len(active_swing_bone.collisions) > 0
 
     def execute(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        active_swing_bone_chain: SwingBoneChain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
-        active_swing_bone: SwingBone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_swing_bone_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains[ssd.active_swing_bone_chain_index]
+        active_swing_bone: SUB_PG_swing_bone = active_swing_bone_chain.swing_bones[active_swing_bone_chain.active_swing_bone_index]
         active_swing_bone.collisions.remove(active_swing_bone.active_collision_index)
         i = active_swing_bone.active_collision_index
         active_swing_bone.active_collision_index = min(max(0, i-1), len(active_swing_bone.collisions))
-        return {'FINISHED'}    
+        return {'FINISHED'} 
 
-class SUB_PT_swing_data_spheres(Panel, SwingPropertyPanel):
-    bl_label = "Spheres"
-    bl_parent_id = "SUB_PT_swing_data_master"
-    
-    def draw(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        layout = self.layout
-        row = layout.row()
-        row.template_list(
-            "SUB_UL_swing_data_spheres",
-            "",
-            ssd,
-            "spheres",
-            ssd,
-            "active_sphere_index",
-            rows=3,
-            maxrows=10,
-            )
-        col = row.column(align=True)
-        col.operator('sub.swing_data_sphere_add', icon='ADD', text="")
-        col.operator('sub.swing_data_sphere_remove', icon='REMOVE', text="")
-        col.separator()
-        col.menu("SUB_MT_swing_data_spheres_context_menu", icon='DOWNARROW_HLT', text="")
-
-        active_index = ssd.active_sphere_index
-        if active_index >= len(ssd.spheres):
-            return
-        active_sphere = ssd.spheres[active_index]
-        row = layout.row()
-        row.prop_search(active_sphere, 'bone', context.object.data, 'bones', text='Bone')
-        row = layout.row()
-        row.prop(active_sphere, 'offset')
-        row = layout.row()
-        row.prop(active_sphere, 'radius')
 
 class SUB_OP_swing_data_sphere_add(Operator):
     bl_idname = 'sub.swing_data_sphere_add'
@@ -613,68 +377,17 @@ class SUB_OP_swing_data_sphere_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.object:
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
             return False
-        return context.object.type == 'ARMATURE'
+        else:
+            return len(sub_swing_data.spheres) > 0
         
     def execute(self, context):
-        return {'FINISHED'}
-
-class SUB_UL_swing_data_spheres(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            row.prop(entry, "name", text="", emboss=False, icon='SPHERE')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_MT_swing_data_spheres_context_menu(Menu):
-    bl_label = "Sphere Collisons Menu"
-
-    def draw(self, context):
-        layout = self.layout
-
-class SUB_PT_swing_data_ovals(Panel, SwingPropertyPanel):
-    bl_label = "Ovals"
-    bl_parent_id = "SUB_PT_swing_data_master"
+        return {'FINISHED'}   
     
-    def draw(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        layout = self.layout
-        row = layout.row()
-        row.template_list(
-            "SUB_UL_swing_data_ovals",
-            "",
-            ssd,
-            "ovals",
-            ssd,
-            "active_oval_index",
-            rows=3,
-            maxrows=10,
-            )
-        col = row.column(align=True)
-        col.operator('sub.swing_data_oval_add', icon='ADD', text="")
-        col.operator('sub.swing_data_oval_remove', icon='REMOVE', text="")
-        col.separator()
-        col.menu("SUB_MT_swing_data_ovals_context_menu", icon='DOWNARROW_HLT', text="")
 
-        active_index = ssd.active_oval_index
-        if active_index >= len(ssd.ovals):
-            return
-        active_oval = ssd.ovals[active_index]
-        row = layout.row()
-        row.prop_search(active_oval, 'start_bone_name', context.object.data, 'bones', text='Start Bone')
-        row = layout.row()
-        row.prop_search(active_oval, 'end_bone_name', context.object.data, 'bones', text='End Bone')
-        row = layout.row()
-        row.prop(active_oval, 'radius')
-        row = layout.row()
-        row.prop(active_oval, 'start_offset')
-        row = layout.row()
-        row.prop(active_oval, 'end_offset')
 
 class SUB_OP_swing_data_oval_add(Operator):
     bl_idname = 'sub.swing_data_oval_add'
@@ -695,66 +408,17 @@ class SUB_OP_swing_data_oval_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.object:
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
             return False
-        return context.object.type == 'ARMATURE'
+        else:
+            return len(sub_swing_data.ovals) > 0
         
     def execute(self, context):
         return {'FINISHED'}
-
-class SUB_UL_swing_data_ovals(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            row.prop(entry, "name", text="", emboss=False, icon='MESH_CYLINDER')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_MT_swing_data_ovals_context_menu(Menu):
-    bl_label = "Oval Collisons Menu"
-
-    def draw(self, context):
-        layout = self.layout
-
-class SUB_PT_swing_data_ellipsoids(Panel, SwingPropertyPanel):
-    bl_label = "Ellipsoids"
-    bl_parent_id = "SUB_PT_swing_data_master"
     
-    def draw(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        layout = self.layout
-        row = layout.row()
-        row.template_list(
-            "SUB_UL_swing_data_ellipsoids",
-            "",
-            ssd,
-            "ellipsoids",
-            ssd,
-            "active_ellipsoid_index",
-            rows=3,
-            maxrows=10,
-            )
-        col = row.column(align=True)
-        col.operator('sub.swing_data_ellipsoid_add', icon='ADD', text="")
-        col.operator('sub.swing_data_ellipsoid_remove', icon='REMOVE', text="")
-        col.separator()
-        col.menu("SUB_MT_swing_data_ellipsoids_context_menu", icon='DOWNARROW_HLT', text="")
 
-        active_index = ssd.active_ellipsoid_index
-        if active_index >= len(ssd.ellipsoids):
-            return
-        active_ellipsoid = ssd.ellipsoids[active_index]
-        row = layout.row()
-        row.prop_search(active_ellipsoid, 'bone_name', context.object.data, 'bones', text='Bone')
-        row = layout.row()
-        row.prop(active_ellipsoid, 'offset')
-        row = layout.row()
-        row.prop(active_ellipsoid, 'rotation')
-        row = layout.row()
-        row.prop(active_ellipsoid, 'scale')
 
 class SUB_OP_swing_data_ellipsoid_add(Operator):
     bl_idname = 'sub.swing_data_ellipsoid_add'
@@ -775,70 +439,16 @@ class SUB_OP_swing_data_ellipsoid_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.object:
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
             return False
-        return context.object.type == 'ARMATURE'
+        else:
+            return len(sub_swing_data.ellipsoids) > 0
         
     def execute(self, context):
         return {'FINISHED'}
-
-class SUB_UL_swing_data_ellipsoids(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            row.prop(entry, "name", text="", emboss=False, icon='META_ELLIPSOID')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_MT_swing_data_ellipsoids_context_menu(Menu):
-    bl_label = "Ellipsoids Collisons Menu"
-
-    def draw(self, context):
-        layout = self.layout
-
-class SUB_PT_swing_data_capsules(Panel, SwingPropertyPanel):
-    bl_label = "Capsules"
-    bl_parent_id = "SUB_PT_swing_data_master"
     
-    def draw(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        layout = self.layout
-        row = layout.row()
-        row.template_list(
-            "SUB_UL_swing_data_capsules",
-            "",
-            ssd,
-            "capsules",
-            ssd,
-            "active_capsule_index",
-            rows=3,
-            maxrows=10,
-            )
-        col = row.column(align=True)
-        col.operator('sub.swing_data_capsule_add', icon='ADD', text="")
-        col.operator('sub.swing_data_capsule_remove', icon='REMOVE', text="")
-        col.separator()
-        col.menu("SUB_MT_swing_data_capsule_context_menu", icon='DOWNARROW_HLT', text="")
-
-        active_index = ssd.active_capsule_index
-        if active_index >= len(ssd.capsules):
-            return
-        active_capsule = ssd.capsules[active_index]
-        row = layout.row()
-        row.prop_search(active_capsule, 'start_bone_name',  context.object.data, 'bones', text='Start Bone')
-        row = layout.row()
-        row.prop_search(active_capsule, 'end_bone_name',  context.object.data, 'bones', text='End Bone')
-        row = layout.row()
-        row.prop(active_capsule, 'start_offset')
-        row = layout.row()
-        row.prop(active_capsule, 'end_offset')
-        row = layout.row()
-        row.prop(active_capsule, 'start_radius')
-        row = layout.row()
-        row.prop(active_capsule, 'end_radius')
 
 class SUB_OP_swing_data_capsule_add(Operator):
     bl_idname = 'sub.swing_data_capsule_add'
@@ -859,68 +469,16 @@ class SUB_OP_swing_data_capsule_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.object:
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
             return False
-        return context.object.type == 'ARMATURE'
+        else:
+            return len(sub_swing_data.ellipsoids) > 0
         
     def execute(self, context):
         return {'FINISHED'}
-
-class SUB_UL_swing_data_capsules(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            row.prop(entry, "name", text="", emboss=False, icon='META_CAPSULE')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_MT_swing_data_capsules_context_menu(Menu):
-    bl_label = "Capsule Collisons Menu"
-
-    def draw(self, context):
-        layout = self.layout
-
-class SUB_PT_swing_data_planes(Panel, SwingPropertyPanel):
-    bl_label = "Planes"
-    bl_parent_id = "SUB_PT_swing_data_master"
     
-    def draw(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        layout = self.layout
-        row = layout.row()
-        row.template_list(
-            "SUB_UL_swing_data_planes",
-            "",
-            ssd,
-            "planes",
-            ssd,
-            "active_plane_index",
-            rows=3,
-            maxrows=10,
-            )
-        col = row.column(align=True)
-        col.operator('sub.swing_data_plane_add', icon='ADD', text="")
-        col.operator('sub.swing_data_plane_remove', icon='REMOVE', text="")
-        col.separator()
-        col.menu("SUB_MT_swing_data_plane_context_menu", icon='DOWNARROW_HLT', text="")
-
-        active_index = ssd.active_plane_index
-        if active_index >= len(ssd.planes):
-            return
-        active_plane = ssd.planes[active_index]
-        row = layout.row()
-        row.prop_search(active_plane, 'bone_name', context.object.data, 'bones', text='Bone')
-        row = layout.row()
-        row.prop(active_plane, 'nx')
-        row = layout.row()
-        row.prop(active_plane, 'ny')
-        row = layout.row()
-        row.prop(active_plane, 'nz')
-        row = layout.row()
-        row.prop(active_plane, 'distance')
 
 class SUB_OP_swing_data_plane_add(Operator):
     bl_idname = 'sub.swing_data_plane_add'
@@ -941,66 +499,16 @@ class SUB_OP_swing_data_plane_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.object:
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
             return False
-        return context.object.type == 'ARMATURE'
+        else:
+            return len(sub_swing_data.planes) > 0
         
     def execute(self, context):
         return {'FINISHED'}
-
-class SUB_UL_swing_data_planes(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            row.prop(entry, "name", text="", emboss=False, icon='MESH_PLANE')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_MT_swing_data_planes_context_menu(Menu):
-    bl_label = "Plane Collisons Menu"
-
-    def draw(self, context):
-        layout = self.layout
-
-class SUB_PT_swing_data_connections(Panel, SwingPropertyPanel):
-    bl_label = "Connections"
-    bl_parent_id = "SUB_PT_swing_data_master"
     
-    def draw(self, context):
-        ssd: SubSwingData = context.object.data.sub_swing_data
-        layout = self.layout
-        row = layout.row()
-        row.template_list(
-            "SUB_UL_swing_data_connections",
-            "",
-            ssd,
-            "connections",
-            ssd,
-            "active_connection_index",
-            rows=3,
-            maxrows=10,
-            )
-        col = row.column(align=True)
-        col.operator('sub.swing_data_connection_add', icon='ADD', text="")
-        col.operator('sub.swing_data_connection_remove', icon='REMOVE', text="")
-        col.separator()
-        col.menu("SUB_MT_swing_data_connections_context_menu", icon='DOWNARROW_HLT', text="")
-
-        active_index = ssd.active_connection_index
-        if active_index >= len(ssd.connections):
-            return
-        active_connection = ssd.connections[active_index]
-        row = layout.row()
-        row.prop_search(active_connection, 'start_bone_name', context.object.data, 'bones', text='Start Bone')
-        row = layout.row()
-        row.prop_search(active_connection, 'end_bone_name', context.object.data, 'bones', text='End Bone')
-        row = layout.row()
-        row.prop(active_connection, 'radius')
-        row = layout.row()
-        row.prop(active_connection, 'length')
 
 class SUB_OP_swing_data_connection_add(Operator):
     bl_idname = 'sub.swing_data_connection_add'
@@ -1021,29 +529,16 @@ class SUB_OP_swing_data_connection_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.object:
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
             return False
-        return context.object.type == 'ARMATURE'
+        else:
+            return len(sub_swing_data.connections) > 0
         
     def execute(self, context):
         return {'FINISHED'}
 
-class SUB_UL_swing_data_connections(UIList):
-    def draw_item(self, _context, layout: bpy.types.UILayout, _data, item, icon, active_data, _active_propname, index):
-        obj = active_data
-        entry = item
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            row = layout.row()
-            row.label(text=f"{item.start_bone_name} -> {item.end_bone_name}", icon='MOD_LENGTH')
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class SUB_MT_swing_data_connections_context_menu(Menu):
-    bl_label = "Swing Bone Connections Menu"
-
-    def draw(self, context):
-        layout = self.layout
 
 class SUB_OP_swing_import(Operator):
     bl_idname = 'sub.swing_import'
@@ -1075,7 +570,7 @@ class SUB_OP_swing_import(Operator):
         #    rename_uncracked_hashes(self, context)
         setup_bone_soft_bodies(self, context)
         return {'FINISHED'}
-
+    
 def struct_get(param_struct, input, fallback=None):
     return dict(param_struct).get(pyprc.hash(input), fallback)
 
@@ -1089,9 +584,9 @@ def struct_get_val(param_struct, input):
 
 def swing_prc_import(operator: Operator, context: Context, filepath: str):
     arma_data: bpy.types.Armature = context.object.data
-    ssd: SubSwingData = arma_data.sub_swing_data
+    ssd: SUB_PG_sub_swing_data = arma_data.sub_swing_data
     prc_root = pyprc.param(filepath)
-    labels_path = (Path(__file__).parent.parent / 'pyprc' / 'ParamLabels.csv').resolve()
+    labels_path = (Path(__file__).parent.parent.parent / 'pyprc' / 'ParamLabels.csv').resolve()
     pyprc.hash.load_labels(str(labels_path))
 
     raw_hash_to_blender_bone = {pyprc.hash(bone.name.lower()) : bone for bone in arma_data.bones}
@@ -1107,7 +602,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
         if matched_bone is None:
             operator.report({'WARNING'}, f"Could not match bone for a sphere. {struct_get_str(prc_sphere, 'name')}, {struct_get_str(prc_sphere, 'bonename')}")
             continue
-        new_sphere: Sphere = ssd.spheres.add()
+        new_sphere: SUB_PG_swing_sphere = ssd.spheres.add()
         new_sphere.name = struct_get_str(prc_sphere, 'name')
         new_sphere.bone = matched_bone.name
         new_sphere.offset.x = -(struct_get_val(prc_sphere, 'cy'))
@@ -1130,7 +625,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
             end_bone_hash = struct_get_str(prc_oval, 'end_bonename')
             operator.report({'WARNING'}, f'Could not match bones for a oval. {start_bone_hash=}, {end_bone_hash=}')
             continue
-        new_oval: Oval = ssd.ovals.add()
+        new_oval: SUB_PG_swing_oval = ssd.ovals.add()
         new_oval.name = struct_get_str(prc_oval, 'name')
         new_oval.start_bone_name = matched_start_bone.name
         new_oval.end_bone_name = matched_end_bone.name
@@ -1153,7 +648,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
         if matched_bone is None:
             operator.report({'WARNING'}, f"Could not match bone for a ellipsoid. {struct_get_str(prc_ellipsoid, 'name')}, {struct_get_str(prc_ellipsoid, 'bonename')}")
             continue
-        new_ellipsoid: Ellipsoid = ssd.ellipsoids.add()
+        new_ellipsoid: SUB_PG_swing_ellipsoid = ssd.ellipsoids.add()
         new_ellipsoid.name = struct_get_str(prc_ellipsoid, 'name')
         new_ellipsoid.bone_name = matched_bone.name
         new_ellipsoid.offset.x =  -(struct_get_val(prc_ellipsoid, 'cy')) 
@@ -1180,7 +675,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
             end_bone_hash = struct_get_str(prc_capsule, 'end_bonename')
             operator.report({'WARNING'}, f'Could not match bones for a capsule. {start_bone_hash=}, {end_bone_hash=}')
             continue
-        new_capsule: Capsule = ssd.capsules.add()
+        new_capsule: SUB_PG_swing_capsule = ssd.capsules.add()
         new_capsule.name = struct_get_str(prc_capsule, 'name')
         new_capsule.start_bone_name = matched_start_bone.name
         new_capsule.end_bone_name = matched_end_bone.name
@@ -1204,7 +699,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
         if matched_bone is None:
             operator.report({'WARNING'}, f"Could not match bone for a plane. {struct_get_str(prc_plane, 'name')}, {struct_get_str(prc_plane, 'bonename')}")
             continue
-        new_plane: Plane = ssd.planes.add()
+        new_plane: SUB_PG_swing_plane = ssd.planes.add()
         new_plane.name = struct_get_str(prc_plane, 'name')
         new_plane.bone_name = matched_bone.name
         new_plane.nx = -(struct_get_val(prc_plane, 'ny'))
@@ -1231,7 +726,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
             end_bone_hash = struct_get_str(prc_connection, 'end_bonename')
             operator.report({'WARNING'}, f'Could not match end bone for a connction. {start_bone_hash=}, {end_bone_hash=}')
             continue
-        new_connection: Connection = ssd.connections.add()
+        new_connection: SUB_PG_swing_connection = ssd.connections.add()
         new_connection.start_bone_name = matched_start_bone.name
         new_connection.end_bone_name = matched_end_bone.name
         new_connection.radius = struct_get_val(prc_connection, 'radius')
@@ -1250,9 +745,11 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
             end_bone_hash = struct_get_str(chain, 'end_bonename')
             operator.report({'WARNING'}, f'Could not match bones for a bone chain, skipping. {start_bone_hash=}, {end_bone_hash=}')
             continue
-        new_chain: SwingBoneChain = ssd.swing_bone_chains.add()
+        new_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains.add()
         new_chain.name            = struct_get_str(chain, 'name')
         new_chain.start_bone_name = matched_start_bone.name
+        new_chain.start_bone = matched_start_bone
+        new_chain.end_bone = matched_end_bone
         new_chain.end_bone_name   = matched_end_bone.name
         new_chain.is_skirt        = struct_get_val(chain, 'isskirt')
         new_chain.rotate_order    = struct_get_val(chain, 'rotateorder')
@@ -1263,7 +760,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
             new_chain.unk_8 = unk_8
         
         for prc_swing_bone_parameters in list(struct_get(chain, 'params')):
-            new_swing_bone: SwingBone           = new_chain.swing_bones.add()
+            new_swing_bone: SUB_PG_swing_bone           = new_chain.swing_bones.add()
             new_swing_bone.air_resistance       = struct_get_val(prc_swing_bone_parameters, 'airresistance')
             new_swing_bone.water_resistance     = struct_get_val(prc_swing_bone_parameters, 'waterresistance')
             #new_swing_bone.min_angle_z          = struct_get_val(prc_swing_bone_parameters, 'minanglez')
@@ -1293,14 +790,14 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
                 if col_type is None or col_index is None:
                     operator.report({'WARNING'}, f'A swing bone in chain {new_chain.name} refrences missing collision {str(prc_swing_bone_collision.value)}, discarding the missing collision.')
                     continue
-                new_swing_bone_collision: SwingBoneCollision   = new_swing_bone.collisions.add()
+                new_swing_bone_collision: SUB_PG_swing_bone_collision   = new_swing_bone.collisions.add()
                 new_swing_bone_collision.collision_type = col_type
                 new_swing_bone_collision.collision_index = col_index
                 #new_swing_bone_collision.target_collision_name = str(prc_swing_bone_collision.value)
                 #new_swing_bone_collision: SwingBoneCollision   = new_swing_bone.collisions.add()
                 #new_swing_bone_collision.target_collision_name = str(prc_swing_bone_collision.value)
-    swing_bone_chain: SwingBoneChain
-    swing_bone: SwingBone
+    swing_bone_chain: SUB_PG_swing_bone_chain
+    swing_bone: SUB_PG_swing_bone
     for chain_index, swing_bone_chain in enumerate(ssd.swing_bone_chains):
         starting_blender_bone = arma_data.bones.get(swing_bone_chain.start_bone_name) 
         current_blender_bone = starting_blender_bone
@@ -1311,7 +808,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
             current_blender_bone = current_blender_bone.children[0]
 
 def get_collision_info(ssd, collision_name):
-    ssd: SubSwingData = ssd
+    ssd: SUB_PG_sub_swing_data = ssd
     # Needs to be in same order as the enum
     collision_collections = [
         ssd.spheres,
@@ -1323,15 +820,15 @@ def get_collision_info(ssd, collision_name):
     for collection in collision_collections:
         for collision_index, collision in enumerate(collection):
             if collision.name == collision_name:
-                if isinstance(collision, Sphere):
+                if isinstance(collision, SUB_PG_swing_sphere):
                     return 'SPHERE', collision_index
-                elif isinstance(collision, Oval):
+                elif isinstance(collision, SUB_PG_swing_oval):
                     return 'OVAL', collision_index
-                elif isinstance(collision, Ellipsoid):
+                elif isinstance(collision, SUB_PG_swing_ellipsoid):
                     return 'ELLIPSOID', collision_index
-                elif isinstance(collision, Capsule):
+                elif isinstance(collision, SUB_PG_swing_capsule):
                     return 'CAPSULE', collision_index
-                elif isinstance(collision, Plane):
+                elif isinstance(collision, SUB_PG_swing_plane):
                     return 'PLANE', collision_index
                 else:
                     raise RuntimeError
@@ -1347,17 +844,17 @@ def is_uncracked_hash(s: str) -> bool:
 
 def rename_uncracked_hashes(operator: Operator, context: Context):
     # forward declaration for typechecking.
-    swing_bone_chain: SwingBoneChain
-    swing_bone: SwingBone 
-    collision: SwingBoneCollision 
-    sphere: Sphere
-    oval: Oval
-    ellipsoid: Ellipsoid
-    capsule: Capsule
-    plane: Plane
-    connection: Connection
+    swing_bone_chain: SUB_PG_swing_bone_chain
+    swing_bone: SUB_PG_swing_bone 
+    collision: SUB_PG_swing_bone_collision 
+    sphere: SUB_PG_swing_sphere
+    oval: SUB_PG_swing_oval
+    ellipsoid: SUB_PG_swing_ellipsoid
+    capsule: SUB_PG_swing_capsule
+    plane: SUB_PG_swing_plane
+    connection: SUB_PG_swing_connection
 
-    ssd: SubSwingData = context.object.data.sub_swing_data
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
 
     for swing_bone_chain in ssd.swing_bone_chains:
         if is_uncracked_hash(swing_bone_chain.name):
@@ -1368,7 +865,7 @@ def rename_uncracked_hashes(operator: Operator, context: Context):
                     pass
 
 def setup_bone_soft_bodies(operator: Operator, context: Context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
+    ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
     swing_master_collection = bpy.data.collections.new(f'{context.object.name} Swing Objects')
     swing_chains_collection = bpy.data.collections.new('Swing Bone Chains')
     collision_shapes_collection = bpy.data.collections.new('Collision Shapes')
@@ -1382,7 +879,7 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
     swing_master_collection.children.link(swing_chains_collection)
     swing_master_collection.children.link(collision_shapes_collection)
     
-    swing_sphere: Sphere
+    swing_sphere: SUB_PG_swing_sphere
     for swing_sphere in ssd.spheres:
         blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_sphere.bone)
         if blender_bone is None:
@@ -1396,7 +893,7 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
         spheres_collection = shape_name_to_collection['Spheres']
         spheres_collection.objects.link(sphere_obj)
 
-    swing_oval: Oval
+    swing_oval: SUB_PG_swing_oval
     for swing_oval in ssd.ovals:
         start_bone: bpy.types.Bone = context.object.data.bones.get(swing_oval.start_bone_name)
         end_bone: bpy.types.Bone = context.object.data.bones.get(swing_oval.end_bone_name)
@@ -1429,7 +926,7 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
         ovals_collection = shape_name_to_collection['Ovals']
         ovals_collection.objects.link(oval_obj)
 
-    swing_ellipsoid: Ellipsoid
+    swing_ellipsoid: SUB_PG_swing_ellipsoid
     for swing_ellipsoid in ssd.ellipsoids:
         blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_ellipsoid.bone_name)
         s = Vector(swing_ellipsoid.scale)
@@ -1443,7 +940,7 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
         ellipsoids_collection = shape_name_to_collection['Ellipsoids']
         ellipsoids_collection.objects.link(ellipsoid_obj)
 
-    swing_capsule: Capsule
+    swing_capsule: SUB_PG_swing_capsule
     for swing_capsule in ssd.capsules:
         start_bone: bpy.types.Bone = context.object.data.bones.get(swing_capsule.start_bone_name)
         end_bone: bpy.types.Bone = context.object.data.bones.get(swing_capsule.end_bone_name)
@@ -1478,11 +975,11 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
         capsules_collection = shape_name_to_collection['Capsules']
         capsules_collection.objects.link(capsule_obj)
 
-    swing_plane: Plane
+    swing_plane: SUB_PG_swing_plane
     for swing_plane in ssd.planes:
         blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_plane.bone_name)
         
-    swing_connection: Connection
+    swing_connection: SUB_PG_swing_connection
     for swing_connection in ssd.connections:
         start_bone: bpy.types.Bone = context.object.data.bones.get(swing_connection.start_bone_name)
         end_bone: bpy.types.Bone = context.object.data.bones.get(swing_connection.end_bone_name)
@@ -1516,9 +1013,9 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
         connections_collection = shape_name_to_collection['Connections']
         connections_collection.objects.link(capsule_obj)
 
-    swing_bone_chain: SwingBoneChain
-    swing_bone: SwingBone
-    swing_bone_collision: SwingBoneCollision
+    swing_bone_chain: SUB_PG_swing_bone_chain
+    swing_bone: SUB_PG_swing_bone
+    swing_bone_collision: SUB_PG_swing_bone_collision
     collision_name_to_collision = {}
     collision_lists =(ssd.spheres, ssd.ovals, ssd.ellipsoids, ssd.capsules,) #ssd.planes
     for collision_list in collision_lists:
@@ -1575,7 +1072,7 @@ class SUB_OP_swing_export(Operator):
             return False
         if arma.type != 'ARMATURE':
             return False
-        ssd: SubSwingData = arma.data.sub_swing_data
+        ssd: SUB_PG_sub_swing_data = arma.data.sub_swing_data
         return len(ssd.swing_bone_chains) > 0
 
     def invoke(self, context, _event):
@@ -1614,7 +1111,6 @@ pyprc.param.struct([
         ...
 
 '''
-from typing import Union # in python 3.10 this is deprecated
 def new_prc_list(list_name):
     return pyprc.param.struct([
         (pyprc.hash(list_name),pyprc.param.list([]))
@@ -1623,7 +1119,7 @@ def new_prc_list(list_name):
 def new_prc_struct():
     return pyprc.param.struct([])
 
-def new_prc_hash(hash_name: Union[str, int], hash_value: Union[str, int]):
+def new_prc_hash(hash_name: str|int, hash_value: str|int):
     try: 
         int(hash_name, base=16) 
     except ValueError: 
@@ -1649,16 +1145,16 @@ def new_prc_hash_simple(hash_value):
         hash_value = int(hash_value, base=16)
     return pyprc.param.hash(pyprc.hash(hash_value))
 
-def new_prc_float(float_name: Union[str, int], float_value: float):
+def new_prc_float(float_name: str| int, float_value: float):
     return pyprc.param.struct([
         (pyprc.hash(float_name), pyprc.param.float(float_value))
     ])
 
-def new_prc_byte(byte_name: Union[str, int], byte_value: int):
+def new_prc_byte(byte_name: str|int, byte_value: int):
     return pyprc.param.struct([
         (pyprc.hash(byte_name), pyprc.param.i8(byte_value))
     ])
-def new_prc_int(int_name: Union[str, int], int_value: int):
+def new_prc_int(int_name: str|int, int_value: int):
     return pyprc.param.struct([
         (pyprc.hash(int_name), pyprc.param.i8(int_value))
     ])
@@ -1719,18 +1215,18 @@ class PrcHash40():
 
 def swing_prc_export(operator: Operator, context: Context, filepath: str):
     # forward declaration for typechecking.
-    swing_bone_chain: SwingBoneChain
-    swing_bone: SwingBone 
-    collision: SwingBoneCollision 
-    sphere: Sphere
-    oval: Oval
-    ellipsoid: Ellipsoid
-    capsule: Capsule
-    plane: Plane
-    connection: Connection
+    swing_bone_chain: SUB_PG_swing_bone_chain
+    swing_bone: SUB_PG_swing_bone 
+    collision: SUB_PG_swing_bone_collision 
+    sphere: SUB_PG_swing_sphere
+    oval: SUB_PG_swing_oval
+    ellipsoid: SUB_PG_swing_ellipsoid
+    capsule: SUB_PG_swing_capsule
+    plane: SUB_PG_swing_plane
+    connection: SUB_PG_swing_connection
 
     arma_data: bpy.types.Armature = context.object.data
-    ssd: SubSwingData = arma_data.sub_swing_data
+    ssd: SUB_PG_sub_swing_data = arma_data.sub_swing_data
     prc_root = PrcStruct()
     # Add 'swingbones' list
     swing_bone_chains_list = PrcList('swingbones')
@@ -1798,8 +1294,19 @@ def swing_prc_export(operator: Operator, context: Context, filepath: str):
                 new_prc_float('windaffect', swing_bone.wind_affect),
                 collision_list,
             ])
-            #for collision in swing_bone.collisions:
-            #    collision_list += PrcHash40(collision.target_collision_name)
+            swing_bone_collision: SUB_PG_swing_bone_collision
+            for swing_bone_collision in swing_bone.collisions:
+                if swing_bone_collision.collision_type == 'SPHERE':
+                    c = ssd.spheres[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'OVAL':
+                    c = ssd.ovals[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'ELLIPSOID':
+                    c = ssd.ellipsoids[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'CAPSULE':
+                    c = ssd.capsules[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'PLANE':
+                    c = ssd.planes[swing_bone_collision.collision_index]
+                collision_list += PrcHash40(c.name)
             swing_bone_param_list += swing_bone_params_struct
         swing_bone_chains_list += swing_bone_chain_struct
     prc_root += swing_bone_chains_list
@@ -1904,193 +1411,3 @@ def swing_prc_export(operator: Operator, context: Context, filepath: str):
 
     prc_root.save(filepath)
 
-def collision_object_name_update(self, context):
-    ssd: SubSwingData = context.object.data.sub_swing_data
-    collision: SwingBoneCollision
-
-    # Need to make sure the name isn't used by other collision objects.
-    collision_collections = [
-        ssd.spheres,
-        ssd.ovals,
-        ssd.ellipsoids,
-        ssd.capsules,
-        ssd.planes,
-    ]
-    collision_names = [col.name for col_collection in collision_collections for col in col_collection if col.as_pointer() != self.as_pointer()]
-    if self.name in collision_names:
-        regex = r"(\w+\.)(\d+)"
-        matches = re.match(regex, self.name)
-        if matches is None:
-            self.name = self.name + '.001'
-        else:
-            base_name = matches.groups()[0]
-            number = int(matches.groups()[1])
-            self.name = f'{base_name}{number+1:003d}'
-         
-collision_types = (
-    ('SPHERE', 'Sphere', 'Sphere'),
-    ('OVAL', 'Oval', 'Oval'),
-    ('ELLIPSOID', 'Ellipsoid', 'Ellipsoid'),
-    ('CAPSULE', 'Capsule', 'Capsule'),
-    ('PLANE', 'Plane', 'Plane'),
-)
-
-class SwingBoneCollision(PropertyGroup):
-    # target_collision_name: StringProperty(name='The cracked hash of the collision name if possible, otherwise the raw hash')
-    # New idea, instead of storing the collision name, store the collision sub-type and index
-    collision_type: EnumProperty(
-        name='Collision Type',
-        items=collision_types,
-        default='SPHERE',
-    )
-    collision_index: IntProperty(
-        name='Collision Index',
-        default=0,
-    )
-
-class SwingBone(PropertyGroup):
-    air_resistance: FloatProperty(name='Air Resistance')
-    water_resistance: FloatProperty(name='Water Resistance')
-    #min_angle_z: FloatProperty(name='Min Angle Z')
-    #max_angle_z: FloatProperty(name='Max Angle Z')
-    angle_z: FloatVectorProperty(name='Angle Z Min/Max', size=2, unit='ROTATION')
-    #min_angle_y: FloatProperty(name='Min Angle Y')
-    #max_angle_y: FloatProperty(name='Max Angle Y')
-    angle_y: FloatVectorProperty(name='Angle Y Min/Max', size=2, unit='ROTATION')
-    #collision_size_tip: FloatProperty(name='Collision Size Tip')
-    #collision_size_root: FloatProperty(name='Collision Size Root')
-    collision_size: FloatVectorProperty(name='Collsion Size Head/Tail', size=2, unit='LENGTH')
-    friction_rate: FloatProperty(name='Friction Rate')
-    goal_strength: FloatProperty(name='Goal Strength')
-    unk_11: FloatProperty(name='0x0cc10e5d3a')
-    local_gravity: FloatProperty(name='Local Gravity')
-    fall_speed_scale: FloatProperty(name='Fall Speed Scale')
-    ground_hit: BoolProperty(name='Ground Hit')
-    wind_affect: FloatProperty(name='Wind Affect')
-    collisions: CollectionProperty(type=SwingBoneCollision)
-    # Properties Below are for UI Only
-    name: StringProperty(name='Swing Bone Name') # The swing.prc doesn't track individual bone names
-    active_collision_index: IntProperty(name='Active Collision Index', default=0) 
-
-class SwingBoneChain(PropertyGroup):
-    name: StringProperty(name='SwingBoneChain Name Hash40')
-    start_bone_name: StringProperty(name='Start Bone Name Hash40')
-    end_bone_name: StringProperty(name='End Bone Name Hash40')
-    is_skirt: BoolProperty(name='Is Skirt')
-    rotate_order: IntProperty(name='Rotate Order')
-    curve_rotate_x: BoolProperty(name='Curve Rotate X')
-    has_unk_8: BoolProperty(name='Has Unk 8', default=False)
-    unk_8: IntProperty(name='0x0f7316a113', default=0)
-    swing_bones: CollectionProperty(type=SwingBone)
-    # Properties below are for UI Only
-    active_swing_bone_index: IntProperty(name='Active Bone Index', default=0)
-
-class Sphere(PropertyGroup):
-    name: StringProperty(name='Sphere Name Hash40', update=collision_object_name_update)
-    #bone_name: StringProperty(name='Bone Name Hash40')
-    bone: StringProperty(
-        name='Bone',
-        description='The bone this sphere is attached to',
-    )
-    offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3)
-    radius: FloatProperty(name='Radius')
-    # Store the blender object for optimization
-    blender_object: PointerProperty(
-        type=bpy.types.Object,
-        name='Sphere Object',
-    )
-
-class Oval(PropertyGroup):
-    name: StringProperty(name='Oval Name Hash40', update=collision_object_name_update)
-    start_bone_name: StringProperty(name='Start Bone Name Hash40')
-    end_bone_name: StringProperty(name='End Bone Name Hash40')
-    radius: FloatProperty(name='Radius')
-    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3)
-    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3)
-    # Store the blender object for optimization 
-    blender_object: PointerProperty(
-        type=bpy.types.Object,
-        name='Oval Object',
-    )
-
-class Ellipsoid(PropertyGroup):
-    name: StringProperty(name='Ellipoid Name Hash40', update=collision_object_name_update)
-    bone_name: StringProperty(name='BoneName Hash40')
-    offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3)
-    rotation: FloatVectorProperty(name='Rotation', subtype='XYZ', size=3)
-    scale: FloatVectorProperty(name='Scale', subtype='XYZ', size=3)
-    # Store the blender object for optimization
-    blender_object: PointerProperty(
-        type=bpy.types.Object,
-        name='Ellipse Object',
-    )
-
-
-class Capsule(PropertyGroup):
-    name: StringProperty(name='Capsule Name Hash40', update=collision_object_name_update)
-    start_bone_name: StringProperty(name='Start Bone Name Hash40')
-    end_bone_name: StringProperty(name='End Bone Name Hash40')
-    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3)
-    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3)
-    start_radius: FloatProperty(name='Start Radius')
-    end_radius: FloatProperty(name='End Radius')
-    # Store the blender object for optimization
-    blender_object: PointerProperty(
-        type=bpy.types.Object,
-        name='Capsule Object',
-    )
-
-class Plane(PropertyGroup):
-    name: StringProperty(name='Plane Name Hash40', update=collision_object_name_update)
-    bone_name: StringProperty(name='Bone Name Hash40')
-    nx: FloatProperty(name='nx')
-    ny: FloatProperty(name='ny')
-    nz: FloatProperty(name='nz')
-    distance: FloatProperty(name='d')
-    # Store the blender object for optimization
-    blender_object: PointerProperty(
-        type=bpy.types.Object,
-        name='Plane Object',
-    )
-
-class Connection(PropertyGroup):
-    start_bone_name: StringProperty(name='Start Bone Name Hash40')
-    end_bone_name: StringProperty(name='End Bone Name Hash40')
-    radius: FloatProperty(name='Radius')
-    length: FloatProperty(name='Length')
-    # Store the blender object for optimization
-    blender_object: PointerProperty(
-        type=bpy.types.Object,
-        name='Connection Object',
-    )
-
-class SubSwingData(PropertyGroup):
-    swing_bone_chains: CollectionProperty(type=SwingBoneChain)
-    spheres: CollectionProperty(type=Sphere)
-    ovals: CollectionProperty(type=Oval)
-    ellipsoids: CollectionProperty(type=Ellipsoid)
-    capsules: CollectionProperty(type=Capsule)
-    planes: CollectionProperty(type=Plane)
-    connections: CollectionProperty(type=Connection)
-    # Below are needed properties for UI
-    active_swing_bone_chain_index: IntProperty(name='Active Swing Bone Chain Index', default=0)
-    active_sphere_index: IntProperty(name='Active Sphere', default=0)
-    active_oval_index: IntProperty(name='Active Oval', default=0)
-    active_ellipsoid_index: IntProperty(name='Active Ellipsoid', default=0)
-    active_capsule_index: IntProperty(name='Active Capsule', default=0)
-    active_plane_index: IntProperty(name='Active Plane', default=0)
-    active_connection_index: IntProperty(name='Active Connection', default=0)
-    # Hack since prop_search doesn't allow filtering. Still doesn't work for the UI, but for operators it will
-    armature_swing_bones: CollectionProperty(type=ArmatureSwingBone)
-    armature_swing_bone_children: CollectionProperty(type=ArmatureSwingBoneChildren)
-
-# This is for UI only
-class SubSwingBlenderBoneData(PropertyGroup):
-    swing_bone_chain_index: IntProperty(
-        name='Index of swing bone chain this bone belongs to',
-        default= -1,
-    )
-    swing_bone_index: IntProperty(
-        name='Index of the swing bone data of this bone',
-        default= -1,
-    )
