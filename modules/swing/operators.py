@@ -96,9 +96,9 @@ class SUB_OP_swing_bone_chain_add(Operator):
             self.report({'ERROR'}, f'Somehow the specified start bone {self.start_bone_name} is no longer in the armature.')
             return {'CANCELLED'}
         if end_bone is None:
-            self.report({'ERROR'}, f'Somehow the specified end bone {self.end_bone} is no longer in the armature.')
+            self.report({'ERROR'}, f'Somehow the specified end bone {self.end_bone_name} is no longer in the armature.')
             return {'CANCELLED'}
-        
+
         is_valid_chain, problematic_bone = is_one_child_only_chain(start_bone)
         if not is_valid_chain:
             self.report({'ERROR'}, f"Chain can't start at {start_bone.name}, the bone {problematic_bone.name} has multiple children!")
@@ -109,18 +109,34 @@ class SUB_OP_swing_bone_chain_add(Operator):
             self.report({'ERROR'}, f"Chain can't end at {end_bone.name}, that bone has no child! (Add a '_null' swing bone if its the last bone in the chain)")
             return {'CANCELLED'}
 
+        bones_in_chain: list[bpy.types.Bone] = []
+        for blender_bone in [start_bone] + start_bone.children_recursive:
+            if blender_bone.name == end_bone.children[0].name:
+                break
+            bones_in_chain.append(blender_bone)
+
+        if end_bone not in bones_in_chain:
+            self.report({'ERROR'}, f'Somehow the specified end bone {end_bone.name} was not a child of {start_bone.name}')
+            return {'CANCELLED'}
+        
+        for blender_bone in bones_in_chain:
+            sub_blender_bone_data: SUB_PG_blender_bone_data = blender_bone.sub_swing_blender_bone_data
+            chain_index = sub_blender_bone_data.swing_bone_chain_index
+            if chain_index != -1:
+                self.report({'ERROR'}, f"Chain can't contain {blender_bone.name}, that bone is already in the swing bone chain '{sub_swing_data.swing_bone_chains[chain_index].name}'")
+                return {'CANCELLED'}
+
+
         new_chain: SUB_PG_swing_bone_chain = sub_swing_data.swing_bone_chains.add()
         new_chain.name = self.start_bone_name[2:].lower()
 
-        for bone_index, blender_bone in enumerate([start_bone] + start_bone.children_recursive):
-            if blender_bone.name == end_bone.children[0].name:
-                break
+        for bone_index, blender_bone in enumerate(bones_in_chain):
             new_swing_bone: SUB_PG_swing_bone = new_chain.swing_bones.add()
             new_swing_bone.name = blender_bone.name
             sub_blender_bone_data: SUB_PG_blender_bone_data = blender_bone.sub_swing_blender_bone_data
             sub_blender_bone_data.swing_bone_chain_index = sub_swing_data.swing_bone_chains.find(new_chain.name)
             sub_blender_bone_data.swing_bone_index = bone_index
-
+        sub_swing_data.active_swing_bone_chain_index = len(sub_swing_data.swing_bone_chains)-1
         return {'FINISHED'}
 
 class SUB_OP_swing_bone_chain_remove(Operator):
@@ -129,10 +145,28 @@ class SUB_OP_swing_bone_chain_remove(Operator):
 
     @classmethod
     def poll(cls, context):
-        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        try:
+            sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        except:
+            return False
+        
         return len(sub_swing_data.swing_bone_chains) > 0
     
     def execute(self, context):
+        arma_data: bpy.types.Armature = context.object.data
+        sub_swing_data: SUB_PG_sub_swing_data = arma_data.sub_swing_data
+        active_swing_bone_chain_index = sub_swing_data.active_swing_bone_chain_index
+        for bone in arma_data.bones:
+            sub_blender_bone_data: SUB_PG_blender_bone_data = bone.sub_swing_blender_bone_data
+            if sub_blender_bone_data.swing_bone_chain_index == active_swing_bone_chain_index:
+                sub_blender_bone_data.swing_bone_chain_index = -1
+                sub_blender_bone_data.swing_bone_index = -1
+            if sub_blender_bone_data.swing_bone_chain_index > active_swing_bone_chain_index:
+                sub_blender_bone_data.swing_bone_chain_index -= 1
+
+        sub_swing_data.swing_bone_chains.remove(active_swing_bone_chain_index)
+        sub_swing_data.active_swing_bone_chain_index = min(active_swing_bone_chain_index, len(sub_swing_data.swing_bone_chains)-1)
+        
         return {'FINISHED'}
 
 class SUB_OP_swing_bone_chain_length_edit(Operator):

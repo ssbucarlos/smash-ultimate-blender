@@ -120,7 +120,7 @@ class SUB_PG_swing_bone(PropertyGroup):
     # Ok so it turns out bones cant be used for pointer props when made thru python
     #bone: PointerProperty(type=bpy.types.Bone) # Testing using pointer prop instead
    
-    active_collision_index: IntProperty(name='Active Collision Index', default=0) 
+    active_collision_index: IntProperty(name='Active Collision Index', default=0, options={'HIDDEN'},) 
 
 class SUB_PG_swing_bone_chain(PropertyGroup):
     name: StringProperty(name='SwingBoneChain Name Hash40', update=swing_bone_chain_name_update)
@@ -133,7 +133,7 @@ class SUB_PG_swing_bone_chain(PropertyGroup):
     unk_8: IntProperty(name='0x0f7316a113', default=0)
     swing_bones: CollectionProperty(type=SUB_PG_swing_bone)
     # Properties below are for UI Only
-    active_swing_bone_index: IntProperty(name='Active Bone Index', default=0)
+    active_swing_bone_index: IntProperty(name='Active Bone Index', default=0, options={'HIDDEN'},)
     # Ok so it turns out bones cant be used for pointer props when made thru python
     # Testing Pointer Properties Instead
     #start_bone: PointerProperty(type=bpy.types.Bone)
@@ -227,13 +227,13 @@ class SUB_PG_sub_swing_data(PropertyGroup):
     planes: CollectionProperty(type=SUB_PG_swing_plane)
     connections: CollectionProperty(type=SUB_PG_swing_connection)
     # Below are needed properties for UI
-    active_swing_bone_chain_index: IntProperty(name='Active Swing Bone Chain Index', default=0)
-    active_sphere_index: IntProperty(name='Active Sphere', default=0)
-    active_oval_index: IntProperty(name='Active Oval', default=0)
-    active_ellipsoid_index: IntProperty(name='Active Ellipsoid', default=0)
-    active_capsule_index: IntProperty(name='Active Capsule', default=0)
-    active_plane_index: IntProperty(name='Active Plane', default=0)
-    active_connection_index: IntProperty(name='Active Connection', default=0)
+    active_swing_bone_chain_index: IntProperty(name='Active Swing Bone Chain Index', default=0, options={'HIDDEN'},)
+    active_sphere_index: IntProperty(name='Active Sphere', default=0, options={'HIDDEN'},)
+    active_oval_index: IntProperty(name='Active Oval', default=0, options={'HIDDEN'},)
+    active_ellipsoid_index: IntProperty(name='Active Ellipsoid', default=0, options={'HIDDEN'},)
+    active_capsule_index: IntProperty(name='Active Capsule', default=0, options={'HIDDEN'},)
+    active_plane_index: IntProperty(name='Active Plane', default=0, options={'HIDDEN'},)
+    active_connection_index: IntProperty(name='Active Connection', default=0, options={'HIDDEN'},)
     # Hack since prop_search doesn't allow filtering. Still doesn't work for the UI, but for operators it will
     armature_swing_bones: CollectionProperty(type=SUB_PG_armature_swing_bone)
     armature_swing_bone_children: CollectionProperty(type=SUB_PG_armature_swing_bone_children)
@@ -243,8 +243,10 @@ class SUB_PG_blender_bone_data(PropertyGroup):
     swing_bone_chain_index: IntProperty(
         name='Index of swing bone chain this bone belongs to',
         default= -1,
+        options={'HIDDEN'},
     )
     swing_bone_index: IntProperty(
         name='Index of the swing bone data of this bone',
         default= -1,
+        options={'HIDDEN'},
     )
