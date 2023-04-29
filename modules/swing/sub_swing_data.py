@@ -109,7 +109,7 @@ class SUB_PG_swing_bone(PropertyGroup):
     collision_size: FloatVectorProperty(name='Collsion Size Head/Tail', size=2, unit='LENGTH')
     friction_rate: FloatProperty(name='Friction Rate')
     goal_strength: FloatProperty(name='Goal Strength')
-    unk_11: FloatProperty(name='0x0cc10e5d3a')
+    inertial_mass: FloatProperty(name='Mass')
     local_gravity: FloatProperty(name='Local Gravity')
     fall_speed_scale: FloatProperty(name='Fall Speed Scale')
     ground_hit: BoolProperty(name='Ground Hit')

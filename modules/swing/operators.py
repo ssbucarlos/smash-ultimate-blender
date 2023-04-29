@@ -811,7 +811,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
             new_swing_bone.collision_size[1]    = struct_get_val(prc_swing_bone_parameters, 'collisionsizetip')
             new_swing_bone.friction_rate        = struct_get_val(prc_swing_bone_parameters, 'frictionrate')
             new_swing_bone.goal_strength        = struct_get_val(prc_swing_bone_parameters, 'goalstrength')
-            new_swing_bone.unk_11               = struct_get_val(prc_swing_bone_parameters, 0x0cc10e5d3a)
+            new_swing_bone.inertial_mass        = struct_get_val(prc_swing_bone_parameters, 'inertialmass')
             new_swing_bone.local_gravity        = struct_get_val(prc_swing_bone_parameters, 'localgravity')
             new_swing_bone.fall_speed_scale     = struct_get_val(prc_swing_bone_parameters, 'fallspeedscale')
             new_swing_bone.ground_hit           = struct_get_val(prc_swing_bone_parameters, 'groundhit')
@@ -1190,7 +1190,7 @@ def new_prc_byte(byte_name: str|int, byte_value: int):
     ])
 def new_prc_int(int_name: str|int, int_value: int):
     return pyprc.param.struct([
-        (pyprc.hash(int_name), pyprc.param.i8(int_value))
+        (pyprc.hash(int_name), pyprc.param.i32(int_value))
     ])
 def extend_struct(struct, new_thing):
     struct.set_struct(list(struct) + list(new_thing))
@@ -1321,7 +1321,7 @@ def swing_prc_export(operator: Operator, context: Context, filepath: str):
                 new_prc_float('collisionsizeroot', swing_bone.collision_size[0]),
                 new_prc_float('frictionrate', swing_bone.friction_rate),
                 new_prc_float('goalstrength', swing_bone.goal_strength),
-                new_prc_float(0x0cc10e5d3a, swing_bone.unk_11),
+                new_prc_float('inertialmass', swing_bone.inertial_mass),
                 new_prc_float('localgravity', swing_bone.local_gravity),
                 new_prc_float('fallspeedscale', swing_bone.fall_speed_scale),
                 new_prc_byte('groundhit', swing_bone.ground_hit),
@@ -1341,6 +1341,8 @@ def swing_prc_export(operator: Operator, context: Context, filepath: str):
                 elif swing_bone_collision.collision_type == 'PLANE':
                     c = ssd.planes[swing_bone_collision.collision_index]
                 collision_list += PrcHash40(c.name)
+            if len(swing_bone.collisions) == 0:
+                collision_list += PrcHash40("")
             swing_bone_param_list += swing_bone_params_struct
         swing_bone_chains_list += swing_bone_chain_struct
     prc_root += swing_bone_chains_list
@@ -1417,8 +1419,8 @@ def swing_prc_export(operator: Operator, context: Context, filepath: str):
         planes_list += PrcStruct([
             new_prc_hash('name', plane.name),
             new_prc_hash('bonename', plane.bone_name.lower()),
-            new_prc_float('nx',  plane.nx),
-            new_prc_float('ny',  plane.ny),
+            new_prc_float('nx',  plane.ny),
+            new_prc_float('ny',  -plane.nx),
             new_prc_float('nz',  plane.nz),
             new_prc_float('distance', plane.distance),
         ])
@@ -1441,6 +1443,19 @@ def swing_prc_export(operator: Operator, context: Context, filepath: str):
             swing_bone_collision_list = PrcList(swing_bone.name.lower() + 'col')
             #for collision in swing_bone.collisions:
                 #swing_bone_collision_list += PrcHash40(collision.target_collision_name)
+            swing_bone_collision: SUB_PG_swing_bone_collision
+            for swing_bone_collision in swing_bone.collisions:
+                if swing_bone_collision.collision_type == 'SPHERE':
+                    c = ssd.spheres[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'OVAL':
+                    c = ssd.ovals[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'ELLIPSOID':
+                    c = ssd.ellipsoids[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'CAPSULE':
+                    c = ssd.capsules[swing_bone_collision.collision_index]
+                elif swing_bone_collision.collision_type == 'PLANE':
+                    c = ssd.planes[swing_bone_collision.collision_index]
+                swing_bone_collision_list += PrcHash40(c.name)
             prc_root += swing_bone_collision_list
 
     prc_root.save(filepath)
