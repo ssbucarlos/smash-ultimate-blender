@@ -129,6 +129,8 @@ class SUB_OP_swing_bone_chain_add(Operator):
 
         new_chain: SUB_PG_swing_bone_chain = sub_swing_data.swing_bone_chains.add()
         new_chain.name = self.start_bone_name[2:].lower()
+        new_chain.start_bone_name = self.start_bone_name
+        new_chain.end_bone_name = self.end_bone_name
 
         for bone_index, blender_bone in enumerate(bones_in_chain):
             new_swing_bone: SUB_PG_swing_bone = new_chain.swing_bones.add()
@@ -442,6 +444,53 @@ class SUB_OP_swing_data_sphere_add(Operator):
         new_sphere.radius = self.radius
         return {'FINISHED'}
 
+def remove_active_collision_from_collection(collision_type: str, sub_swing_data: SUB_PG_sub_swing_data):
+    if collision_type == "SPHERE":
+        active_index = sub_swing_data.active_sphere_index
+        collision_collection = sub_swing_data.spheres
+    elif collision_type == "OVAL":
+        active_index = sub_swing_data.active_oval_index
+        collision_collection = sub_swing_data.ovals
+    elif collision_type == "ELLIPSOID":
+        active_index = sub_swing_data.active_ellipsoid_index
+        collision_collection = sub_swing_data.ellipsoids
+    elif collision_type == "CAPSULE":
+        active_index = sub_swing_data.active_capsule_index
+        collision_collection = sub_swing_data.capsules
+    elif collision_type == "PLANE":
+        active_index = sub_swing_data.active_plane_index
+        collision_collection = sub_swing_data.planes
+
+    swing_bone_chain: SUB_PG_swing_bone_chain
+    swing_bone: SUB_PG_swing_bone
+    swing_bone_collision: SUB_PG_swing_bone_collision
+    for swing_bone_chain in sub_swing_data.swing_bone_chains:
+        for swing_bone in swing_bone_chain.swing_bones:
+            collision_index_to_remove: int = -1
+            for swing_bone_all_collision_index, swing_bone_collision in enumerate(swing_bone.collisions):
+                if swing_bone_collision.collision_type == collision_type:
+                    if swing_bone_collision.collision_index > active_index:
+                        swing_bone_collision.collision_index -= 1
+                    elif swing_bone_collision.collision_index == active_index:
+                        collision_index_to_remove = swing_bone_all_collision_index
+            if collision_index_to_remove != -1:
+                swing_bone.collisions.remove(collision_index_to_remove)
+                swing_bone.active_collision_index = max(0, min(swing_bone.active_collision_index, len(swing_bone.collisions)-1))
+    
+    collision_collection.remove(active_index)
+    new_index = max(0, min(active_index, len(collision_collection)-1))  
+    if collision_type == "SPHERE":
+        sub_swing_data.active_sphere_index = new_index
+    elif collision_type == "OVAL":
+        sub_swing_data.active_oval_index = new_index
+    elif collision_type == "ELLIPSOID":
+        sub_swing_data.active_ellipsoid_index = new_index
+    elif collision_type == "CAPSULE":
+        sub_swing_data.active_capsule_index = new_index
+    elif collision_type == "PLANE":
+        sub_swing_data.active_plane_index = new_index
+      
+
 class SUB_OP_swing_data_sphere_remove(Operator):
     bl_idname = 'sub.swing_data_sphere_remove'
     bl_label = 'Remove Sphere Collision'
@@ -456,29 +505,7 @@ class SUB_OP_swing_data_sphere_remove(Operator):
             return len(sub_swing_data.spheres) > 0
         
     def execute(self, context):
-        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
-        active_sphere = sub_swing_data.spheres[sub_swing_data.active_sphere_index]
-        active_sphere_index = sub_swing_data.active_sphere_index
-
-        swing_bone_chain: SUB_PG_swing_bone_chain
-        swing_bone: SUB_PG_swing_bone
-        collision: SUB_PG_swing_bone_collision
-        for swing_bone_chain in sub_swing_data.swing_bone_chains:
-            for swing_bone in swing_bone_chain.swing_bones:
-                col_to_remove: int = -1
-                for i, collision in enumerate(swing_bone.collisions):
-                    if collision.collision_type == 'SPHERE':
-                        if collision.collision_index > active_sphere_index:
-                            collision.collision_index -= 1
-                        elif collision.collision_index == active_sphere_index:
-                            col_to_remove = i
-                if col_to_remove != -1:
-                    swing_bone.collisions.remove(col_to_remove)
-                    swing_bone.active_collision_index = max(0, min(swing_bone.active_collision_index, len(swing_bone.collisions)-1))
-        
-        sub_swing_data.spheres.remove(active_sphere_index)
-        sub_swing_data.active_sphere_index = max(0, min(active_sphere_index, len(sub_swing_data.spheres)-1))
-
+        remove_active_collision_from_collection("SPHERE",context.object.data.sub_swing_data)
         return {'FINISHED'}   
     
 
@@ -487,14 +514,65 @@ class SUB_OP_swing_data_oval_add(Operator):
     bl_idname = 'sub.swing_data_oval_add'
     bl_label = 'Add Oval Collision'
 
+    oval_name: StringProperty(name='Oval Name')
+    start_bone_name: StringProperty(name='Start Bone Name')
+    end_bone_name: StringProperty(name='End Bone Name')
+    radius: FloatProperty(name='Radius')
+    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3)
+    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3)
+
     @classmethod
     def poll(cls, context):
         if not context.object:
             return False
         return context.object.type == 'ARMATURE'
+    
+    def invoke(self, context: Context, event):
+        wm = context.window_manager
+        self.oval_name = ""
+        self.start_bone_name = ""
+        self.end_bone_name = ""
+        self.radius = 1.0
+        self.start_offset = (0.0, 0.0, 0.0)
+        self.end_offset = (0.0, 0.0, 0.0)
+
+        return wm.invoke_props_dialog(self)
+    
+    def draw(self, context):
+        layout = self.layout
+        
+        layout.row().prop(self, "oval_name")
+
+        layout.row().prop_search(self, 'start_bone_name', context.object.data, 'bones', text='Start Bone', icon='BONE_DATA')
+
+        layout.row().prop_search(self, 'end_bone_name', context.object.data, 'bones', text='End Bone', icon='BONE_DATA')
+
+        layout.row().prop(self, "radius")
+
+        layout.row().prop(self, "start_offset")
+
+        layout.row().prop(self, "end_offset")   
 
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        if self.oval_name == "":
+            return {'CANCELLED'}
+        if self.start_bone_name == "":
+            return {'CANCELLED'}
+        if self.end_bone_name == "":
+            return {'CANCELLED'}
+        
+        new_oval: SUB_PG_swing_oval = sub_swing_data.ovals.add()
+        new_oval.name = self.oval_name
+        new_oval.start_bone_name = self.start_bone_name
+        new_oval.end_bone_name = self.end_bone_name
+        new_oval.radius = self.radius
+        new_oval.start_offset = self.start_offset
+        new_oval.end_offset = self.end_offset
+
         return {'FINISHED'}
+
+
 
 class SUB_OP_swing_data_oval_remove(Operator):
     bl_idname = 'sub.swing_data_oval_remove'
@@ -510,6 +588,7 @@ class SUB_OP_swing_data_oval_remove(Operator):
             return len(sub_swing_data.ovals) > 0
         
     def execute(self, context):
+        remove_active_collision_from_collection('OVAL', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
 
@@ -518,13 +597,55 @@ class SUB_OP_swing_data_ellipsoid_add(Operator):
     bl_idname = 'sub.swing_data_ellipsoid_add'
     bl_label = 'Add Ellipsoid Collision'
 
+    ellipsoid_name: StringProperty(name='Ellipoid Name Hash40')
+    bone_name: StringProperty(name='Bone Name')
+    offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3)
+    rotation: FloatVectorProperty(name='Rotation', subtype='XYZ', size=3)
+    scale: FloatVectorProperty(name='Scale', subtype='XYZ', size=3)
+
     @classmethod
     def poll(cls, context):
         if not context.object:
             return False
         return context.object.type == 'ARMATURE'
+    
+    def invoke(self, context: Context, event):
+        wm = context.window_manager
+        self.ellipsoid_name = ""
+        self.bone_name = ""
+        self.offset = (0.0, 0.0, 0.0)
+        self.rotation = (0.0, 0.0, 0.0)
+        self.scale = (1.0, 1.0, 1.0)
+
+        return wm.invoke_props_dialog(self)
+    
+    def draw(self, context):
+        layout = self.layout
+
+        layout.row().prop(self, "ellipsoid_name")
+
+        layout.row().prop_search(self, 'bone_name', context.object.data, 'bones', text='Bone', icon='BONE_DATA')
+
+        layout.row().prop(self, "offset")
+
+        layout.row().prop(self, "rotation")
+
+        layout.row().prop(self, "scale")   
 
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        if self.ellipsoid_name == "":
+            return {'CANCELLED'}
+        if self.bone_name == "":
+            return {'CANCELLED'}
+        
+        new_ellipsoid: SUB_PG_swing_ellipsoid = sub_swing_data.ellipsoids.add()
+        new_ellipsoid.name = self.ellipsoid_name
+        new_ellipsoid.bone_name = self.bone_name
+        new_ellipsoid.offset = self.offset
+        new_ellipsoid.rotation = self.rotation
+        new_ellipsoid.scale = self.scale
+
         return {'FINISHED'}
 
 class SUB_OP_swing_data_ellipsoid_remove(Operator):
@@ -541,6 +662,7 @@ class SUB_OP_swing_data_ellipsoid_remove(Operator):
             return len(sub_swing_data.ellipsoids) > 0
         
     def execute(self, context):
+        remove_active_collision_from_collection('ELLIPSOID', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
 
@@ -548,13 +670,68 @@ class SUB_OP_swing_data_capsule_add(Operator):
     bl_idname = 'sub.swing_data_capsule_add'
     bl_label = 'Add Capsule Collision'
 
+    capsule_name: StringProperty(name='Capsule Name')
+    start_bone_name: StringProperty(name='Start Bone Name')
+    end_bone_name: StringProperty(name='End Bone Name')
+    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3)
+    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3)
+    start_radius: FloatProperty(name='Start Radius')
+    end_radius: FloatProperty(name='End Radius')
+
     @classmethod
     def poll(cls, context):
         if not context.object:
             return False
         return context.object.type == 'ARMATURE'
+    
+    def invoke(self, context: Context, event):
+        wm = context.window_manager
+        self.capsule_name = ""
+        self.start_bone_name = ""
+        self.end_bone_name = ""
+        self.start_offset = (0.0, 0.0, 0.0)
+        self.end_offset = (0.0, 0.0, 0.0)
+        self.start_radius = 1.0
+        self.end_radius = 1.0
+
+        return wm.invoke_props_dialog(self)
+
+    def draw(self, context):
+        layout = self.layout
+        
+        layout.row().prop(self, "capsule_name")
+
+        layout.row().prop_search(self, 'start_bone_name', context.object.data, 'bones', text='Start Bone', icon='BONE_DATA')
+
+        layout.row().prop_search(self, 'end_bone_name', context.object.data, 'bones', text='End Bone', icon='BONE_DATA')
+
+        layout.row().prop(self, "start_offset")
+
+        layout.row().prop(self, "end_offset")
+
+        layout.row().prop(self, "start_radius")
+
+        layout.row().prop(self, "end_radius")      
 
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        if self.capsule_name == "":
+            return {'CANCELLED'}
+        if self.start_bone_name == "":
+            return {'CANCELLED'}
+        if self.end_bone_name == "":
+            return {'CANCELLED'}
+        
+        new_capsule: SUB_PG_swing_capsule = sub_swing_data.capsules.add()
+
+        new_capsule.name            = self.capsule_name
+        new_capsule.start_bone_name = self.start_bone_name
+        new_capsule.end_bone_name   = self.end_bone_name
+        new_capsule.start_offset    = self.start_offset
+        new_capsule.end_offset      = self.end_offset
+        new_capsule.start_radius    = self.start_radius
+        new_capsule.end_radius      = self.end_radius
+        
         return {'FINISHED'}
 
 class SUB_OP_swing_data_capsule_remove(Operator):
@@ -568,9 +745,10 @@ class SUB_OP_swing_data_capsule_remove(Operator):
         except:
             return False
         else:
-            return len(sub_swing_data.ellipsoids) > 0
+            return len(sub_swing_data.capsules) > 0
         
     def execute(self, context):
+        remove_active_collision_from_collection('CAPSULE', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
 
@@ -578,13 +756,59 @@ class SUB_OP_swing_data_plane_add(Operator):
     bl_idname = 'sub.swing_data_plane_add'
     bl_label = 'Add Plane Collision'
 
+    plane_name: StringProperty(name='Plane Name',)
+    bone_name: StringProperty(name='Bone Name')
+    nx: FloatProperty(name='nx')
+    ny: FloatProperty(name='ny')
+    nz: FloatProperty(name='nz')
+    distance: FloatProperty(name='d')
+
     @classmethod
     def poll(cls, context):
         if not context.object:
             return False
         return context.object.type == 'ARMATURE'
 
+    def invoke(self, context: Context, event):
+        wm = context.window_manager
+        self.plane_name = ""
+        self.bone_name = ""
+        self.nx = 1.0
+        self.ny = 1.0
+        self.nz = 1.0
+        self.distance = 1.0
+
+        return wm.invoke_props_dialog(self)
+
+    def draw(self, context):
+        layout = self.layout
+        
+        layout.row().prop(self, "plane_name")
+
+        layout.row().prop_search(self, 'bone_name', context.object.data, 'bones', text='Bone', icon='BONE_DATA')
+
+        layout.row().prop(self, "nx")
+
+        layout.row().prop(self, "ny")
+
+        layout.row().prop(self, "nz")
+
+        layout.row().prop(self, "distance")         
+
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        if self.plane_name == "":
+            return {'CANCELLED'}
+        if self.bone_name == "":
+            return {'CANCELLED'}
+        
+        new_plane: SUB_PG_swing_plane = sub_swing_data.planes.add()
+        new_plane.name = self.plane_name
+        new_plane.bone_name = self.bone_name
+        new_plane.nx = self.nx
+        new_plane.ny = self.ny
+        new_plane.nz = self.nz
+        new_plane.distance = self.distance
         return {'FINISHED'}
 
 class SUB_OP_swing_data_plane_remove(Operator):
@@ -601,6 +825,7 @@ class SUB_OP_swing_data_plane_remove(Operator):
             return len(sub_swing_data.planes) > 0
         
     def execute(self, context):
+        remove_active_collision_from_collection('PLANE', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
 
@@ -608,13 +833,50 @@ class SUB_OP_swing_data_connection_add(Operator):
     bl_idname = 'sub.swing_data_connection_add'
     bl_label = 'Add Swing Bone Connection Collision'
 
+    start_bone_name: StringProperty(name='Start Bone Name Hash40')
+    end_bone_name: StringProperty(name='End Bone Name Hash40')
+    radius: FloatProperty(name='Radius')
+    length: FloatProperty(name='Length')
+
     @classmethod
     def poll(cls, context):
         if not context.object:
             return False
         return context.object.type == 'ARMATURE'
 
+    def invoke(self, context: Context, event):
+        wm = context.window_manager
+        self.start_bone_name = ""
+        self.end_bone_name = ""
+        self.radius = 1.0
+        self.length = 1.0
+        fill_armature_swing_bones(context)
+        return wm.invoke_props_dialog(self)
+
+    def draw(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        layout = self.layout
+        
+        layout.row().prop_search(self, 'start_bone_name', sub_swing_data, 'armature_swing_bones', text='Start Bone Name', icon='BONE_DATA')
+
+        layout.row().prop_search(self, 'end_bone_name', sub_swing_data, 'armature_swing_bones', text='End Bone Name', icon='BONE_DATA')
+
+        layout.row().prop(self, "radius")
+
+        layout.row().prop(self, "length")       
+
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        if self.start_bone_name == "":
+            return {'CANCELLED'}
+        if self.end_bone_name == "":
+            return {'CANCELLED'}
+        
+        new_connection: SUB_PG_swing_connection = sub_swing_data.connections.add()
+        new_connection.start_bone_name = self.start_bone_name
+        new_connection.end_bone_name = self.end_bone_name
+        new_connection.radius = self.radius
+        new_connection.length = self.length
         return {'FINISHED'}
 
 class SUB_OP_swing_data_connection_remove(Operator):
@@ -631,6 +893,10 @@ class SUB_OP_swing_data_connection_remove(Operator):
             return len(sub_swing_data.connections) > 0
         
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_connection_index = sub_swing_data.active_connection_index
+        sub_swing_data.connections.remove(active_connection_index)
+        sub_swing_data.active_connection_index = max(0, min(active_connection_index, len(sub_swing_data.connections)-1))  
         return {'FINISHED'}
 
 
@@ -1214,30 +1480,18 @@ def new_prc_struct():
     return pyprc.param.struct([])
 
 def new_prc_hash(hash_name: str|int, hash_value: str|int):
-    try: 
-        int(hash_name, base=16) 
-    except ValueError: 
-        pass
-    else: 
+    regex = r"0x[\da-f]{10}"
+    matches = re.match(regex, hash_name)
+    if matches is not None:
         hash_name = int(hash_name, base=16)
-    try: 
-        int(hash_value, base=16) 
-    except ValueError: 
-        pass
-    else: 
+    
+    matches = re.match(regex, hash_value)
+    if matches is not None:
         hash_value = int(hash_value, base=16)
+
     return pyprc.param.struct([
         (pyprc.hash(hash_name), pyprc.param.hash(pyprc.hash(hash_value)))
     ])
-
-def new_prc_hash_simple(hash_value):
-    try: 
-        int(hash_value, base=16) 
-    except ValueError: 
-        pass
-    else: 
-        hash_value = int(hash_value, base=16)
-    return pyprc.param.hash(pyprc.hash(hash_value))
 
 def new_prc_float(float_name: str| int, float_value: float):
     return pyprc.param.struct([
@@ -1295,12 +1549,11 @@ class PrcList(PrcStruct):
 class PrcHash40():
     _prc_param = None
     def __init__(self, hash_value):
-        try: 
-            int(hash_value, base=16) 
-        except ValueError: 
-            pass
-        else: 
+        regex = r"0x[\da-f]{10}"
+        matches = re.match(regex, hash_value)
+        if matches is not None:
             hash_value = int(hash_value, base=16)
+
         self._prc_param = pyprc.param.hash(pyprc.hash(hash_value))
     def get_param(self):
         return self._prc_param
