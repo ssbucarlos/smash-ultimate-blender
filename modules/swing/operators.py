@@ -395,6 +395,11 @@ class SUB_OP_swing_bone_collision_remove(Operator):
 class SUB_OP_swing_data_sphere_add(Operator):
     bl_idname = 'sub.swing_data_sphere_add'
     bl_label = 'Add Sphere Collision'
+    
+    sphere_name: StringProperty(name="Sphere Name", default="")
+    bone_name: StringProperty(name='Bone Name', default='', )
+    offset: FloatVectorProperty(name="Offset", size=3, subtype='XYZ_LENGTH')
+    radius: FloatProperty(name="Radius", subtype='DISTANCE')
 
     @classmethod
     def poll(cls, context):
@@ -402,7 +407,39 @@ class SUB_OP_swing_data_sphere_add(Operator):
             return False
         return context.object.type == 'ARMATURE'
 
+    def invoke(self, context: Context, event):
+        wm = context.window_manager
+        self.sphere_name = ""
+        self.bone_name = ""
+        self.offset = (0.0, 0.0, 0.0)
+        self.radius = 1.0
+
+        return wm.invoke_props_dialog(self)
+
+    def draw(self, context):
+        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        layout = self.layout
+        
+        layout.row().prop(self, "sphere_name")
+
+        layout.row().prop_search(self, 'bone_name', context.object.data, 'bones', text='Bone', icon='BONE_DATA')
+
+        layout.row().prop(self, "offset")
+        
+        layout.row().prop(self, "radius")
+
+
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        if self.sphere_name == "":
+            return {'CANCELLED'}
+        if self.bone_name == "":
+            return {'CANCELLED'}
+        new_sphere: SUB_PG_swing_sphere = sub_swing_data.spheres.add()
+        new_sphere.name = self.sphere_name
+        new_sphere.bone = self.bone_name
+        new_sphere.offset = self.offset
+        new_sphere.radius = self.radius
         return {'FINISHED'}
 
 class SUB_OP_swing_data_sphere_remove(Operator):
@@ -419,6 +456,29 @@ class SUB_OP_swing_data_sphere_remove(Operator):
             return len(sub_swing_data.spheres) > 0
         
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_sphere = sub_swing_data.spheres[sub_swing_data.active_sphere_index]
+        active_sphere_index = sub_swing_data.active_sphere_index
+
+        swing_bone_chain: SUB_PG_swing_bone_chain
+        swing_bone: SUB_PG_swing_bone
+        collision: SUB_PG_swing_bone_collision
+        for swing_bone_chain in sub_swing_data.swing_bone_chains:
+            for swing_bone in swing_bone_chain.swing_bones:
+                col_to_remove: int = -1
+                for i, collision in enumerate(swing_bone.collisions):
+                    if collision.collision_type == 'SPHERE':
+                        if collision.collision_index > active_sphere_index:
+                            collision.collision_index -= 1
+                        elif collision.collision_index == active_sphere_index:
+                            col_to_remove = i
+                if col_to_remove != -1:
+                    swing_bone.collisions.remove(col_to_remove)
+                    swing_bone.active_collision_index = max(0, min(swing_bone.active_collision_index, len(swing_bone.collisions)-1))
+        
+        sub_swing_data.spheres.remove(active_sphere_index)
+        sub_swing_data.active_sphere_index = max(0, min(active_sphere_index, len(sub_swing_data.spheres)-1))
+
         return {'FINISHED'}   
     
 
