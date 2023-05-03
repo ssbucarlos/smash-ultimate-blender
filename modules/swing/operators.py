@@ -1,7 +1,7 @@
 # BPY Imports
 import bpy
 from bpy.types import (
-    Operator, Context, CopyTransformsConstraint, CopyLocationConstraint, TrackToConstraint,)
+    Operator, Context, CopyTransformsConstraint, CopyLocationConstraint, TrackToConstraint, Collection)
 from bpy.props import (
     IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty, FloatVectorProperty)
 # Standard Library Imports
@@ -911,7 +911,7 @@ class SUB_OP_swing_import(Operator):
 
     filepath: StringProperty(subtype='FILE_PATH')
 
-    rename_uncracked_things: BoolProperty(default=True)
+    #rename_uncracked_things: BoolProperty(default=True)
 
     @classmethod
     def poll(cls, context):
@@ -1224,15 +1224,20 @@ def rename_uncracked_hashes(operator: Operator, context: Context):
                 if True:
                     pass
 
+def new_swing_collection(collection_name: str) -> Collection:
+    collection = bpy.data.collections.new(collection_name)
+    collection.color_tag = 'COLOR_05'
+    return collection
+
 def setup_bone_soft_bodies(operator: Operator, context: Context):
     ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
-    swing_master_collection = bpy.data.collections.new(f'{context.object.name} Swing Objects')
-    swing_chains_collection = bpy.data.collections.new('Swing Bone Chains')
-    collision_shapes_collection = bpy.data.collections.new('Collision Shapes')
+    swing_master_collection: Collection = new_swing_collection(f'{context.object.name} Swing Objects')
+    swing_chains_collection: Collection = new_swing_collection('Swing Bone Chains')
+    collision_shapes_collection: Collection = new_swing_collection('Collision Shapes')
     shape_collection_names = ('Spheres', 'Ovals', 'Ellipsoids', 'Capsules', 'Planes', 'Connections')
-    shape_name_to_collection: dict[str, bpy.types.Collection] = {}
+    shape_name_to_collection: dict[str, Collection] = {}
     for shape_collection_name in shape_collection_names:
-        shape_collection = bpy.data.collections.new(shape_collection_name)
+        shape_collection: Collection = new_swing_collection(shape_collection_name)
         collision_shapes_collection.children.link(shape_collection)
         shape_name_to_collection[shape_collection_name] = shape_collection
     context.collection.children.link(swing_master_collection)
@@ -1382,9 +1387,9 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
         for collision in collision_list:
             collision_name_to_collision[collision.name] = collision
     for swing_bone_chain in ssd.swing_bone_chains: # type: list[SwingBoneChain]
-        chain_collection = bpy.data.collections.new(swing_bone_chain.name)
-        chain_swing_bones_collection = bpy.data.collections.new(f'{swing_bone_chain.name} swing bones')
-        chain_collision_collection = bpy.data.collections.new(f'{swing_bone_chain.name} collisions')
+        chain_collection = new_swing_collection(swing_bone_chain.name)
+        chain_swing_bones_collection = new_swing_collection(f'{swing_bone_chain.name} swing bones')
+        chain_collision_collection = new_swing_collection(f'{swing_bone_chain.name} collisions')
         swing_chains_collection.children.link(chain_collection)
         chain_collection.children.link(chain_swing_bones_collection)
         chain_collection.children.link(chain_collision_collection)
@@ -1399,7 +1404,7 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
             ctc.target = context.object
             ctc.subtarget = blender_bone.name
             chain_swing_bones_collection.objects.link(cap)
-            swing_bone_collision_collection = bpy.data.collections.new(f'{swing_bone_chain.name} {swing_bone.name} collisions')
+            swing_bone_collision_collection = new_swing_collection(f'{swing_bone_chain.name} {swing_bone.name} collisions')
             chain_collision_collection.children.link(swing_bone_collision_collection)
             '''
             for swing_bone_collision in swing_bone.collisions:
