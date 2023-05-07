@@ -1,7 +1,7 @@
 # BPY Imports
 import bpy
 from bpy.types import (
-    Operator, Context, CopyTransformsConstraint, CopyLocationConstraint, TrackToConstraint, Collection)
+    Operator, Context, CopyTransformsConstraint, CopyLocationConstraint, TrackToConstraint, Collection, Object)
 from bpy.props import (
     IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty, FloatVectorProperty)
 # Standard Library Imports
@@ -927,7 +927,9 @@ class SUB_OP_swing_import(Operator):
         swing_prc_import(self, context, self.filepath)
         #if self.rename_uncracked_things:
         #    rename_uncracked_hashes(self, context)
-        setup_bone_soft_bodies(self, context)
+        arma_obj = context.object
+        collection = get_swing_mesh_master_collection(arma_obj)
+        setup_bone_meshes(self, context)
         return {'FINISHED'}
     
 def struct_get(param_struct, input, fallback=None):
@@ -1247,7 +1249,36 @@ def parent_swing_bone_collision(parent, child, chain_index, bone_index):
     armature_modifier: bpy.types.ArmatureModifier = child.modifiers.new("Armature", "ARMATURE")
     armature_modifier.object = parent
 
-def setup_bone_soft_bodies(operator: Operator, context: Context):
+def create_swing_mesh_master_collection(collection: Collection, arma_obj: Object):
+    swing_master_collection: Collection = new_swing_collection(f'{arma_obj.name} Swing Objects')
+    swing_master_collection.sub_swing_linked_object = arma_obj
+    swing_chains_collection: Collection = new_swing_collection('Swing Bone Chains')
+    collision_shapes_collection: Collection = new_swing_collection('Collision Shapes')
+    shape_collection_names = ('Spheres', 'Ovals', 'Ellipsoids', 'Capsules', 'Planes', 'Connections')
+    shape_name_to_collection: dict[str, Collection] = {}
+    for shape_collection_name in shape_collection_names:
+        shape_collection: Collection = new_swing_collection(shape_collection_name)
+        collision_shapes_collection.children.link(shape_collection)
+        shape_name_to_collection[shape_collection_name] = shape_collection
+    collection.children.link(swing_master_collection)
+    swing_master_collection.children.link(swing_chains_collection)
+    swing_master_collection.children.link(collision_shapes_collection)
+
+def get_swing_mesh_master_collection(context: Context, arma_obj: Object) -> Collection:
+    # The object could be in several collections, need to check them all
+    arma_collections = [c for c in context.scene.collection.children if arma_obj.name in c.objects]
+    master_collection = None
+    for collection in arma_collections:
+        if collection.sub_swing_linked_object is not None:
+            if collection.sub_swing_linked_object.name == arma_obj.name:
+                master_collection = collection.sub_swing_linked_object
+    if master_collection is not None:
+        return master_collection
+    else:
+        # Just spawn the new collection in one of the several possible ones the armature is in.
+        return create_swing_mesh_master_collection(arma_collections[0], arma_obj)
+
+def setup_bone_meshes(operator: Operator, context: Context):
     ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
     swing_master_collection: Collection = new_swing_collection(f'{context.object.name} Swing Objects')
     swing_chains_collection: Collection = new_swing_collection('Swing Bone Chains')
@@ -1396,6 +1427,7 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
                 blender_bone,
                 child_bone,
                 skin_to_start_only)
+            swing_bone.blender_object = cap
             parent_swing_bone_collision(context.object, cap, chain_index, bone_index)
             chain_swing_bones_collection.objects.link(cap)
             swing_bone_collision_collection = new_swing_collection(f'{swing_bone_chain.name} {swing_bone.name} collisions')

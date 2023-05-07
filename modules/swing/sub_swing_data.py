@@ -95,6 +95,30 @@ class SUB_PG_swing_bone_collision(PropertyGroup):
         default=0,
     )
 
+def swing_bone_update(self, context):
+    if self.blender_object is None:
+        return
+    if self.name == "":
+        return
+    try:
+        arma: bpy.types.Armature = self.id_data
+        bone = arma.bones[self.name]
+        child_bone = bone.children[0]
+        mesh_obj: bpy.types.Object = self.blender_object
+    except:
+        return
+    else:
+        create_meshes.make_capsule_mesh(
+            mesh_obj,
+            self.collision_size[0],
+            self.collision_size[1],
+            (0,0,0),
+            (0,0,0),
+            bone,
+            child_bone,
+            True
+        )
+
 class SUB_PG_swing_bone(PropertyGroup):
     air_resistance: FloatProperty(name='Air Resistance')
     water_resistance: FloatProperty(name='Water Resistance')
@@ -103,10 +127,10 @@ class SUB_PG_swing_bone(PropertyGroup):
     angle_z: FloatVectorProperty(name='Angle Z Min/Max', size=2, unit='ROTATION')
     #min_angle_y: FloatProperty(name='Min Angle Y')
     #max_angle_y: FloatProperty(name='Max Angle Y')
-    angle_y: FloatVectorProperty(name='Angle Y Min/Max', size=2, unit='ROTATION')
+    angle_y: FloatVectorProperty(name='Angle X Min/Max', size=2, unit='ROTATION') # Smash and blender have different primary bone axis (X & Y)
     #collision_size_tip: FloatProperty(name='Collision Size Tip')
     #collision_size_root: FloatProperty(name='Collision Size Root')
-    collision_size: FloatVectorProperty(name='Collsion Size Head/Tail', size=2, unit='LENGTH')
+    collision_size: FloatVectorProperty(name='Collsion Size Head/Tail', size=2, unit='LENGTH', update=swing_bone_update)
     friction_rate: FloatProperty(name='Friction Rate')
     goal_strength: FloatProperty(name='Goal Strength')
     inertial_mass: FloatProperty(name='Mass')
@@ -119,7 +143,11 @@ class SUB_PG_swing_bone(PropertyGroup):
     name: StringProperty(name='Swing Bone Name') # The swing.prc doesn't track individual bone names
     # Ok so it turns out bones cant be used for pointer props when made thru python
     #bone: PointerProperty(type=bpy.types.Bone) # Testing using pointer prop instead
-   
+    # Keep track of the mesh object
+    blender_object: PointerProperty(
+        type=bpy.types.Object,
+        name='Swing Bone Object',
+    )
     active_collision_index: IntProperty(name='Active Collision Index', default=0, options={'HIDDEN'},) 
 
 class SUB_PG_swing_bone_chain(PropertyGroup):
@@ -128,7 +156,7 @@ class SUB_PG_swing_bone_chain(PropertyGroup):
     end_bone_name: StringProperty(name='End Bone Name Hash40')
     is_skirt: BoolProperty(name='Is Skirt')
     rotate_order: IntProperty(name='Rotate Order')
-    curve_rotate_x: BoolProperty(name='Curve Rotate X')
+    curve_rotate_x: BoolProperty(name='Curve Rotate Y') # Smash and blender have different primary bone axis (X & Y)
     has_unk_8: BoolProperty(name='Has Unk 8', default=False)
     unk_8: IntProperty(name='0x0f7316a113', default=0)
     swing_bones: CollectionProperty(type=SUB_PG_swing_bone)
