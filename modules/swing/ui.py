@@ -95,6 +95,112 @@ class SUB_PT_active_bone_swing_info(Panel):
         col.prop(swing_bone, 'ground_hit')
         col.prop(swing_bone, 'wind_affect')
 
+class SUB_PT_active_mesh_swing_info(Panel):
+    bl_label = 'Ultimate Swing Data'
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "data"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        try:
+            type = bpy.context.active_object.type
+        except:
+            return False
+        else:
+            return type == 'MESH'
+
+    def draw(self, context):
+        layout = self.layout
+        mesh_obj: bpy.types.Object = bpy.context.active_object
+        mesh_data: bpy.types.Mesh = mesh_obj.data
+        sub_swing_data_linked_mesh: SUB_PG_sub_swing_data_linked_mesh = mesh_data.sub_swing_data_linked_mesh
+
+        if not sub_swing_data_linked_mesh.is_swing_mesh:
+            layout.row().label(text="This is not a swing collision mesh.")
+            return
+        sub_swing_data: SUB_PG_sub_swing_data = mesh_obj.parent.data.sub_swing_data
+
+        if sub_swing_data_linked_mesh.is_swing_bone_shape:
+            swing_bone_chain: SUB_PG_swing_bone_chain = sub_swing_data.swing_bone_chains[sub_swing_data_linked_mesh.swing_chain_index]
+            swing_bone: SUB_PG_swing_bone = swing_bone_chain.swing_bones[sub_swing_data_linked_mesh.swing_bone_index]
+            col = layout.column()
+            col.label(text=f'Swing Bone Chain Name: {swing_bone_chain.name}')
+            col.label(text=f'Swing Bone Name: {swing_bone.name}')
+            col.label(text=f'Swing Bone Collisions')
+            col.template_list(
+                            'SUB_UL_swing_bone_collisions',
+                            '',
+                            swing_bone,
+                            'collisions',
+                            swing_bone,
+                            'active_collision_index',
+                            rows=5,
+                            maxrows=5,
+                        )
+            col.label(text='Swing Bone Props:')
+            col.prop(swing_bone, 'air_resistance')
+            col.prop(swing_bone, 'water_resistance')
+            col.prop(swing_bone, 'angle_z')
+            col.prop(swing_bone, 'angle_y')
+            col.prop(swing_bone, 'collision_size')
+            col.prop(swing_bone, 'friction_rate')
+            col.prop(swing_bone, 'goal_strength')
+            col.prop(swing_bone, 'inertial_mass')
+            col.prop(swing_bone, 'local_gravity')
+            col.prop(swing_bone, 'fall_speed_scale')
+            col.prop(swing_bone, 'ground_hit')
+            col.prop(swing_bone, 'wind_affect')
+            return
+
+        
+        if sub_swing_data_linked_mesh.collision_collection_type == 'SPHERE':
+            swing_sphere: SUB_PG_swing_sphere = sub_swing_data.spheres[sub_swing_data_linked_mesh.collision_collection_index]
+            layout.row().prop(swing_sphere, "bone")
+            layout.row().prop(swing_sphere, "offset")
+            layout.row().prop(swing_sphere, "radius")
+        
+        if sub_swing_data_linked_mesh.collision_collection_type == 'OVAL':
+            swing_oval = sub_swing_data.ovals[sub_swing_data_linked_mesh.collision_collection_index]
+            layout.row().prop(swing_oval, "start_bone_name")
+            layout.row().prop(swing_oval, "end_bone_name")
+            layout.row().prop(swing_oval, "radius")
+            layout.row().prop(swing_oval, "start_offset")
+            layout.row().prop(swing_oval, "end_offset")
+
+        if sub_swing_data_linked_mesh.collision_collection_type == 'ELLIPSOID':
+            swing_ellipsoid = sub_swing_data.ellipsoids[sub_swing_data_linked_mesh.collision_collection_index]
+            layout.row().prop(swing_ellipsoid, "bone_name")
+            layout.row().prop(swing_ellipsoid, "offset")
+            layout.row().prop(swing_ellipsoid, "rotation")
+            layout.row().prop(swing_ellipsoid, "scale")
+
+        if sub_swing_data_linked_mesh.collision_collection_type == 'CAPSULE':
+            swing_capsule = sub_swing_data.capsules[sub_swing_data_linked_mesh.collision_collection_index]
+            layout.row().prop(swing_capsule, "start_bone_name")
+            layout.row().prop(swing_capsule, "end_bone_name")
+            layout.row().prop(swing_capsule, "start_offset")
+            layout.row().prop(swing_capsule, "end_offset")
+            layout.row().prop(swing_capsule, "start_radius")
+            layout.row().prop(swing_capsule, "end_radius")
+        
+        if sub_swing_data_linked_mesh.collision_collection_type == 'PLANE':
+            swing_plane = sub_swing_data.planes[sub_swing_data_linked_mesh.collision_collection_index]
+            layout.row().prop(swing_plane, "bone_name")
+            layout.row().prop(swing_plane, "nx")
+            layout.row().prop(swing_plane, "ny")
+            layout.row().prop(swing_plane, "nz")
+            layout.row().prop(swing_plane, "distance")
+
+        if sub_swing_data_linked_mesh.collision_collection_type == 'CONNECTION':
+            swing_connection = sub_swing_data.connections[sub_swing_data_linked_mesh.collision_collection_index]
+            layout.row().prop(swing_connection, "start_bone_name")
+            layout.row().prop(swing_connection, "end_bone_name")
+            layout.row().prop(swing_connection, "radius")
+            layout.row().prop(swing_connection, "length")
+        
+
 class SwingPropertyPanel: # Mix-in for the swing info property panel classes
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -252,8 +358,11 @@ class SUB_UL_swing_bones(UIList):
 class SUB_UL_swing_bone_collisions(UIList):
     def draw_item(self, context, layout: bpy.types.UILayout, _data, item, icon, active_data, _active_propname, index):
         obj = active_data
-        ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
         entry: SUB_PG_swing_bone_collision = item
+
+        arma = entry.id_data
+        ssd: SUB_PG_sub_swing_data = arma.sub_swing_data
+        
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row()
             if entry.collision_type == 'SPHERE':
@@ -633,3 +742,4 @@ class SUB_MT_swing_data_connections_context_menu(Menu):
 
     def draw(self, context):
         layout = self.layout
+

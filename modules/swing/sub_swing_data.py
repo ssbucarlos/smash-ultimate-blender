@@ -8,7 +8,7 @@ from bpy.props import (
 import re
 # 3rd Party Imports
 # Local Project Imports
-
+from ...operators import create_meshes
 
 def get_unique_name_for_entry_in_collection_property(entry, collection) -> str:
     other_names: set[str] = {e.name for e in collection if e.as_pointer() != entry.as_pointer()}
@@ -139,15 +139,36 @@ class SUB_PG_swing_bone_chain(PropertyGroup):
     #start_bone: PointerProperty(type=bpy.types.Bone)
     #end_bone: PointerProperty(type=bpy.types.Bone)
 
+def swing_sphere_update(self, context):
+    if self.blender_object is None:
+        return
+    if self.bone == "":
+        return
+    arma = self.id_data
+    sphere_obj: bpy.types.Object = self.blender_object
+    
+    create_meshes.make_sphere_2(sphere_obj, self.radius, self.offset, arma.bones[self.bone])
+
+def swing_ellipsoid_update(self, context):
+    if self.blender_object is None:
+        return
+    if self.bone_name == "":
+        return
+    arma = self.id_data
+    ellipsoid_obj: bpy.types.Object = self.blender_object
+    
+    create_meshes.make_ellipsoid_mesh(ellipsoid_obj, self.offset, self.rotation, self.scale, arma.bones[self.bone_name])
+
 class SUB_PG_swing_sphere(PropertyGroup):
     name: StringProperty(name='Sphere Name Hash40', update=collision_object_name_update)
     #bone_name: StringProperty(name='Bone Name Hash40')
     bone: StringProperty(
         name='Bone',
         description='The bone this sphere is attached to',
+        update=swing_sphere_update,
     )
-    offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3)
-    radius: FloatProperty(name='Radius')
+    offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3, update=swing_sphere_update)
+    radius: FloatProperty(name='Radius', update=swing_sphere_update)
     # Store the blender object for optimization
     blender_object: PointerProperty(
         type=bpy.types.Object,
@@ -169,48 +190,85 @@ class SUB_PG_swing_oval(PropertyGroup):
 
 class SUB_PG_swing_ellipsoid(PropertyGroup):
     name: StringProperty(name='Ellipoid Name Hash40', update=collision_object_name_update)
-    bone_name: StringProperty(name='BoneName Hash40')
-    offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3)
-    rotation: FloatVectorProperty(name='Rotation', subtype='XYZ', size=3)
-    scale: FloatVectorProperty(name='Scale', subtype='XYZ', size=3)
+    bone_name: StringProperty(name='BoneName Hash40', update=swing_ellipsoid_update)
+    offset: FloatVectorProperty(name='Offset', subtype='XYZ', size=3, update=swing_ellipsoid_update)
+    rotation: FloatVectorProperty(name='Rotation', subtype='XYZ', size=3, update=swing_ellipsoid_update)
+    scale: FloatVectorProperty(name='Scale', subtype='XYZ', size=3, update=swing_ellipsoid_update)
     # Store the blender object for optimization
     blender_object: PointerProperty(
         type=bpy.types.Object,
         name='Ellipse Object',
     )
 
+def swing_capsule_update(self, context):
+    if self.blender_object is None:
+        return
+    if self.start_bone_name == "":
+        return
+    if self.end_bone_name == "":
+        return
+    arma = self.id_data
+    capsule_obj: bpy.types.Object = self.blender_object
+    start_bone = arma.bones[self.start_bone_name]
+    end_bone = arma.bones[self.end_bone_name]
+    create_meshes.make_capsule_mesh(capsule_obj, self.start_radius, self.end_radius, self.start_offset, self.end_offset, start_bone, end_bone)
 
 class SUB_PG_swing_capsule(PropertyGroup):
     name: StringProperty(name='Capsule Name Hash40', update=collision_object_name_update)
-    start_bone_name: StringProperty(name='Start Bone Name Hash40')
-    end_bone_name: StringProperty(name='End Bone Name Hash40')
-    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3)
-    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3)
-    start_radius: FloatProperty(name='Start Radius')
-    end_radius: FloatProperty(name='End Radius')
+    start_bone_name: StringProperty(name='Start Bone Name Hash40', update=swing_capsule_update)
+    end_bone_name: StringProperty(name='End Bone Name Hash40', update=swing_capsule_update)
+    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3, update=swing_capsule_update)
+    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3, update=swing_capsule_update)
+    start_radius: FloatProperty(name='Start Radius', update=swing_capsule_update)
+    end_radius: FloatProperty(name='End Radius', update=swing_capsule_update)
     # Store the blender object for optimization
     blender_object: PointerProperty(
         type=bpy.types.Object,
         name='Capsule Object',
     )
 
+
+def swing_plane_update(self, context):
+    if self.blender_object is None:
+        return
+    if self.bone_name == "":
+        return
+    
+    arma = self.id_data
+    plane_obj = self.blender_object
+    bone = arma.bones[self.bone_name]
+    create_meshes.make_plane_mesh(plane_obj, bone, self.nx, self.ny, self.nz, self.distance)
+
 class SUB_PG_swing_plane(PropertyGroup):
     name: StringProperty(name='Plane Name Hash40', update=collision_object_name_update)
-    bone_name: StringProperty(name='Bone Name Hash40')
-    nx: FloatProperty(name='nx')
-    ny: FloatProperty(name='ny')
-    nz: FloatProperty(name='nz')
-    distance: FloatProperty(name='d')
+    bone_name: StringProperty(name='Bone Name Hash40', update=swing_plane_update)
+    nx: FloatProperty(name='nx', update=swing_plane_update)
+    ny: FloatProperty(name='ny', update=swing_plane_update)
+    nz: FloatProperty(name='nz', update=swing_plane_update)
+    distance: FloatProperty(name='d', update=swing_plane_update)
     # Store the blender object for optimization
     blender_object: PointerProperty(
         type=bpy.types.Object,
         name='Plane Object',
     )
 
+def swing_connection_update(self, context):
+    if self.blender_object is None:
+        return
+    if self.start_bone_name == "":
+        return
+    if self.end_bone_name == "":
+        return
+    arma = self.id_data
+    connection_obj: bpy.types.Object = self.blender_object
+    start_bone = arma.bones[self.start_bone_name]
+    end_bone = arma.bones[self.end_bone_name]
+    create_meshes.make_connection_mesh(connection_obj, self.radius, start_bone, end_bone)
+
 class SUB_PG_swing_connection(PropertyGroup):
-    start_bone_name: StringProperty(name='Start Bone Name Hash40')
-    end_bone_name: StringProperty(name='End Bone Name Hash40')
-    radius: FloatProperty(name='Radius')
+    start_bone_name: StringProperty(name='Start Bone Name Hash40', update=swing_connection_update)
+    end_bone_name: StringProperty(name='End Bone Name Hash40', update=swing_connection_update)
+    radius: FloatProperty(name='Radius', update=swing_connection_update)
     length: FloatProperty(name='Length')
     # Store the blender object for optimization
     blender_object: PointerProperty(
@@ -218,6 +276,7 @@ class SUB_PG_swing_connection(PropertyGroup):
         name='Connection Object',
     )
 
+# Armature.sub_swing_data
 class SUB_PG_sub_swing_data(PropertyGroup):
     swing_bone_chains: CollectionProperty(type=SUB_PG_swing_bone_chain)
     spheres: CollectionProperty(type=SUB_PG_swing_sphere)
@@ -238,7 +297,8 @@ class SUB_PG_sub_swing_data(PropertyGroup):
     armature_swing_bones: CollectionProperty(type=SUB_PG_armature_swing_bone)
     armature_swing_bone_children: CollectionProperty(type=SUB_PG_armature_swing_bone_children)
 
-# This is for UI only
+# Bone.sub_swing_blender_bone_data
+# This is so the user can click on a swing bone in the scene and get info from it.
 class SUB_PG_blender_bone_data(PropertyGroup):
     swing_bone_chain_index: IntProperty(
         name='Index of swing bone chain this bone belongs to',
@@ -249,4 +309,44 @@ class SUB_PG_blender_bone_data(PropertyGroup):
         name='Index of the swing bone data of this bone',
         default= -1,
         options={'HIDDEN'},
+    )
+
+# Mesh.sub_swing_blender_bone_data
+# This is so the user can click on a swing mesh in the scene and get info from it.
+collision_collection_types = (
+    ('NONE', 'None', 'None'),
+    ('SPHERE', 'Sphere', 'Sphere'),
+    ('OVAL', 'Oval', 'Oval'),
+    ('ELLIPSOID', 'Ellipsoid', 'Ellipsoid'),
+    ('CAPSULE', 'Capsule', 'Capsule'),
+    ('PLANE', 'Plane', 'Plane'),
+    ('CONNECTION', 'Connection', 'Connection')
+)
+class SUB_PG_sub_swing_data_linked_mesh(PropertyGroup):
+    is_swing_mesh: BoolProperty(
+        name='Is this a smush_blender created swing mesh',
+        default=False,
+        options={'HIDDEN'}
+    )
+    collision_collection_type: EnumProperty(
+        name='Collision Type',
+        items=collision_collection_types,
+        default='NONE',
+    )
+    collision_collection_index: IntProperty(
+        name='collision_collection_index',
+        default=0,
+    )
+    is_swing_bone_shape: BoolProperty(
+        name='Is this representing a swing bone',
+        default=False,
+        options={'HIDDEN'}
+    )
+    swing_chain_index: IntProperty(
+        name='collision_collection_index',
+        default=0,
+    )
+    swing_bone_index: IntProperty(
+        name='collision_collection_index',
+        default=0,
     )

@@ -1,6 +1,6 @@
 import bpy
 import re
-from bpy.types import Scene, Object, Armature, PropertyGroup, Camera, Material, Bone
+from bpy.types import Scene, Object, Armature, PropertyGroup, Camera, Material, Bone, Mesh
 from bpy.props import IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty
 from .modules.swing import sub_swing_data
@@ -25,6 +25,10 @@ def register():
     Bone.sub_swing_blender_bone_data = PointerProperty(
         type=sub_swing_data.SUB_PG_blender_bone_data
     )
+    Mesh.sub_swing_data_linked_mesh = PointerProperty(
+        type=sub_swing_data.SUB_PG_sub_swing_data_linked_mesh
+    )
+
 
 class SubSceneProperties(PropertyGroup):
     model_export_arma: PointerProperty(

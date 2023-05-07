@@ -14,9 +14,8 @@ from ... import pyprc
 from ...operators import create_meshes
 from .sub_swing_data import *
 
-''' # TODOS:
-1.) Capsule Offset
-2.) Planes
+''' 
+# TODOS:
 3.) In blender 3.3, string properties allow a 'search' parameter, investigate if this allows to filter for only swing bones when searching for bones
 '''
 # Hack workaround since prop_search has no filter
@@ -1229,6 +1228,25 @@ def new_swing_collection(collection_name: str) -> Collection:
     collection.color_tag = 'COLOR_05'
     return collection
 
+def parent_swing_child_to_parent_obj_armature_deform(parent: bpy.types.Object, child: bpy.types.Object, type: str, index: int):
+    child.parent = parent
+    linked_sphere_data: SUB_PG_sub_swing_data_linked_mesh = child.data.sub_swing_data_linked_mesh
+    linked_sphere_data.collision_collection_type = type
+    linked_sphere_data.is_swing_mesh = True
+    linked_sphere_data.collision_collection_index = index
+    armature_modifier: bpy.types.ArmatureModifier = child.modifiers.new("Armature", "ARMATURE")
+    armature_modifier.object = parent
+
+def parent_swing_bone_collision(parent, child, chain_index, bone_index):
+    child.parent = parent
+    linked_sphere_data: SUB_PG_sub_swing_data_linked_mesh = child.data.sub_swing_data_linked_mesh
+    linked_sphere_data.is_swing_mesh = True
+    linked_sphere_data.is_swing_bone_shape = True
+    linked_sphere_data.swing_chain_index = chain_index
+    linked_sphere_data.swing_bone_index = bone_index
+    armature_modifier: bpy.types.ArmatureModifier = child.modifiers.new("Armature", "ARMATURE")
+    armature_modifier.object = parent
+
 def setup_bone_soft_bodies(operator: Operator, context: Context):
     ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
     swing_master_collection: Collection = new_swing_collection(f'{context.object.name} Swing Objects')
@@ -1245,138 +1263,102 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
     swing_master_collection.children.link(collision_shapes_collection)
     
     swing_sphere: SUB_PG_swing_sphere
-    for swing_sphere in ssd.spheres:
+    for sphere_index, swing_sphere in enumerate(ssd.spheres):
         blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_sphere.bone)
         if blender_bone is None:
                 continue
         
-        sphere_obj = create_meshes.make_sphere_object(swing_sphere.name, swing_sphere.radius, swing_sphere.offset)
+        sphere_obj = create_meshes.make_sphere_object_2(swing_sphere.name, swing_sphere.radius, swing_sphere.offset, blender_bone)
+        parent_swing_child_to_parent_obj_armature_deform(context.object, sphere_obj, 'SPHERE', sphere_index)
         swing_sphere.blender_object = sphere_obj
-        ctc: CopyTransformsConstraint = sphere_obj.constraints.new('COPY_TRANSFORMS')
-        ctc.target = context.object
-        ctc.subtarget = blender_bone.name
         spheres_collection = shape_name_to_collection['Spheres']
         spheres_collection.objects.link(sphere_obj)
 
     swing_oval: SUB_PG_swing_oval
-    for swing_oval in ssd.ovals:
+    for oval_index, swing_oval in enumerate(ssd.ovals):
         start_bone: bpy.types.Bone = context.object.data.bones.get(swing_oval.start_bone_name)
         end_bone: bpy.types.Bone = context.object.data.bones.get(swing_oval.end_bone_name)
-        length = (start_bone.head_local - end_bone.head_local).length
-        oval_obj = create_meshes.make_capsule_object(context, swing_oval.name, swing_oval.radius, swing_oval.radius, length, swing_oval.start_offset, swing_oval.end_offset)
+        oval_obj = create_meshes.make_capsule_object(
+            swing_oval.name, 
+            swing_oval.radius, 
+            swing_oval.radius, 
+            swing_oval.start_offset, 
+            swing_oval.end_offset,
+            start_bone,
+            end_bone)
         swing_oval.blender_object = oval_obj
-
-        clc: CopyLocationConstraint = oval_obj.constraints.new('COPY_LOCATION')
-        clc.target = context.object
-        clc.subtarget = start_bone.name
-
-        ttc: TrackToConstraint = oval_obj.constraints.new('TRACK_TO')
-        ttc.target = context.object
-        ttc.subtarget = end_bone.name
-        ttc.track_axis = 'TRACK_Y'
-        ttc.up_axis = 'UP_Z'
-
-        driver_handle = oval_obj.driver_add('scale', 1)
-        driver: bpy.types.Driver = driver_handle.driver
-        var = driver.variables.new()
-        var.type = 'LOC_DIFF'
-        target_1 = var.targets[0]
-        target_1.id = context.object
-        target_1.bone_target = start_bone.name
-        target_2 = var.targets[1]
-        target_2.id = context.object
-        target_2.bone_target = end_bone.name
-        driver.expression = f' {var.name} / {length} '
+        parent_swing_child_to_parent_obj_armature_deform(context.object, oval_obj, 'OVAL', oval_index)
 
         ovals_collection = shape_name_to_collection['Ovals']
         ovals_collection.objects.link(oval_obj)
 
     swing_ellipsoid: SUB_PG_swing_ellipsoid
-    for swing_ellipsoid in ssd.ellipsoids:
+    for ellipsoid_index, swing_ellipsoid in enumerate(ssd.ellipsoids):
         blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_ellipsoid.bone_name)
         s = Vector(swing_ellipsoid.scale)
         r = Vector(swing_ellipsoid.rotation)
         o = Vector(swing_ellipsoid.offset)
-        ellipsoid_obj = create_meshes.make_ellipsoid_object(swing_ellipsoid.name, scale=s, offset=o, rotation=r)
+        ellipsoid_obj: bpy.types.Object = create_meshes.make_ellipsoid_object(swing_ellipsoid.name, offset=o, rotation=r, scale=s, bone=blender_bone )
+        parent_swing_child_to_parent_obj_armature_deform(context.object, ellipsoid_obj, 'ELLIPSOID', ellipsoid_index)
+
         swing_ellipsoid.blender_object = ellipsoid_obj
-        ctc: CopyTransformsConstraint = ellipsoid_obj.constraints.new('COPY_TRANSFORMS')
-        ctc.target = context.object
-        ctc.subtarget = blender_bone.name
         ellipsoids_collection = shape_name_to_collection['Ellipsoids']
         ellipsoids_collection.objects.link(ellipsoid_obj)
 
     swing_capsule: SUB_PG_swing_capsule
-    for swing_capsule in ssd.capsules:
+    for capsule_index, swing_capsule in enumerate(ssd.capsules):
         start_bone: bpy.types.Bone = context.object.data.bones.get(swing_capsule.start_bone_name)
         end_bone: bpy.types.Bone = context.object.data.bones.get(swing_capsule.end_bone_name)
         start_offset = Vector(swing_capsule.start_offset)
         end_offset = Vector(swing_capsule.end_offset)
-        length = (start_bone.head_local - end_bone.head_local).length
-        capsule_obj = create_meshes.make_capsule_object(context, swing_capsule.name, swing_capsule.start_radius, swing_capsule.end_radius, length, start_offset=start_offset, end_offset=end_offset)
+        capsule_obj = create_meshes.make_capsule_object(
+            swing_capsule.name, 
+            start_radius=swing_capsule.start_radius, 
+            end_radius=swing_capsule.end_radius, 
+            start_offset=start_offset, 
+            end_offset=end_offset,
+            start_bone=start_bone,
+            end_bone=end_bone)
+        parent_swing_child_to_parent_obj_armature_deform(context.object, capsule_obj, 'CAPSULE', capsule_index)
+
         swing_capsule.blender_object = capsule_obj
-
-        clc: CopyLocationConstraint = capsule_obj.constraints.new('COPY_LOCATION')
-        clc.target = context.object
-        clc.subtarget = start_bone.name
-
-        ttc: TrackToConstraint = capsule_obj.constraints.new('TRACK_TO')
-        ttc.target = context.object
-        ttc.subtarget = end_bone.name
-        ttc.track_axis = 'TRACK_Y'
-        ttc.up_axis = 'UP_Z'
-
-        driver_handle = capsule_obj.driver_add('scale', 1)
-        driver: bpy.types.Driver = driver_handle.driver
-        var = driver.variables.new()
-        var.type = 'LOC_DIFF'
-        target_1 = var.targets[0]
-        target_1.id = context.object
-        target_1.bone_target = start_bone.name
-        target_2 = var.targets[1]
-        target_2.id = context.object
-        target_2.bone_target = end_bone.name
-        driver.expression = f' {var.name} / {length} '
 
         capsules_collection = shape_name_to_collection['Capsules']
         capsules_collection.objects.link(capsule_obj)
 
     swing_plane: SUB_PG_swing_plane
-    for swing_plane in ssd.planes:
+    for plane_index, swing_plane in enumerate(ssd.planes):
         blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_plane.bone_name)
+        plane_obj = create_meshes.make_plane_object(
+            swing_plane.name,
+            blender_bone,
+            swing_plane.nx,
+            swing_plane.ny,
+            swing_plane.nz,
+            swing_plane.distance
+        )
+        parent_swing_child_to_parent_obj_armature_deform(context.object, plane_obj, 'PLANE', plane_index)
+
+        swing_plane.blender_object = plane_obj
+
+        planes_collection = shape_name_to_collection['Planes']
+        planes_collection.objects.link(plane_obj)
         
     swing_connection: SUB_PG_swing_connection
-    for swing_connection in ssd.connections:
+    for connection_index, swing_connection in enumerate(ssd.connections):
         start_bone: bpy.types.Bone = context.object.data.bones.get(swing_connection.start_bone_name)
         end_bone: bpy.types.Bone = context.object.data.bones.get(swing_connection.end_bone_name)
-        connection_name = f'{start_bone.name} -> {end_bone.name} '
-        length = (start_bone.head_local - end_bone.head_local).length
-        capsule_obj = create_meshes.make_capsule_object(context, connection_name, swing_connection.radius, swing_connection.radius, length)
-        swing_connection.blender_object = capsule_obj
-
-        clc: CopyLocationConstraint = capsule_obj.constraints.new('COPY_LOCATION')
-        clc.target = context.object
-        clc.subtarget = start_bone.name
-
-        ttc: TrackToConstraint = capsule_obj.constraints.new('TRACK_TO')
-        ttc.target = context.object
-        ttc.subtarget = end_bone.name
-        ttc.track_axis = 'TRACK_Y'
-        ttc.up_axis = 'UP_Z'
-
-        driver_handle = capsule_obj.driver_add('scale', 1)
-        driver: bpy.types.Driver = driver_handle.driver
-        var = driver.variables.new()
-        var.type = 'LOC_DIFF'
-        target_1 = var.targets[0]
-        target_1.id = context.object
-        target_1.bone_target = start_bone.name
-        target_2 = var.targets[1]
-        target_2.id = context.object
-        target_2.bone_target = end_bone.name
-        driver.expression = f' {var.name} / {length} '
+        connection_name = f'{start_bone.name} -> {end_bone.name}'
+        connection_obj = create_meshes.make_connection_obj(
+            connection_name,
+            swing_connection.radius, 
+            start_bone,
+            end_bone)
+        parent_swing_child_to_parent_obj_armature_deform(context.object, connection_obj, 'CONNECTION', connection_index)
+        swing_connection.blender_object = connection_obj
 
         connections_collection = shape_name_to_collection['Connections']
-        connections_collection.objects.link(capsule_obj)
+        connections_collection.objects.link(connection_obj)
 
     swing_bone_chain: SUB_PG_swing_bone_chain
     swing_bone: SUB_PG_swing_bone
@@ -1386,23 +1368,35 @@ def setup_bone_soft_bodies(operator: Operator, context: Context):
     for collision_list in collision_lists:
         for collision in collision_list:
             collision_name_to_collision[collision.name] = collision
-    for swing_bone_chain in ssd.swing_bone_chains: # type: list[SwingBoneChain]
+    for chain_index, swing_bone_chain in enumerate(ssd.swing_bone_chains): # type: list[SwingBoneChain]
         chain_collection = new_swing_collection(swing_bone_chain.name)
         chain_swing_bones_collection = new_swing_collection(f'{swing_bone_chain.name} swing bones')
         chain_collision_collection = new_swing_collection(f'{swing_bone_chain.name} collisions')
         swing_chains_collection.children.link(chain_collection)
         chain_collection.children.link(chain_swing_bones_collection)
         chain_collection.children.link(chain_collision_collection)
-        for swing_bone in swing_bone_chain.swing_bones:
+        for bone_index, swing_bone in enumerate(swing_bone_chain.swing_bones):
             # Set Up Swing Bone Capsules
             blender_bone: bpy.types.Bone = context.object.data.bones.get(swing_bone.name)
             if blender_bone is None:
                 continue
-
-            cap = create_meshes.make_capsule_object(context, swing_bone.name, swing_bone.collision_size[0], swing_bone.collision_size[1], blender_bone.length)
-            ctc: CopyTransformsConstraint = cap.constraints.new('COPY_TRANSFORMS')
-            ctc.target = context.object
-            ctc.subtarget = blender_bone.name
+            if len(blender_bone.children) != 1:
+                continue
+            child_bone = blender_bone.children[0]
+            if child_bone.name.endswith("_null"):
+                skin_to_start_only = True
+            else:
+                skin_to_start_only = False
+            cap = create_meshes.make_capsule_object(
+                swing_bone.name,
+                swing_bone.collision_size[0], 
+                swing_bone.collision_size[1], 
+                (0,0,0),
+                (0,0,0),
+                blender_bone,
+                child_bone,
+                skin_to_start_only)
+            parent_swing_bone_collision(context.object, cap, chain_index, bone_index)
             chain_swing_bones_collection.objects.link(cap)
             swing_bone_collision_collection = new_swing_collection(f'{swing_bone_chain.name} {swing_bone.name} collisions')
             chain_collision_collection.children.link(swing_bone_collision_collection)
