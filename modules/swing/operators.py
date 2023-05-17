@@ -1,7 +1,7 @@
 # BPY Imports
 import bpy
 from bpy.types import (
-    Operator, Context, CopyTransformsConstraint, CopyLocationConstraint, TrackToConstraint, Collection, Object)
+    Operator, Context, CopyTransformsConstraint, CopyLocationConstraint, TrackToConstraint, Collection, Object, Mesh, Armature)
 from bpy.props import (
     IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty, FloatVectorProperty)
 # Standard Library Imports
@@ -130,6 +130,16 @@ class SUB_OP_swing_bone_chain_add(Operator):
         new_chain.name = self.start_bone_name[2:].lower()
         new_chain.start_bone_name = self.start_bone_name
         new_chain.end_bone_name = self.end_bone_name
+        new_chain_index = sub_swing_data.swing_bone_chains.find(new_chain.name)
+
+        master_collection: Collection = get_swing_mesh_master_collection(context, context.object)
+        master_collection_props: SUB_PG_sub_swing_master_collection_props = master_collection.sub_swing_collection_props
+        chain_collection = new_swing_collection(new_chain.name)
+        chain_swing_bones_collection = new_swing_collection(f'{new_chain.name} swing bones')
+        chain_collision_collection = new_swing_collection(f'{new_chain.name} collisions')
+        master_collection_props.swing_chains_collection.children.link(chain_collection)
+        chain_collection.children.link(chain_swing_bones_collection)
+        chain_collection.children.link(chain_collision_collection)
 
         for bone_index, blender_bone in enumerate(bones_in_chain):
             new_swing_bone: SUB_PG_swing_bone = new_chain.swing_bones.add()
@@ -137,7 +147,22 @@ class SUB_OP_swing_bone_chain_add(Operator):
             sub_blender_bone_data: SUB_PG_blender_bone_data = blender_bone.sub_swing_blender_bone_data
             sub_blender_bone_data.swing_bone_chain_index = sub_swing_data.swing_bone_chains.find(new_chain.name)
             sub_blender_bone_data.swing_bone_index = bone_index
+            cap = create_meshes.make_capsule_object(
+                new_swing_bone.name,
+                new_swing_bone.collision_size[0],
+                new_swing_bone.collision_size[1],
+                (0,0,0),
+                (0,0,0),
+                blender_bone,
+                blender_bone.children[0],
+            )
+            new_swing_bone.blender_object = cap
+            parent_swing_bone_collision(context.object, cap, new_chain_index, bone_index)
+            chain_swing_bones_collection.objects.link(cap)
+            swing_bone_collision_collection = new_swing_collection(f'{new_chain.name} {new_swing_bone.name} collisions')
+            chain_collision_collection.children.link(swing_bone_collision_collection)
         sub_swing_data.active_swing_bone_chain_index = len(sub_swing_data.swing_bone_chains)-1
+
         return {'FINISHED'}
 
 class SUB_OP_swing_bone_chain_remove(Operator):
@@ -431,16 +456,42 @@ class SUB_OP_swing_data_sphere_add(Operator):
 
 
     def execute(self, context):
-        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        arma_obj: Object = context.object
+        arma_data: bpy.types.Armature = arma_obj.data
+
+        sub_swing_data: SUB_PG_sub_swing_data = arma_data.sub_swing_data
+
         if self.sphere_name == "":
             return {'CANCELLED'}
         if self.bone_name == "":
             return {'CANCELLED'}
+        
         new_sphere: SUB_PG_swing_sphere = sub_swing_data.spheres.add()
         new_sphere.name = self.sphere_name
         new_sphere.bone = self.bone_name
         new_sphere.offset = self.offset
         new_sphere.radius = self.radius
+        new_sphere.blender_object = create_meshes.make_sphere_object_2(
+                            new_sphere.name,
+                            new_sphere.radius,
+                            new_sphere.offset,
+                            arma_data.bones.get(self.bone_name))
+        
+        new_sphere_index = sub_swing_data.spheres.find(new_sphere.name)
+
+        parent_swing_child_to_parent_obj_armature_deform(
+            parent = context.object,
+            child = new_sphere.blender_object,
+            type = 'SPHERE',
+            index = new_sphere_index)
+        
+        master_collection: Collection = get_swing_mesh_master_collection(context, context.object)
+        master_collection_props: SUB_PG_sub_swing_master_collection_props = master_collection.sub_swing_collection_props
+
+        master_collection_props.spheres_collection.objects.link(new_sphere.blender_object)
+
+        sub_swing_data.active_sphere_index = new_sphere_index
+
         return {'FINISHED'}
 
 def remove_active_collision_from_collection(collision_type: str, sub_swing_data: SUB_PG_sub_swing_data):
@@ -504,7 +555,13 @@ class SUB_OP_swing_data_sphere_remove(Operator):
             return len(sub_swing_data.spheres) > 0
         
     def execute(self, context):
-        remove_active_collision_from_collection("SPHERE",context.object.data.sub_swing_data)
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_sphere: SUB_PG_swing_sphere = sub_swing_data.spheres[sub_swing_data.active_sphere_index]
+
+        bpy.data.meshes.remove(active_sphere.blender_object.data)
+        #bpy.data.objects.remove(active_sphere.blender_object) # Deleting the mesh automatically deletes the object too?
+        
+        remove_active_collision_from_collection("SPHERE", sub_swing_data)
         return {'FINISHED'}   
     
 
@@ -553,7 +610,10 @@ class SUB_OP_swing_data_oval_add(Operator):
         layout.row().prop(self, "end_offset")   
 
     def execute(self, context):
-        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        arma_obj: Object = context.object
+        arma_data: Armature = arma_obj.data
+
+        sub_swing_data: SUB_PG_sub_swing_data = arma_data.sub_swing_data
         if self.oval_name == "":
             return {'CANCELLED'}
         if self.start_bone_name == "":
@@ -568,6 +628,30 @@ class SUB_OP_swing_data_oval_add(Operator):
         new_oval.radius = self.radius
         new_oval.start_offset = self.start_offset
         new_oval.end_offset = self.end_offset
+        new_oval.blender_object = create_meshes.make_capsule_object(
+            name = new_oval.name,
+            start_radius = new_oval.radius,
+            end_radius = new_oval.radius,
+            start_offset = new_oval.start_offset,
+            end_offset = new_oval.end_offset,
+            start_bone = arma_data.bones.get(self.start_bone_name),
+            end_bone = arma_data.bones.get(self.end_bone_name),)
+        
+        new_oval_index = sub_swing_data.ovals.find(new_oval.name)
+
+        parent_swing_child_to_parent_obj_armature_deform(
+            parent = arma_obj,
+            child = new_oval.blender_object,
+            type = 'OVAL',
+            index = new_oval_index,)
+
+        master_collection_props: SUB_PG_sub_swing_master_collection_props = get_swing_mesh_master_collection(
+            context = context, 
+            arma_obj = arma_obj).sub_swing_collection_props
+        
+        master_collection_props.ovals_collection.objects.link(new_oval.blender_object)
+
+        sub_swing_data.active_oval_index = new_oval_index
 
         return {'FINISHED'}
 
@@ -587,6 +671,11 @@ class SUB_OP_swing_data_oval_remove(Operator):
             return len(sub_swing_data.ovals) > 0
         
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_oval: SUB_PG_swing_oval = sub_swing_data.ovals[sub_swing_data.active_oval_index]
+
+        bpy.data.meshes.remove(active_oval.blender_object.data)
+
         remove_active_collision_from_collection('OVAL', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
@@ -632,7 +721,10 @@ class SUB_OP_swing_data_ellipsoid_add(Operator):
         layout.row().prop(self, "scale")   
 
     def execute(self, context):
-        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        arma_obj: Object = context.object
+        arma_data: Armature = arma_obj.data
+
+        sub_swing_data: SUB_PG_sub_swing_data = arma_data.sub_swing_data
         if self.ellipsoid_name == "":
             return {'CANCELLED'}
         if self.bone_name == "":
@@ -644,6 +736,28 @@ class SUB_OP_swing_data_ellipsoid_add(Operator):
         new_ellipsoid.offset = self.offset
         new_ellipsoid.rotation = self.rotation
         new_ellipsoid.scale = self.scale
+        new_ellipsoid.blender_object = create_meshes.make_ellipsoid_object(
+            name = new_ellipsoid.name,
+            offset = new_ellipsoid.offset,
+            rotation = new_ellipsoid.rotation,
+            scale = new_ellipsoid.scale,
+            bone = arma_data.bones.get(new_ellipsoid.bone_name))
+        
+        new_ellipsoid_index = sub_swing_data.ellipsoids.find(new_ellipsoid.name)
+
+        parent_swing_child_to_parent_obj_armature_deform(
+            parent = arma_obj,
+            child = new_ellipsoid.blender_object,
+            type = 'ELLIPSOID',
+            index = new_ellipsoid_index,)
+        
+        master_collection_props: SUB_PG_sub_swing_master_collection_props = get_swing_mesh_master_collection(
+            context = context, 
+            arma_obj = arma_obj).sub_swing_collection_props
+        
+        master_collection_props.ellipsoids_collection.objects.link(new_ellipsoid.blender_object)
+
+        sub_swing_data.active_ellipsoid_index = new_ellipsoid_index
 
         return {'FINISHED'}
 
@@ -661,6 +775,11 @@ class SUB_OP_swing_data_ellipsoid_remove(Operator):
             return len(sub_swing_data.ellipsoids) > 0
         
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_ellipsoid: SUB_PG_swing_oval = sub_swing_data.ellipsoids[sub_swing_data.active_ellipsoid_index]
+
+        bpy.data.meshes.remove(active_ellipsoid.blender_object.data)
+
         remove_active_collision_from_collection('ELLIPSOID', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
@@ -713,7 +832,10 @@ class SUB_OP_swing_data_capsule_add(Operator):
         layout.row().prop(self, "end_radius")      
 
     def execute(self, context):
-        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        arma_obj: Object = context.object
+        arma_data: Armature = arma_obj.data
+
+        sub_swing_data: SUB_PG_sub_swing_data = arma_data.sub_swing_data
         if self.capsule_name == "":
             return {'CANCELLED'}
         if self.start_bone_name == "":
@@ -722,7 +844,6 @@ class SUB_OP_swing_data_capsule_add(Operator):
             return {'CANCELLED'}
         
         new_capsule: SUB_PG_swing_capsule = sub_swing_data.capsules.add()
-
         new_capsule.name            = self.capsule_name
         new_capsule.start_bone_name = self.start_bone_name
         new_capsule.end_bone_name   = self.end_bone_name
@@ -730,6 +851,30 @@ class SUB_OP_swing_data_capsule_add(Operator):
         new_capsule.end_offset      = self.end_offset
         new_capsule.start_radius    = self.start_radius
         new_capsule.end_radius      = self.end_radius
+        new_capsule.blender_object = create_meshes.make_capsule_object(
+            name = new_capsule.name,
+            start_radius = new_capsule.start_radius,
+            end_radius = new_capsule.end_radius,
+            start_offset = new_capsule.start_offset,
+            end_offset = new_capsule.end_offset,
+            start_bone = arma_data.bones.get(self.start_bone_name),
+            end_bone = arma_data.bones.get(self.end_bone_name))
+        
+        new_capsule_index = sub_swing_data.capsules.find(new_capsule.name)
+
+        parent_swing_child_to_parent_obj_armature_deform(
+            parent = arma_obj,
+            child = new_capsule.blender_object,
+            type = 'CAPSULE',
+            index = new_capsule_index,)
+
+        master_collection_props: SUB_PG_sub_swing_master_collection_props = get_swing_mesh_master_collection(
+            context = context, 
+            arma_obj = arma_obj).sub_swing_collection_props
+        
+        master_collection_props.capsules_collection.objects.link(new_capsule.blender_object)
+
+        sub_swing_data.active_capsule_index = new_capsule_index
         
         return {'FINISHED'}
 
@@ -747,6 +892,11 @@ class SUB_OP_swing_data_capsule_remove(Operator):
             return len(sub_swing_data.capsules) > 0
         
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_capsule: SUB_PG_swing_oval = sub_swing_data.capsules[sub_swing_data.active_capsule_index]
+
+        bpy.data.meshes.remove(active_capsule.blender_object.data)
+
         remove_active_collision_from_collection('CAPSULE', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
@@ -795,6 +945,9 @@ class SUB_OP_swing_data_plane_add(Operator):
         layout.row().prop(self, "distance")         
 
     def execute(self, context):
+        arma_obj: Object = context.object
+        arma_data: Armature = arma_obj.data
+
         sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
         if self.plane_name == "":
             return {'CANCELLED'}
@@ -808,6 +961,30 @@ class SUB_OP_swing_data_plane_add(Operator):
         new_plane.ny = self.ny
         new_plane.nz = self.nz
         new_plane.distance = self.distance
+        new_plane.blender_object = create_meshes.make_plane_object(
+            name= new_plane.name,
+            bone= arma_data.bones.get(new_plane.bone_name),
+            nx= new_plane.nx,
+            ny= new_plane.ny,
+            nz= new_plane.nz,
+            d= new_plane.distance,)
+        
+        new_plane_index = sub_swing_data.planes.find(new_plane.name)
+
+        parent_swing_child_to_parent_obj_armature_deform(
+            parent = arma_obj,
+            child = new_plane.blender_object,
+            type = 'PLANE',
+            index = new_plane_index,)
+        
+        master_collection_props: SUB_PG_sub_swing_master_collection_props = get_swing_mesh_master_collection(
+            context = context, 
+            arma_obj = arma_obj).sub_swing_collection_props
+        
+        master_collection_props.planes_collection.objects.link(new_plane.blender_object)
+
+        sub_swing_data.active_plane_index = new_plane_index
+
         return {'FINISHED'}
 
 class SUB_OP_swing_data_plane_remove(Operator):
@@ -824,6 +1001,11 @@ class SUB_OP_swing_data_plane_remove(Operator):
             return len(sub_swing_data.planes) > 0
         
     def execute(self, context):
+        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        active_plane: SUB_PG_swing_plane = sub_swing_data.planes[sub_swing_data.active_plane_index]
+
+        bpy.data.meshes.remove(active_plane.blender_object.data)
+
         remove_active_collision_from_collection('PLANE', context.object.data.sub_swing_data)
         return {'FINISHED'}
     
@@ -865,7 +1047,10 @@ class SUB_OP_swing_data_connection_add(Operator):
         layout.row().prop(self, "length")       
 
     def execute(self, context):
-        sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+        arma_obj: Object = context.object
+        arma_data: Armature = arma_obj.data
+
+        sub_swing_data: SUB_PG_sub_swing_data = arma_data.sub_swing_data
         if self.start_bone_name == "":
             return {'CANCELLED'}
         if self.end_bone_name == "":
@@ -876,6 +1061,29 @@ class SUB_OP_swing_data_connection_add(Operator):
         new_connection.end_bone_name = self.end_bone_name
         new_connection.radius = self.radius
         new_connection.length = self.length
+        new_connection.blender_object = create_meshes.make_connection_obj(
+            connection_name= f'{new_connection.start_bone_name} -> {new_connection.end_bone_name}',
+            radius= new_connection.radius,
+            start_bone=arma_data.bones.get(new_connection.start_bone_name),
+            end_bone=arma_data.bones.get(new_connection.end_bone_name),
+        )
+
+        new_connection_index = sub_swing_data.connections.find(new_connection.name)
+
+        parent_swing_child_to_parent_obj_armature_deform(
+            parent = arma_obj,
+            child = new_connection.blender_object,
+            type = 'CAPSULE',
+            index = new_connection_index,)
+
+        master_collection_props: SUB_PG_sub_swing_master_collection_props = get_swing_mesh_master_collection(
+            context = context, 
+            arma_obj = arma_obj).sub_swing_collection_props
+        
+        master_collection_props.connections_collection.objects.link(new_connection.blender_object)
+
+        sub_swing_data.active_connection_index = new_connection_index
+
         return {'FINISHED'}
 
 class SUB_OP_swing_data_connection_remove(Operator):
@@ -893,6 +1101,11 @@ class SUB_OP_swing_data_connection_remove(Operator):
         
     def execute(self, context):
         sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+
+        active_connection: SUB_PG_swing_connection = sub_swing_data.connections[sub_swing_data.active_connection_index]
+
+        bpy.data.meshes.remove(active_connection.blender_object.data)
+
         active_connection_index = sub_swing_data.active_connection_index
         sub_swing_data.connections.remove(active_connection_index)
         sub_swing_data.active_connection_index = max(0, min(active_connection_index, len(sub_swing_data.connections)-1))  
@@ -928,8 +1141,8 @@ class SUB_OP_swing_import(Operator):
         #if self.rename_uncracked_things:
         #    rename_uncracked_hashes(self, context)
         arma_obj = context.object
-        collection = get_swing_mesh_master_collection(arma_obj)
-        setup_bone_meshes(self, context)
+        collection = get_swing_mesh_master_collection(context, arma_obj)
+        setup_bone_meshes(self, context, collection)
         return {'FINISHED'}
     
 def struct_get(param_struct, input, fallback=None):
@@ -1249,37 +1462,57 @@ def parent_swing_bone_collision(parent, child, chain_index, bone_index):
     armature_modifier: bpy.types.ArmatureModifier = child.modifiers.new("Armature", "ARMATURE")
     armature_modifier.object = parent
 
-def create_swing_mesh_master_collection(collection: Collection, arma_obj: Object):
+def create_swing_mesh_master_collection(parent_collection: Collection, arma_obj: Object):
     swing_master_collection: Collection = new_swing_collection(f'{arma_obj.name} Swing Objects')
-    swing_master_collection.sub_swing_linked_object = arma_obj
-    swing_chains_collection: Collection = new_swing_collection('Swing Bone Chains')
-    collision_shapes_collection: Collection = new_swing_collection('Collision Shapes')
-    shape_collection_names = ('Spheres', 'Ovals', 'Ellipsoids', 'Capsules', 'Planes', 'Connections')
-    shape_name_to_collection: dict[str, Collection] = {}
-    for shape_collection_name in shape_collection_names:
-        shape_collection: Collection = new_swing_collection(shape_collection_name)
-        collision_shapes_collection.children.link(shape_collection)
-        shape_name_to_collection[shape_collection_name] = shape_collection
-    collection.children.link(swing_master_collection)
-    swing_master_collection.children.link(swing_chains_collection)
-    swing_master_collection.children.link(collision_shapes_collection)
+    sub_swing_collection_props: SUB_PG_sub_swing_master_collection_props = swing_master_collection.sub_swing_collection_props
+    sub_swing_collection_props.linked_object = arma_obj
+    sub_swing_collection_props.swing_chains_collection = new_swing_collection("Swing Bone Chains")
+    sub_swing_collection_props.collision_shapes_collection = new_swing_collection("Collision Shapes")
+    sub_swing_collection_props.spheres_collection = new_swing_collection("Spheres")
+    sub_swing_collection_props.ovals_collection = new_swing_collection("Ovals")
+    sub_swing_collection_props.ellipsoids_collection = new_swing_collection("Ellipsoids")
+    sub_swing_collection_props.capsules_collection = new_swing_collection("Capsules")
+    sub_swing_collection_props.planes_collection = new_swing_collection("Planes")
+    sub_swing_collection_props.connections_collection = new_swing_collection("Connections")
+
+    parent_collection.children.link(swing_master_collection)
+    swing_master_collection.children.link(sub_swing_collection_props.swing_chains_collection)
+    swing_master_collection.children.link(sub_swing_collection_props.collision_shapes_collection)
+
+    for collision_shape_collection in (
+        sub_swing_collection_props.spheres_collection,
+        sub_swing_collection_props.ovals_collection,
+        sub_swing_collection_props.ellipsoids_collection,
+        sub_swing_collection_props.capsules_collection,
+        sub_swing_collection_props.planes_collection,
+        sub_swing_collection_props.connections_collection
+    ):
+        sub_swing_collection_props.collision_shapes_collection.children.link(collision_shape_collection)
+    
+    return swing_master_collection
+    
 
 def get_swing_mesh_master_collection(context: Context, arma_obj: Object) -> Collection:
     # The object could be in several collections, need to check them all
     arma_collections = [c for c in context.scene.collection.children if arma_obj.name in c.objects]
     master_collection = None
-    for collection in arma_collections:
-        if collection.sub_swing_linked_object is not None:
-            if collection.sub_swing_linked_object.name == arma_obj.name:
-                master_collection = collection.sub_swing_linked_object
+    for arma_collection in arma_collections:
+        for sibling_collection in arma_collection.children:
+            sub_swing_collection_props: SUB_PG_sub_swing_master_collection_props = sibling_collection.sub_swing_collection_props
+            if sub_swing_collection_props.linked_object is not None:
+                if sub_swing_collection_props.linked_object.name == arma_obj.name:
+                    master_collection = sibling_collection
     if master_collection is not None:
         return master_collection
     else:
         # Just spawn the new collection in one of the several possible ones the armature is in.
         return create_swing_mesh_master_collection(arma_collections[0], arma_obj)
 
-def setup_bone_meshes(operator: Operator, context: Context):
+def setup_bone_meshes(operator: Operator, context: Context, master_collection: Collection):
     ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+    master_collection_props: SUB_PG_sub_swing_master_collection_props = master_collection.sub_swing_collection_props
+
+    """
     swing_master_collection: Collection = new_swing_collection(f'{context.object.name} Swing Objects')
     swing_chains_collection: Collection = new_swing_collection('Swing Bone Chains')
     collision_shapes_collection: Collection = new_swing_collection('Collision Shapes')
@@ -1292,6 +1525,7 @@ def setup_bone_meshes(operator: Operator, context: Context):
     context.collection.children.link(swing_master_collection)
     swing_master_collection.children.link(swing_chains_collection)
     swing_master_collection.children.link(collision_shapes_collection)
+    """
     
     swing_sphere: SUB_PG_swing_sphere
     for sphere_index, swing_sphere in enumerate(ssd.spheres):
@@ -1302,8 +1536,9 @@ def setup_bone_meshes(operator: Operator, context: Context):
         sphere_obj = create_meshes.make_sphere_object_2(swing_sphere.name, swing_sphere.radius, swing_sphere.offset, blender_bone)
         parent_swing_child_to_parent_obj_armature_deform(context.object, sphere_obj, 'SPHERE', sphere_index)
         swing_sphere.blender_object = sphere_obj
-        spheres_collection = shape_name_to_collection['Spheres']
-        spheres_collection.objects.link(sphere_obj)
+        """spheres_collection = shape_name_to_collection['Spheres']
+        spheres_collection.objects.link(sphere_obj)"""
+        master_collection_props.spheres_collection.objects.link(sphere_obj)
 
     swing_oval: SUB_PG_swing_oval
     for oval_index, swing_oval in enumerate(ssd.ovals):
@@ -1319,9 +1554,9 @@ def setup_bone_meshes(operator: Operator, context: Context):
             end_bone)
         swing_oval.blender_object = oval_obj
         parent_swing_child_to_parent_obj_armature_deform(context.object, oval_obj, 'OVAL', oval_index)
-
-        ovals_collection = shape_name_to_collection['Ovals']
-        ovals_collection.objects.link(oval_obj)
+        """ovals_collection = shape_name_to_collection['Ovals']
+        ovals_collection.objects.link(oval_obj)"""
+        master_collection_props.ovals_collection.objects.link(oval_obj)
 
     swing_ellipsoid: SUB_PG_swing_ellipsoid
     for ellipsoid_index, swing_ellipsoid in enumerate(ssd.ellipsoids):
@@ -1333,8 +1568,9 @@ def setup_bone_meshes(operator: Operator, context: Context):
         parent_swing_child_to_parent_obj_armature_deform(context.object, ellipsoid_obj, 'ELLIPSOID', ellipsoid_index)
 
         swing_ellipsoid.blender_object = ellipsoid_obj
-        ellipsoids_collection = shape_name_to_collection['Ellipsoids']
-        ellipsoids_collection.objects.link(ellipsoid_obj)
+        """ellipsoids_collection = shape_name_to_collection['Ellipsoids']
+        ellipsoids_collection.objects.link(ellipsoid_obj)"""
+        master_collection_props.ellipsoids_collection.objects.link(ellipsoid_obj)
 
     swing_capsule: SUB_PG_swing_capsule
     for capsule_index, swing_capsule in enumerate(ssd.capsules):
@@ -1354,8 +1590,9 @@ def setup_bone_meshes(operator: Operator, context: Context):
 
         swing_capsule.blender_object = capsule_obj
 
-        capsules_collection = shape_name_to_collection['Capsules']
-        capsules_collection.objects.link(capsule_obj)
+        """capsules_collection = shape_name_to_collection['Capsules']
+        capsules_collection.objects.link(capsule_obj)"""
+        master_collection_props.capsules_collection.objects.link(capsule_obj)
 
     swing_plane: SUB_PG_swing_plane
     for plane_index, swing_plane in enumerate(ssd.planes):
@@ -1372,8 +1609,9 @@ def setup_bone_meshes(operator: Operator, context: Context):
 
         swing_plane.blender_object = plane_obj
 
-        planes_collection = shape_name_to_collection['Planes']
-        planes_collection.objects.link(plane_obj)
+        """planes_collection = shape_name_to_collection['Planes']
+        planes_collection.objects.link(plane_obj)"""
+        master_collection_props.planes_collection.objects.link(plane_obj)
         
     swing_connection: SUB_PG_swing_connection
     for connection_index, swing_connection in enumerate(ssd.connections):
@@ -1388,8 +1626,9 @@ def setup_bone_meshes(operator: Operator, context: Context):
         parent_swing_child_to_parent_obj_armature_deform(context.object, connection_obj, 'CONNECTION', connection_index)
         swing_connection.blender_object = connection_obj
 
-        connections_collection = shape_name_to_collection['Connections']
-        connections_collection.objects.link(connection_obj)
+        """connections_collection = shape_name_to_collection['Connections']
+        connections_collection.objects.link(connection_obj)"""
+        master_collection_props.connections_collection.objects.link(connection_obj)
 
     swing_bone_chain: SUB_PG_swing_bone_chain
     swing_bone: SUB_PG_swing_bone
@@ -1403,7 +1642,8 @@ def setup_bone_meshes(operator: Operator, context: Context):
         chain_collection = new_swing_collection(swing_bone_chain.name)
         chain_swing_bones_collection = new_swing_collection(f'{swing_bone_chain.name} swing bones')
         chain_collision_collection = new_swing_collection(f'{swing_bone_chain.name} collisions')
-        swing_chains_collection.children.link(chain_collection)
+        """swing_chains_collection.children.link(chain_collection)"""
+        master_collection_props.swing_chains_collection.children.link(chain_collection)
         chain_collection.children.link(chain_swing_bones_collection)
         chain_collection.children.link(chain_collision_collection)
         for bone_index, swing_bone in enumerate(swing_bone_chain.swing_bones):

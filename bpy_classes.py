@@ -115,6 +115,7 @@ classes = [
     modules.swing.sub_swing_data.SUB_PG_sub_swing_data,
     modules.swing.sub_swing_data.SUB_PG_blender_bone_data,
     modules.swing.sub_swing_data.SUB_PG_sub_swing_data_linked_mesh,
+    modules.swing.sub_swing_data.SUB_PG_sub_swing_master_collection_props,
     modules.swing.ui.SUB_PT_swing_io,
     modules.swing.ui.SUB_PT_active_bone_swing_info,
     modules.swing.ui.SUB_PT_active_mesh_swing_info,

@@ -1,11 +1,13 @@
-import bpy
 # BPY Imports
+import bpy
 from bpy.types import (
     PropertyGroup)
 from bpy.props import (
     IntProperty, StringProperty, EnumProperty, BoolProperty, FloatProperty, CollectionProperty, PointerProperty, FloatVectorProperty)
 # Core Library imports
 import re
+from math import(
+    radians,)
 # 3rd Party Imports
 # Local Project Imports
 from ...operators import create_meshes
@@ -120,24 +122,24 @@ def swing_bone_update(self, context):
         )
 
 class SUB_PG_swing_bone(PropertyGroup):
-    air_resistance: FloatProperty(name='Air Resistance')
-    water_resistance: FloatProperty(name='Water Resistance')
+    air_resistance: FloatProperty(name='Air Resistance', default=1.0)
+    water_resistance: FloatProperty(name='Water Resistance', default=1.0)
     #min_angle_z: FloatProperty(name='Min Angle Z')
     #max_angle_z: FloatProperty(name='Max Angle Z')
-    angle_z: FloatVectorProperty(name='Angle Z Min/Max', size=2, unit='ROTATION')
+    angle_z: FloatVectorProperty(name='Angle Z Min/Max', size=2, unit='ROTATION', default=(radians(-180),radians(180)))
     #min_angle_y: FloatProperty(name='Min Angle Y')
     #max_angle_y: FloatProperty(name='Max Angle Y')
-    angle_y: FloatVectorProperty(name='Angle X Min/Max', size=2, unit='ROTATION') # Smash and blender have different primary bone axis (X & Y)
+    angle_y: FloatVectorProperty(name='Angle X Min/Max', size=2, unit='ROTATION', default=(radians(-180),radians(180))) # Smash and blender have different primary bone axis (X & Y)
     #collision_size_tip: FloatProperty(name='Collision Size Tip')
     #collision_size_root: FloatProperty(name='Collision Size Root')
-    collision_size: FloatVectorProperty(name='Collsion Size Head/Tail', size=2, unit='LENGTH', update=swing_bone_update)
-    friction_rate: FloatProperty(name='Friction Rate')
-    goal_strength: FloatProperty(name='Goal Strength')
-    inertial_mass: FloatProperty(name='Mass')
-    local_gravity: FloatProperty(name='Local Gravity')
-    fall_speed_scale: FloatProperty(name='Fall Speed Scale')
-    ground_hit: BoolProperty(name='Ground Hit')
-    wind_affect: FloatProperty(name='Wind Affect')
+    collision_size: FloatVectorProperty(name='Collsion Size Head/Tail', size=2, unit='LENGTH', default=(1.0, 1.0), update=swing_bone_update)
+    friction_rate: FloatProperty(name='Friction Rate', default=1.0)
+    goal_strength: FloatProperty(name='Goal Strength', default=1.0)
+    inertial_mass: FloatProperty(name='Mass', default=1.0)
+    local_gravity: FloatProperty(name='Local Gravity', default=1.0)
+    fall_speed_scale: FloatProperty(name='Fall Speed Scale', default=1.0)
+    ground_hit: BoolProperty(name='Ground Hit', default=True)
+    wind_affect: FloatProperty(name='Wind Affect', default=1.0)
     collisions: CollectionProperty(type=SUB_PG_swing_bone_collision)
     # Properties Below are for UI Only
     name: StringProperty(name='Swing Bone Name') # The swing.prc doesn't track individual bone names
@@ -177,6 +179,26 @@ def swing_sphere_update(self, context):
     
     create_meshes.make_sphere_2(sphere_obj, self.radius, self.offset, arma.bones[self.bone])
 
+def swing_oval_update(self, context):
+    if self.blender_object is None:
+        return
+    if self.start_bone_name is None:
+        return
+    if self.end_bone_name is None:
+        return
+    
+    arma_data: bpy.types.Armature = self.id_data
+    oval_obj: bpy.types.Object = self.blender_object
+
+    create_meshes.make_capsule_mesh(
+        oval_obj,
+        start_radius = self.radius,
+        end_radius = self.radius,
+        start_offset = self.start_offset,
+        end_offset = self.end_offset,
+        start_bone = arma_data.bones.get(self.start_bone_name),
+        end_bone = arma_data.bones.get(self.end_bone_name),)
+
 def swing_ellipsoid_update(self, context):
     if self.blender_object is None:
         return
@@ -205,11 +227,11 @@ class SUB_PG_swing_sphere(PropertyGroup):
 
 class SUB_PG_swing_oval(PropertyGroup):
     name: StringProperty(name='Oval Name Hash40', update=collision_object_name_update)
-    start_bone_name: StringProperty(name='Start Bone Name Hash40')
-    end_bone_name: StringProperty(name='End Bone Name Hash40')
-    radius: FloatProperty(name='Radius')
-    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3)
-    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3)
+    start_bone_name: StringProperty(name='Start Bone Name Hash40', update=swing_oval_update)
+    end_bone_name: StringProperty(name='End Bone Name Hash40', update=swing_oval_update)
+    radius: FloatProperty(name='Radius', update=swing_oval_update)
+    start_offset: FloatVectorProperty(name='Start Offset', subtype='XYZ', size=3, update=swing_oval_update)
+    end_offset: FloatVectorProperty(name='End Offset', subtype='XYZ', size=3, update=swing_oval_update)
     # Store the blender object for optimization 
     blender_object: PointerProperty(
         type=bpy.types.Object,
@@ -378,3 +400,35 @@ class SUB_PG_sub_swing_data_linked_mesh(PropertyGroup):
         name='collision_collection_index',
         default=0,
     )
+
+class SUB_PG_sub_swing_master_collection_props(PropertyGroup):
+    linked_object: PointerProperty(
+        name="The linked Armature",
+        type=bpy.types.Object,
+    )
+    swing_chains_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    collision_shapes_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    spheres_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    ovals_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    ellipsoids_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    capsules_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    planes_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    connections_collection: PointerProperty(
+        type=bpy.types.Collection,
+    )
+    
+

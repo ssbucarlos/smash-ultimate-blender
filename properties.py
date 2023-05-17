@@ -28,8 +28,8 @@ def register():
     Mesh.sub_swing_data_linked_mesh = PointerProperty(
         type=sub_swing_data.SUB_PG_sub_swing_data_linked_mesh
     )
-    Collection.sub_swing_linked_object = PointerProperty(
-        type=Object
+    Collection.sub_swing_collection_props = PointerProperty(
+        type=sub_swing_data.SUB_PG_sub_swing_master_collection_props
     )
 
 class SubSceneProperties(PropertyGroup):
