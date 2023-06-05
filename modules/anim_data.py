@@ -27,8 +27,7 @@ class SUB_PT_sub_smush_anim_data_master(Panel):
 
     def draw(self, context):
         layout = self.layout
-        obj = context.object
-        arma = obj.data
+        arma = context.object
 
 class SUB_PT_sub_smush_anim_data_vis_tracks(Panel):
     bl_label = "Ultimate Visibility Track Entries"
