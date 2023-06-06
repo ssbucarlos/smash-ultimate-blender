@@ -1,5 +1,6 @@
 import bpy
 import sqlite3
+import re 
 
 from bpy.types import ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial, ShaderNodeVertexColor
 from bpy_extras import image_utils
@@ -426,7 +427,7 @@ def create_blender_materials_from_matl(operator: bpy.types.Operator, ssbh_matl: 
     create_default_textures()
     # Make new Blender Materials
     material_label_to_material: dict[str, bpy.types.Material] = \
-        {entry.material_label: bpy.data.materials.new(entry.material_label) for entry in ssbh_matl.entries}
+        {entry.material_label : bpy.data.materials.new(entry.material_label) for entry in ssbh_matl.entries}
     # Import the texture PNGs
     texture_name_to_image_dict = import_material_images(operator, ssbh_matl, bpy.context.scene.sub_scene_properties.model_import_folder_path)
     # Fill out the sub_matl_data of each material
@@ -446,16 +447,14 @@ def create_blender_materials_from_matl(operator: bpy.types.Operator, ssbh_matl: 
     # Eye materials implicitly use extra materials despite no mesh being explicitly assigned.
     # Need to track these to preserve them on export.
     for material_label, material in material_label_to_material.items():
-        if material_label in ('EyeL', 'EyeR'):
-            sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
-            light_mat: bpy.types.Material = material_label_to_material.get(f'{material_label}L')
-            dark_mat: bpy.types.Material = material_label_to_material.get(f'{material_label}D')
-            glow_mat: bpy.types.Material = material_label_to_material.get(f'{material_label}G')
-            
-            for mat_to_link in (light_mat, dark_mat, glow_mat):
-                if mat_to_link is not None:
+        sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
+        if (match := re.match(r"(Eye[L|R])(\d?)", material_label)):
+            label_no_digit, optional_digit = match.groups(default='')
+            for linked_material_suffix in ('L', 'D', 'G'):
+                if (linked_material := material_label_to_material.get(f'{label_no_digit}{linked_material_suffix}{optional_digit}')):
                     new_linked_material: SUB_PG_matl_linked_material = sub_matl_data.linked_materials.add()
-                    new_linked_material.blender_material = mat_to_link
+                    new_linked_material.blender_material = linked_material
+
                     
     # Make the blender material settings
     for material_label, material in material_label_to_material.items():
