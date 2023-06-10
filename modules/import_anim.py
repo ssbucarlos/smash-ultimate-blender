@@ -370,11 +370,13 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
             data_path = f'sub_anim_properties.vis_track_entries[{sub_vis_track_entry_index}].value'
             fcurve = arma.data.animation_data.action.fcurves.new(data_path, action_group='Visibility')
             # Now create and set the keyframe points
-            fcurve.keyframe_points.add(count=len(node.tracks[0].values))
-            frame_and_value_flattened = []
+            last_value = None
             for index, value in enumerate(node.tracks[0].values):
-                frame_and_value_flattened.extend([scene.frame_start + index, value])
-            fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+                if value != last_value:
+                    new_keyframe = fcurve.keyframe_points.insert(frame=scene.frame_start + index, value=value, options={'FAST'})
+                    new_keyframe.interpolation = 'CONSTANT'
+                    last_value = value
+            
     # Material group import stuff
     material_group = name_to_group_dict.get('Material') if include_material_track else None
     if material_group:
