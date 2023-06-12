@@ -11,7 +11,7 @@ import numpy as np
 from .. import ssbh_data_py
 from pathlib import Path
 from bpy.props import StringProperty, BoolProperty
-from bpy.types import Panel, Operator
+from bpy.types import Panel, Operator, EditBone
 from bpy_extras import image_utils
 from ..operators import master_shader, material_inputs
 from mathutils import Matrix
@@ -191,7 +191,7 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
     print(f'Read files in {end - start} seconds')
 
     try:
-        armature = create_armature(ssbh_skel, context)
+        armature = create_armature(operator, ssbh_skel, context)
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
@@ -274,154 +274,78 @@ def get_blender_transform(m) -> Matrix:
     # Perform the transformation m in Ultimate's basis and convert back to Blender.
     return p @ m @ p.inverted()
 
+def fix_bone_length(blender_bone: EditBone, edit_bones: bpy.types.ArmatureEditBones) -> None:
+    if blender_bone.name.startswith("H_"):
+        return
 
-def create_armature(ssbh_skel, context) -> bpy.types.Object: 
-    '''
-    So blender bone matrixes are not relative to their parent, unlike the ssbh skel.
-    Also, blender has a different coordinate system for the bones.
-    Also, ssbh matrixes need to be transposed first.
-    Also, the root bone needs to be modified differently to fix the world orientation
-    Also, the ssbh bones are not guaranteed to appear in 'hierarchical' order, 
-                 which is where the parent always appears before the child.
-    Also, iterating through the blender bones appears to preserve the order of insertion,
-                 so its also not guaranteed hierarchical order.
-    '''
-    start = time.time()
+    if len(blender_bone.children) == 0:
+        if blender_bone.parent:
+            blender_bone.length = blender_bone.parent.length
+        return
     
-    # Create a new armature and select it.
-    base_skel_name = "smush_blender_import"
-    armature = bpy.data.objects.new(base_skel_name, bpy.data.armatures.new(base_skel_name))
-    armature.rotation_mode = 'QUATERNION'
-    armature.show_in_front = True
-    armature.data.display_type = 'STICK'
-    context.view_layer.active_layer_collection.collection.objects.link(armature)
-    context.view_layer.objects.active = armature
-    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+    if len(blender_bone.children) == 1:
+        if blender_bone.head == blender_bone.children[0].head:
+            return
+        blender_bone.length = (blender_bone.head - blender_bone.children[0].head).length
+        return
     
-    bone_name_parent_name_dict = {bone.name:get_name_from_index(bone.parent_index, ssbh_skel.bones) for bone in ssbh_skel.bones}
+    for child in blender_bone.children:
+        if child.name == blender_bone.name + '_eff':
+            blender_bone.length = (blender_bone.head - child.head).length
+
+    finger_base_bones = ['FingerL10','FingerL20', 'FingerL30','FingerL40',
+                            'FingerR10','FingerR20', 'FingerR30','FingerR40',]
+    if any(finger_base_bone == blender_bone.name for finger_base_bone in finger_base_bones):
+        if finger_1_bone:= edit_bones.get(blender_bone.name[:-1]+'1'):
+            blender_bone.length = (blender_bone.head - finger_1_bone.head).length
     
-    edit_bones = armature.data.edit_bones
-
-    # Make Bones
-    for ssbh_bone in ssbh_skel.bones:
-        blender_bone = edit_bones.new(ssbh_bone.name)
-        blender_bone.head = [0,0,0]
-        blender_bone.tail = [0,1,0] # Doesnt actually matter where its pointing, it just needs to point somewhere
-
-    # Assign Parents
-    for ssbh_bone in ssbh_skel.bones:  
-        blender_bone = edit_bones.get(ssbh_bone.name)
-        parent_bone_name = bone_name_parent_name_dict[ssbh_bone.name]
-        if parent_bone_name is None:
-            continue
-        parent_bone = edit_bones.get(parent_bone_name, None)
-        blender_bone.parent = parent_bone
-
-    # Get a list of bones in 'hierarchical' order
-    def hierarchy_order(bone, reordered):
-        if bone not in reordered:
-            reordered.append(bone)
-        for child in bone.children:
-            hierarchy_order(child, reordered)
-    reordered = []
-    if len(edit_bones) > 0:
-        for edit_bone in edit_bones:
-            if edit_bone.parent is None:
-                hierarchy_order(edit_bone, reordered)
-
-    # Transform bones
-    for blender_bone in reordered:
-        blender_bone: EditBone
-        ssbh_bone = ssbh_skel.bones[get_index_from_name(blender_bone.name, ssbh_skel.bones)]
-        if blender_bone.parent is None:
-            blender_bone.matrix = get_blender_transform(ssbh_bone.transform)
-            # TODO: Why is this necessary?
-            blender_bone.transform(Matrix.Rotation(math.radians(-90), 4, 'Z'))
-            # Convert from Y up to Z up only at root bones.
-            # This works since non empty skeletons will always have at least one root bone.
-            blender_bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
-        else:
-            blender_bone.matrix = blender_bone.parent.matrix @ get_blender_transform(ssbh_bone.transform)
+    if blender_bone.name == 'ArmL' or blender_bone.name == 'ArmR':
+        if hand_bone:= edit_bones.get("Hand" + blender_bone.name[-1]):
+            blender_bone.length = (blender_bone.head - hand_bone.head).length
     
+    if blender_bone.name == 'ShoulderL' or blender_bone.name == 'ShoulderR':
+        if arm_bone:= edit_bones.get("Arm" + blender_bone.name[-1]):
+            blender_bone.length = (blender_bone.head - arm_bone.head).length
 
-    # fix bone lengths
-    for blender_bone in reordered:
-        if "H_" == blender_bone.name[:2]:
-            continue
+    if blender_bone.name == 'LegR' or blender_bone.name == 'LegL':
+        if knee_bone:= edit_bones.get('Knee' + blender_bone.name[-1]):
+            blender_bone.length = (blender_bone.head - knee_bone.head).length
+    
+    if blender_bone.name == 'KneeR' or blender_bone.name == 'KneeL':
+        if foot_bone:= edit_bones.get('Foot' + blender_bone.name[-1]):
+            blender_bone.length = (blender_bone.head - foot_bone.head).length
+    
+    if blender_bone.name == 'ClavicleC':
+        if neck_bone:= edit_bones.get('Neck'):
+            blender_bone.length = (blender_bone.head - neck_bone.head).length
 
-        if len(blender_bone.children) == 0:
-            if blender_bone.parent:
-                blender_bone.length = blender_bone.parent.length
-            continue
-        
-        if len(blender_bone.children) == 1:
-            if blender_bone.head == blender_bone.children[0].head:
-                continue
-            blender_bone.length = (blender_bone.head - blender_bone.children[0].head).length
-            continue
-        
-        for child in blender_bone.children:
-            if child.name == blender_bone.name + '_eff':
-                blender_bone.length = (blender_bone.head - child.head).length
-
-        finger_base_bones = ['FingerL10','FingerL20', 'FingerL30','FingerL40',
-                             'FingerR10','FingerR20', 'FingerR30','FingerR40',]
-        if any(finger_base_bone == blender_bone.name for finger_base_bone in finger_base_bones):
-            finger_1_bone = edit_bones.get(blender_bone.name[:-1]+'1')
-            if finger_1_bone:
-                blender_bone.length = (blender_bone.head - finger_1_bone.head).length
-        
-        if blender_bone.name == 'ArmL' or blender_bone.name == 'ArmR':
-            hand_bone = edit_bones.get("Hand" + blender_bone.name[-1])
-            if hand_bone:
-                blender_bone.length = (blender_bone.head - hand_bone.head).length
-        
-        if blender_bone.name == 'ShoulderL' or blender_bone.name == 'ShoulderR':
-            arm_bone = edit_bones.get("Arm" + blender_bone.name[-1])
-            if arm_bone:
-                blender_bone.length = (blender_bone.head - arm_bone.head).length
-
-        if blender_bone.name == 'LegR' or blender_bone.name == 'LegL':
-            knee_bone = edit_bones.get('Knee' + blender_bone.name[-1])
-            if knee_bone:
-                blender_bone.length = (blender_bone.head - knee_bone.head).length
-        
-        if blender_bone.name == 'KneeR' or blender_bone.name == 'KneeL':
-            foot_bone = edit_bones.get('Foot' + blender_bone.name[-1])
-            if foot_bone:
-                blender_bone.length = (blender_bone.head - foot_bone.head).length
-        
-        if blender_bone.name == 'ClavicleC':
-            neck_bone = edit_bones.get('Neck')
-            if neck_bone:
-                blender_bone.length = (blender_bone.head - neck_bone.head).length
-
-    # Assign bone colors and bone layers
+def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
+    # Bone groups only exist in pose mode, so enter pose mode.
     bpy.ops.object.mode_set(mode='POSE')
     
-    default_group = bpy.context.object.pose.bone_groups.new()
+    default_group = arma_obj.pose.bone_groups.new()
     default_group.name = 'Default'
     default_group.color_set = 'DEFAULT'
 
-    helper_group = bpy.context.object.pose.bone_groups.new()
+    helper_group = arma_obj.pose.bone_groups.new()
     helper_group.name = 'Helper'
     helper_group.color_set = 'THEME06'
 
-    swing_group = bpy.context.object.pose.bone_groups.new()
+    swing_group = arma_obj.pose.bone_groups.new()
     swing_group.name = 'Swing'
     swing_group.color_set = 'THEME04'
 
-    system_group = bpy.context.object.pose.bone_groups.new()
+    system_group = arma_obj.pose.bone_groups.new()
     system_group.name = 'System'
     system_group.color_set = 'THEME10'
 
-    exo_group = bpy.context.object.pose.bone_groups.new()
+    exo_group = arma_obj.pose.bone_groups.new()
     exo_group.name = 'Exo Skel'
     exo_group.color_set = 'THEME09'
 
     system_bone_names = ['Trans', 'Rot', 'Throw']
     system_bone_suffixes = ['_null', '_eff', '_offset']
-    for bone in bpy.context.object.pose.bones:
+    for bone in arma_obj.pose.bones:
         bone: PoseBone
         bone.bone.layers[16] = True
         if bone.name.startswith('H_Exo_'):
@@ -449,10 +373,71 @@ def create_armature(ssbh_skel, context) -> bpy.types.Object:
                 #bone.bone.use_deform = False # A few vanilla bones are actually weighted to '_null' or '_eff' or '_offset' bones
 
     bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelData, context: bpy.types.Context) -> bpy.types.Object: 
+    '''
+    So blender bone matrixes are not relative to their parent, unlike the ssbh skel.
+    Also, blender has a different coordinate system for the bones.
+    Also, ssbh matrixes need to be transposed first.
+    Also, the root bone needs to be modified differently to fix the world orientation
+    Also, the ssbh bones are not guaranteed to appear in 'hierarchical' order, 
+                 which is where the parent always appears before the child.
+    Also, iterating through the blender bones appears to preserve the order of insertion,
+                 so its also not guaranteed hierarchical order.
+    '''
+    start = time.time()
+    
+    # Create a new armature and select it.
+    base_skel_name = "smush_blender_import"
+    arma_obj: bpy.types.Object = bpy.data.objects.new(base_skel_name, bpy.data.armatures.new(base_skel_name))
+    arma_data: bpy.types.Armature = arma_obj.data
+    arma_obj.rotation_mode = 'QUATERNION'
+    arma_obj.show_in_front = True
+    arma_data.display_type = 'STICK'
+    context.view_layer.active_layer_collection.collection.objects.link(arma_obj)
+    context.view_layer.objects.active = arma_obj
+    
+    # Create Blender Bones
+    # Edit bones only exist in edit mode, so enter edit mode
+    bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+    for ssbh_bone in ssbh_skel.bones:
+        new_edit_bone = arma_data.edit_bones.new(ssbh_bone.name)
+        new_edit_bone.head = [0,0,0]
+        new_edit_bone.tail = [0,1,0] # Doesnt actually matter where its pointing, it just needs to point somewhere
+        smash_world_transform = ssbh_data_py.skel_data.SkelData.calculate_world_transform(ssbh_skel, ssbh_bone)
+        smash_world_transform_matrix = Matrix(smash_world_transform).transposed()
+        y_up_to_z_up = Matrix.Rotation(math.radians(90), 4, 'X')
+        x_major_to_y_major = Matrix.Rotation(math.radians(-90), 4, 'Z')
+        new_edit_bone.matrix = y_up_to_z_up @ smash_world_transform_matrix @ x_major_to_y_major
+        # For some reason, the .nusktb rarely contains scale values for bones
+        # Even though this is accounted for with ssbh_data_py's calculate_world_transform function,
+        # and the skel will be properly positioned,
+        # animations will still import wierd as the scale will be "doubled up"
+        scale_vec = smash_world_transform_matrix.to_scale()
+        if not all(math.isclose(i, 1.0, abs_tol=.00001) for i in scale_vec):
+            operator.report({'WARNING'}, f'The bone {new_edit_bone.name} contained scale values! Imported animations may look strange, and the scale values will be lost on model export!')
+
+    # Assign parents to bones
+    bone_name_parent_name_dict: dict[str,str] = {bone.name:get_name_from_index(bone.parent_index, ssbh_skel.bones) for bone in ssbh_skel.bones}
+    for edit_bone in arma_data.edit_bones:
+        if parent_bone_name:= bone_name_parent_name_dict.get(edit_bone.name):
+            if parent_bone:= arma_data.edit_bones.get(parent_bone_name):
+                edit_bone.parent = parent_bone
+
+    # Fix bone length
+    for edit_bone in arma_data.edit_bones:   
+        fix_bone_length(edit_bone, arma_data.edit_bones)
+
+
+    # Assign bone colors and bone layers
+    assign_bone_layers(arma_obj)
+
+    bpy.ops.object.mode_set(mode='OBJECT')
     end = time.time()
     print(f'Created armature in {end - start} seconds')
 
-    return armature
+    return arma_obj
 
 
 def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_object):
