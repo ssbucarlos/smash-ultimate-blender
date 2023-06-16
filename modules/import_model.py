@@ -274,6 +274,9 @@ def get_blender_transform(m) -> Matrix:
     # Perform the transformation m in Ultimate's basis and convert back to Blender.
     return p @ m @ p.inverted()
 
+def are_vectors_close(a: mathutils.Vector, b: mathutils.Vector) -> bool:
+    return all(math.isclose(a[i], b[i], abs_tol=0.00001) for i in [0,1,2])
+        
 def fix_bone_length(blender_bone: EditBone, edit_bones: bpy.types.ArmatureEditBones) -> None:
     if blender_bone.name.startswith("H_"):
         return
@@ -284,7 +287,7 @@ def fix_bone_length(blender_bone: EditBone, edit_bones: bpy.types.ArmatureEditBo
         return
     
     if len(blender_bone.children) == 1:
-        if blender_bone.head == blender_bone.children[0].head:
+        if are_vectors_close(blender_bone.head, blender_bone.children[0].head):
             return
         blender_bone.length = (blender_bone.head - blender_bone.children[0].head).length
         return
@@ -402,7 +405,7 @@ def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelDa
     # Edit bones only exist in edit mode, so enter edit mode
     bpy.ops.object.mode_set(mode='EDIT', toggle=False)
     for ssbh_bone in ssbh_skel.bones:
-        new_edit_bone = arma_data.edit_bones.new(ssbh_bone.name)
+        new_edit_bone = arma_data.edit_bones.new(name=ssbh_bone.name)
         new_edit_bone.head = [0,0,0]
         new_edit_bone.tail = [0,1,0] # Doesnt actually matter where its pointing, it just needs to point somewhere
         smash_world_transform = ssbh_data_py.skel_data.SkelData.calculate_world_transform(ssbh_skel, ssbh_bone)
@@ -415,7 +418,7 @@ def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelDa
         # and the skel will be properly positioned,
         # animations will still import wierd as the scale will be "doubled up"
         scale_vec = smash_world_transform_matrix.to_scale()
-        if not all(math.isclose(i, 1.0, abs_tol=.00001) for i in scale_vec):
+        if not all(math.isclose(i, 1.0, abs_tol=.001) for i in scale_vec):
             operator.report({'WARNING'}, f'The bone {new_edit_bone.name} contained scale values! Imported animations may look strange, and the scale values will be lost on model export!')
 
     # Assign parents to bones
@@ -428,6 +431,10 @@ def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelDa
     # Fix bone length
     for edit_bone in arma_data.edit_bones:   
         fix_bone_length(edit_bone, arma_data.edit_bones)
+        # Fallback in case the bone was made to be too short
+        if edit_bone.length < .001:
+            operator.report({'INFO'}, f"The bone \"{edit_bone.name}\" has a length less than .001, so it was set to .001.")
+            edit_bone.length = .001
 
 
     # Assign bone colors and bone layers
