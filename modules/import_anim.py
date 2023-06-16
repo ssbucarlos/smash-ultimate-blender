@@ -335,11 +335,9 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                 bone_fcurves = bone_to_fcurves[bone]
                 if bone.parent is None:
                     # The root bone
-                    bone.matrix = get_blender_transform(raw_matrix).transposed()
-                    # TODO: Why is this necessary?
-                    arma.data.bones.active = bone.bone
-                    bpy.ops.transform.rotate(value=math.radians(90), orient_axis='Z', center_override=arma.location)
-                    bpy.ops.transform.rotate(value=math.radians(-90), orient_axis='X', center_override=arma.location)
+                    y_up_to_z_up = Matrix.Rotation(math.radians(90), 4, 'X')
+                    x_major_to_y_major = Matrix.Rotation(math.radians(-90), 4, 'Z')
+                    bone.matrix = y_up_to_z_up @ raw_matrix @ x_major_to_y_major
 
                     bone_fcurves.stash_keyframe_set_from_matrix(index, frame, bone.matrix_basis)
                 else:
@@ -472,7 +470,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
         setup_material_drivers(arma)
 
 
-def get_raw_matrix(bone_to_node, bone, index, node):
+def get_raw_matrix(bone_to_node, bone, index, node) -> Matrix:
     translation = node.tracks[0].values[index].translation
     rotation = node.tracks[0].values[index].rotation
     scale = node.tracks[0].values[index].scale
