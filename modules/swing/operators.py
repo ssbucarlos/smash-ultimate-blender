@@ -1501,7 +1501,8 @@ def create_swing_mesh_master_collection(parent_collection: Collection, arma_obj:
 
 def get_swing_mesh_master_collection(context: Context, arma_obj: Object) -> Collection:
     # The object could be in several collections, need to check them all
-    arma_collections = [c for c in context.scene.collection.children if arma_obj.name in c.objects]
+    collections: set[Collection] = {context.scene.collection} | set(context.scene.collection.children_recursive)
+    arma_collections = {c for c in collections if arma_obj.name in c.objects}
     master_collection = None
     for arma_collection in arma_collections:
         for sibling_collection in arma_collection.children:
@@ -1513,7 +1514,7 @@ def get_swing_mesh_master_collection(context: Context, arma_obj: Object) -> Coll
         return master_collection
     else:
         # Just spawn the new collection in one of the several possible ones the armature is in.
-        return create_swing_mesh_master_collection(arma_collections[0], arma_obj)
+        return create_swing_mesh_master_collection(arma_collections.pop(), arma_obj)
 
 def setup_bone_meshes(operator: Operator, context: Context, master_collection: Collection):
     ssd: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
