@@ -1315,10 +1315,17 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
         matched_start_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(chain, 'start_bonename').value)
         matched_end_bone: bpy.types.Bone = raw_hash_to_blender_bone.get(struct_get(chain, 'end_bonename').value)
         if matched_start_bone is None or matched_end_bone is None:
+            chain_name = struct_get_str(chain, 'name')
             start_bone_hash = struct_get_str(chain, 'start_bonename')
             end_bone_hash = struct_get_str(chain, 'end_bonename')
-            operator.report({'WARNING'}, f'Could not match bones for a bone chain, skipping. {start_bone_hash=}, {end_bone_hash=}')
+            operator.report({'WARNING'}, f'Could not match bones for the bone chain "{chain_name}", skipping this chain. {start_bone_hash=}, {end_bone_hash=}')
             continue
+
+        if multi_child_bones:= {bone.name for bone in {matched_start_bone} | set(matched_start_bone.children_recursive) if len(bone.children) > 1}:
+            chain_name = struct_get_str(chain, 'name')
+            operator.report({'WARNING'}, f'The bone chain "{chain_name}" is not a linear hierarchy! Skipping this chain. (The following bones had more than one child: {multi_child_bones})')
+            continue
+
         new_chain: SUB_PG_swing_bone_chain = ssd.swing_bone_chains.add()
         new_chain.name            = struct_get_str(chain, 'name')
         new_chain.start_bone_name = matched_start_bone.name
