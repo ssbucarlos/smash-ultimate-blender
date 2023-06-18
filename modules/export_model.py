@@ -374,6 +374,10 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
             unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0 and not child.name.startswith("_")] 
         else:
             unprocessed_meshes: list[Object] = [child for child in arma.children if child.type == 'MESH' and len(child.data.vertices) > 0] 
+        
+        # Remove swing meshes
+        unprocessed_meshes = [mesh for mesh in unprocessed_meshes if mesh.data.sub_swing_data_linked_mesh.is_swing_mesh == False]
+        
         # TODO: Is it possible to keep the correct order for non imported meshes?
         # TODO: Should users just re-order meshes in ssbh_editor instead?
         unprocessed_meshes.sort(key=lambda mesh: mesh.get("numshb order", 10000))
