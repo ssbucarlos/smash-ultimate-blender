@@ -1751,7 +1751,7 @@ def new_prc_struct():
     return pyprc.param.struct([])
 
 def new_prc_hash(hash_name: str|int, hash_value: str|int):
-    regex = r"0x[\da-f]{10}"
+    regex = r"^0x[\da-f]{10}$"
     matches = re.match(regex, hash_name)
     if matches is not None:
         hash_name = int(hash_name, base=16)
