@@ -221,7 +221,7 @@ class SUB_OP_model_exporter(Operator):
             ('IGNORE_STARTING_UNDERSCORE', 'Ignore Meshes whose name starts with an Underscore "_"', 'For example, a mesh whose name is "_test" will not be exported.'),
             ('NONE', "Don't Ignore Any Meshes", "Won't ignore any meshes"),
         ),
-        default='IGNORE_STARTING_UNDERSCORE',
+        default='NONE',
     )
     use_debug_timer: BoolProperty(
         name='Print debug timing stats',
