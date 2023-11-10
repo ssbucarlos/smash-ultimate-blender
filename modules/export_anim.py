@@ -270,10 +270,17 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
         # Go through the pose bones' fcurves and store all the values at each frame.
         animated_pose_bones: set[bpy.types.PoseBone] = set()
         
+        object_level_transform_reported = False
         for fcurve in arma.animation_data.action.fcurves:
             regex = r'pose\.bones\[\"(.*)\"\]\.(.*)'
             matches = re.match(regex, fcurve.data_path)
             if matches is None: # A fcurve in the action that isn't a bone transform, such as the user keyframing the Armature Object itself.
+                object_level_transfrom_data_path_regex = r'^location$|^scale$|^rotation_quaternion$|^rotation_euler$'
+                if re.match(object_level_transfrom_data_path_regex, fcurve.data_path):
+                    if object_level_transform_reported == False:
+                        operator.report(type={'WARNING'}, message=f"The Armature's \"Object Mode\" location/rotation/scale was keyframed, this will not be exported! Make sure to enter Pose Mode, and keyframe a bone's location/rotation/scale instead!")
+                        object_level_transform_reported = True
+                    continue
                 operator.report(type={'WARNING'}, message=f"The fcurve with data path {fcurve.data_path} will not be exported, since it didn't match the pattern of a bone fcurve.")
                 continue
             if len(matches.groups()) != 2: # TODO: Is this possible?
