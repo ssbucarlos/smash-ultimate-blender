@@ -318,6 +318,36 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
             if animated_pose_bone is not None:
                 animated_pose_bones.add(animated_pose_bone)
 
+        # Detect Negative Scale, Fix Zero Scale
+        zero_scale_reported = False
+        for bone_name, scale_values_list in bone_name_to_scale_values.items():
+            for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                scale = scale_values_list[index]
+                negative_axis: set[str] = set()
+                if scale.x < 0.0:
+                    negative_axis.add('X')
+                if scale.y < 0.0:
+                    negative_axis.add('Y')
+                if scale.z < 0.0:
+                    negative_axis.add('Z')
+                if negative_axis:
+                    operator.report(type={'ERROR'}, message=f"Negative Scale Detected! Negative scale is not supported, and so the export was cancelled! The first instance was on bone {bone_name} on blender frame {frame} in the {negative_axis} axis.")
+                    return
+                zero_axis: set[str] = set()
+                if math.isclose(scale.x, 0.0, abs_tol= 0.0001):
+                    zero_axis.add('X')
+                    scale.x = 0.0001
+                if math.isclose(scale.y, 0.0, abs_tol= 0.0001):
+                    zero_axis.add('Y')
+                    scale.y = 0.0001
+                if math.isclose(scale.z, 0.0, abs_tol= 0.0001):
+                    zero_axis.add('Z')
+                    scale.z = 0.0001
+                if zero_axis:
+                    if not zero_scale_reported:
+                        operator.report(type={'INFO'}, message=f"Clamped scale values of `0` to `0.0001` for export. The first instance was on bone {bone_name} on blender frame {frame} in the {zero_axis} axis.")
+                        zero_scale_reported = True
+                        
         # Create SSBH Transform Group
         trans_group = ssbh_data_py.anim_data.GroupData(ssbh_data_py.anim_data.GroupType.Transform)
         ssbh_anim_data.groups.append(trans_group)
