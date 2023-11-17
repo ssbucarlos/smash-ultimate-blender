@@ -1,3 +1,4 @@
 *.pyc
 *.sh
 *.bat
+test/temp.zip
