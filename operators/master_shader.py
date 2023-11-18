@@ -46,21 +46,31 @@ def add_floats(node_tree: ShaderNodeTree):
     ]
     for custom_float_value in custom_float_values:
         socket_name = matl_params.param_id_to_ui_name[custom_float_value] 
-        input = node_tree.inputs.new("NodeSocketFloat", socket_name)
+        input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_name)
         input.default_value = 0.0
 
 def create_inputs(node_tree, name_to_inputs):
     for _, inputs in name_to_inputs.items():
-        for socket, name, default in inputs:
-            input = node_tree.inputs.new(socket, name)
+        for socket_type, name, default in inputs:
+            input = node_tree.interface.new_socket(in_out='INPUT', socket_type=socket_type, name=name)
+            input.default_value = default
+
+def create_bool_inputs_4_0_hack(node_tree, name_to_inputs):
+    """
+    In 4.0 seems like NodeSocketBool no longer can be used.
+    Will use NodeSocketFloat until its fixed
+    """
+    for _, inputs in name_to_inputs.items():
+        for socket_type, name, default in inputs:
+            input = node_tree.interface.new_socket(in_out='INPUT', socket_type="NodeSocketFloat", name=name)
             input.default_value = default
 
 def create_vec4_inputs(node_tree: NodeTree):
     for socket_params in matl_params.vec4_param_name_to_socket_params.values():
-        x_input = node_tree.inputs.new('NodeSocketFloat', socket_params.x_socket_name)
-        y_input = node_tree.inputs.new('NodeSocketFloat', socket_params.y_socket_name)
-        z_input = node_tree.inputs.new('NodeSocketFloat', socket_params.z_socket_name)
-        w_input = node_tree.inputs.new('NodeSocketFloat', socket_params.w_socket_name)
+        x_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.x_socket_name)
+        y_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.y_socket_name)
+        z_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.z_socket_name)
+        w_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.w_socket_name)
         x_input.default_value = socket_params.default_value[0]
         y_input.default_value = socket_params.default_value[1]
         z_input.default_value = socket_params.default_value[2]
@@ -68,8 +78,8 @@ def create_vec4_inputs(node_tree: NodeTree):
 
 def create_texture_input_sockets(node_group_node_tree: NodeTree):
     for socket_params in matl_params.texture_param_name_to_socket_params.values():
-        rgb_socket = node_group_node_tree.inputs.new('NodeSocketColor', socket_params.rgb_socket_name)
-        alpha_socket = node_group_node_tree.inputs.new('NodeSocketFloat', socket_params.alpha_socket_name)
+        rgb_socket = node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketColor', name=socket_params.rgb_socket_name)
+        alpha_socket = node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketFloat', name=socket_params.alpha_socket_name)
         # The alpha value of a RGB 'Color' socket is innaccessible, so the actual alpha value needs to be stored in a separate socket.
         rgb_socket.default_value = socket_params.default_rgba[0:3] + (1.0,) # The comma is for tuple concatentation, otherwise `(1.0)` evaluates to a float and causes an exception
         alpha_socket.default_value = socket_params.default_rgba[3]
@@ -101,15 +111,15 @@ def create_master_shader():
     node_group_node.name = 'Master'
 
     # Make the one output
-    node_group_node_tree.outputs.new('NodeSocketShader', 'Cycles Output')
-    node_group_node_tree.outputs.new('NodeSocketShader', 'EEVEE Output')
+    node_group_node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='Cycles Output')
+    node_group_node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='EEVEE Output')
 
     # Now we are ready to start adding inputs
     def add_color_node(name):
-        return node_group_node_tree.inputs.new('NodeSocketColor', name)
+        return node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketColor', name=name)
 
     def add_float_node(name):
-        return node_group_node_tree.inputs.new('NodeSocketFloat', name)
+        return node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketFloat', name=name)
     
     create_texture_input_sockets(node_group_node_tree)
 
@@ -125,11 +135,10 @@ def create_master_shader():
     input = add_float_node('colorSet5 Alpha')
     input.default_value = 1.0 / 3.0
 
-    #create_inputs(node_group_node_tree, material_inputs.vec4_param_to_inputs)
     create_vec4_inputs(node_group_node_tree)
-    #create_inputs(node_group_node_tree, material_inputs.float_param_to_inputs)
     add_floats(node_group_node_tree)
-    create_inputs(node_group_node_tree, material_inputs.bool_param_to_inputs)
+    #create_inputs(node_group_node_tree, material_inputs.bool_param_to_inputs)
+    create_bool_inputs_4_0_hack(node_group_node_tree, material_inputs.bool_param_to_inputs)
 
     # Wont be shown to users, should always be hidden
     input = add_float_node('use_custom_vector_47')
@@ -958,7 +967,7 @@ def create_master_shader():
     inner_links.new(reroute_2.outputs[0], reroute_3.inputs[0])
     #reroute_3.Output -> reroute_4.Input
     inner_links.new(reroute_3.outputs[0], reroute_4.inputs[0])
-    inner_links.new(prm_multiply_prm_alpha.outputs[0], eevee_principled_shader.inputs['Specular'])
+    #inner_links.new(prm_multiply_prm_alpha.outputs[0], eevee_principled_shader.inputs['Specular']) #in 4.0 this field no longer exists.
 
     # Each input node technically has all the group's inputs.
     # The duplicate node group input nodes are used to visually group inputs.

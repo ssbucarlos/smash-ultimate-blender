@@ -24,12 +24,12 @@ class SUB_CSN_ultimate_sprite_sheet_params(ShaderNodeCustomGroup):
         # This has to be first, or the inputs to the node cannot be made at all
         self.node_tree: ShaderNodeTree = bpy.data.node_groups.new(self.bl_idname + '_node_tree', SHADER_NODE_TREE)
 
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'CV 18 X (Column Count)')
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'CV 18 Y (Row Count)')
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'CV 18 Z (Active Sprite Number)')
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'CV 18 W (Total Sprite Count)') # Not used but dont remove because for ease of writing some input logic, its easier to have it here
-        self.node_tree.inputs.new(NODE_SOCKET_VECTOR, 'UV Input')
-        self.node_tree.outputs.new(NODE_SOCKET_VECTOR, 'UV Output')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 X (Column Count)')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 Y (Row Count)')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 Z (Active Sprite Number)')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 W (Total Sprite Count)') # Not used but dont remove because for ease of writing some input logic, its easier to have it here
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_VECTOR, name='UV Input')
+        self.node_tree.interface.new_socket(in_out="OUTPUT", socket_type=NODE_SOCKET_VECTOR, name='UV Output')
 
         # Now handle the internal nodes
         nodes = self.node_tree.nodes

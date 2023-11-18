@@ -39,12 +39,13 @@ class SUB_CSN_ultimate_uv_transform(ShaderNodeCustomGroup):
         
         # The sockets that go on the node itself
         # As of blender 3.4.1, creating node sockets using `self.inputs.new` is no longer supported
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Scale X')
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Scale Y')
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Translate X')
-        self.node_tree.inputs.new(NODE_SOCKET_FLOAT, 'Translate Y')
-        self.node_tree.inputs.new(NODE_SOCKET_VECTOR, 'UV Input')
-        self.node_tree.outputs.new(NODE_SOCKET_VECTOR, 'UV Output')
+        # And as of blender 4.0, creating node sockets using `self.node_tree.inputs.new` is no longer supported
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='Scale X')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='Scale Y')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='Translate X')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='Translate Y')
+        self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_VECTOR, name='UV Input')
+        self.node_tree.interface.new_socket(in_out="OUTPUT", socket_type=NODE_SOCKET_VECTOR, name='UV Output')
         
         # Now handle the internal nodes
         nodes = self.node_tree.nodes

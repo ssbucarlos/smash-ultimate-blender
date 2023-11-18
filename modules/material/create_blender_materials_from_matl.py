@@ -239,7 +239,7 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         # For now, manually set the colorspace types....
         linear_textures_names = {ParamId.Texture4.name, ParamId.Texture6.name}
         if texture.node_name in linear_textures_names:
-            texture_node.image.colorspace_settings.name = 'Linear'
+            texture_node.image.colorspace_settings.name = 'Non-Color'
             texture_node.image.alpha_mode = 'CHANNEL_PACKED'
         
         # Create UV Map Node

@@ -4,8 +4,8 @@ bl_info = {
     'category': 'All',
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
-    'version': (0, 10, 0),
-    'blender': (3, 3, 0),
+    'version': (1, 0, 0),
+    'blender': (4, 0, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
     'tracker_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/issues',
@@ -18,9 +18,8 @@ import traceback
 import nodeitems_utils
 
 def check_unsupported_blender_versions():
-    if bpy.app.version < (3, 3):
-        #sys.tracebacklimit = 0 # TODO: research what this does
-        raise ImportError('Cant use a Blender version older than 3.3, please use 3.3 or later')
+    if bpy.app.version < (4, 0):
+        raise ImportError('Cant use a Blender version older than 4.0, please use 4.0 or newer')
 
 def register():
     print('Loading Smash Ultimate Blender Tools...')

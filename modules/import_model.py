@@ -326,6 +326,7 @@ def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
     # Bone groups only exist in pose mode, so enter pose mode.
     bpy.ops.object.mode_set(mode='POSE')
     
+    """
     default_group = arma_obj.pose.bone_groups.new()
     default_group.name = 'Default'
     default_group.color_set = 'DEFAULT'
@@ -345,35 +346,40 @@ def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
     exo_group = arma_obj.pose.bone_groups.new()
     exo_group.name = 'Exo Skel'
     exo_group.color_set = 'THEME09'
+    """
 
     system_bone_names = ['Trans', 'Rot', 'Throw']
     system_bone_suffixes = ['_null', '_eff', '_offset']
     for bone in arma_obj.pose.bones:
         bone: PoseBone
-        bone.bone.layers[16] = True
+        #bone.bone.layers[16] = True
         if bone.name.startswith('H_Exo_'):
-            bone.bone_group = exo_group
-            bone.bone.layers[18] = True
+            #bone.bone_group = exo_group
+            #bone.bone.layers[18] = True
+            pass
         elif bone.name.startswith('H_'):
-            bone.bone_group = helper_group
-            bone.bone.layers[2] = True
+            #bone.bone_group = helper_group
+            #bone.bone.layers[2] = True
+            pass
         elif bone.name.startswith('S_'):
-            bone.bone.layers[1] = True
-            bone.bone.layers[17] = True
-            bone.bone_group = swing_group
+            #bone.bone.layers[1] = True
+            #bone.bone.layers[17] = True
+            #bone.bone_group = swing_group
             if '_null' in bone.name:
-                bone.bone_group = system_group
-                bone.bone.layers[16] = False
-                bone.bone.layers[17] = False
+                #bone.bone_group = system_group
+                #bone.bone.layers[16] = False
+                #bone.bone.layers[17] = False
                 #bone.bone.use_deform = False # A few vanilla bones are actually weighted to null bones
+                pass
         else:
-            bone.bone_group = default_group
+            #bone.bone_group = default_group
             if any(system_bone_name == bone.name for system_bone_name in system_bone_names) \
             or any(system_bone_suffix in bone.name for system_bone_suffix in system_bone_suffixes):
-                bone.bone_group = system_group
-                bone.bone.layers[16] = False
-                bone.bone.layers[17] = False
+                #bone.bone_group = system_group
+                #bone.bone.layers[16] = False
+                #bone.bone.layers[17] = False
                 #bone.bone.use_deform = False # A few vanilla bones are actually weighted to '_null' or '_eff' or '_offset' bones
+                pass
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
