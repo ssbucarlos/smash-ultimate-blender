@@ -992,3 +992,91 @@ def create_master_shader():
     hide_unlinked_outputs(nor_group_input)
     hide_unlinked_outputs(eevee_cv8_input)
     hide_unlinked_outputs(eevee_colorset1_input)
+
+    """
+    4.0 is out, NodeToPython is understandibly not updated yet.
+    Due to changes in the principled shader, will replace with
+    specular bsdf despite potential upcoming deprecation
+    """
+    inner_nodes.remove(eevee_principled_shader)
+
+    eevee_specular_shader = inner_nodes.new("ShaderNodeEeveeSpecular")
+    eevee_specular_shader.name = "eevee_specular_shader"
+    eevee_specular_shader.label = "EEVEE Specular Shader"
+    eevee_specular_shader.parent = eevee_frame
+    eevee_specular_shader.location = (-336.16778564453125, 114.10406494140625)
+    eevee_specular_shader.width, eevee_specular_shader.height = 240.0, 100.0
+
+    eevee_base_color = inner_nodes.new("ShaderNodeMix")
+    eevee_base_color.name = "eevee_base_color"
+    eevee_base_color.label = "EEVEE Base Color"
+    eevee_base_color.data_type = 'RGBA'
+    eevee_base_color.blend_type ='MIX'
+    eevee_base_color.parent = eevee_frame
+    eevee_base_color.location = (-609.9298095703125, 518.8598022460938)
+    eevee_base_color.inputs['B'].default_value = (0,0,0,1)
+    
+    eevee_specular = inner_nodes.new("ShaderNodeMix")
+    eevee_specular.name = "eevee_specular"
+    eevee_specular.label = "EEVEE Specular"
+    eevee_specular.data_type = 'RGBA'
+    eevee_specular.blend_type ='MIX'
+    eevee_specular.parent = eevee_frame
+    eevee_specular.location = (-609.3526611328125, 281.890869140625)
+
+    smash_specular_factor = inner_nodes.new("ShaderNodeMath")
+    smash_specular_factor.name = "smash_specular_factor"
+    smash_specular_factor.label = "Ultimate Specular Factor"
+    smash_specular_factor.operation = 'MULTIPLY'
+    smash_specular_factor.inputs[1].default_value = 0.2
+    smash_specular_factor.parent = eevee_frame
+    smash_specular_factor.location = (-929.4102172851562, 349.277587890625)
+
+    alpha_to_transparency = inner_nodes.new("ShaderNodeMath")
+    alpha_to_transparency.name = "alpha_to_transparency"
+    alpha_to_transparency.label = "Alpha To Transparency"
+    alpha_to_transparency.operation = "SUBTRACT"
+    alpha_to_transparency.inputs[0].default_value = 1.0
+    alpha_to_transparency.parent = eevee_frame
+    alpha_to_transparency.location = (-990.0360107421875, -21.6279296875)
+
+    ao_clamp = inner_nodes.new("ShaderNodeMath")
+    ao_clamp.name = 'ao_clamp'
+    ao_clamp.label = 'AO Clamp'
+    ao_clamp.operation = 'MAXIMUM'
+    ao_clamp.inputs[1].default_value = 0.001
+    ao_clamp.parent = eevee_frame
+    ao_clamp.location = (-611.8629150390625, -157.5174560546875)
+
+    # prm_metal_minimum -> eevee_base_color['Factor']
+    inner_links.new(prm_metal_minimum.outputs[0], eevee_base_color.inputs['Factor'])
+    # baked_lighting_mix -> eevee_base_color['A']
+    inner_links.new(baked_lighting_mix.outputs[0], eevee_base_color.inputs['A'])
+    # eevee_base_color -> eevee_specular_shader['Base Color']
+    inner_links.new(eevee_base_color.outputs['Result'], eevee_specular_shader.inputs['Base Color'])
+    # prm_metal_minimum -> eevee_specular['Factor']
+    inner_links.new(prm_metal_minimum.outputs[0], eevee_specular.inputs['Factor'])
+    # smash_specular_factor -> eevee_specular['A']
+    inner_links.new(smash_specular_factor.outputs[0], eevee_specular.inputs['A'])
+    # baked_lighting_mix -> eevee_specular['B']
+    inner_links.new(baked_lighting_mix.outputs[0], eevee_specular.inputs['B'])
+    # eevee_specular -> eevee_specular_shader['Specular']
+    inner_links.new(eevee_specular.outputs['Result'], eevee_specular_shader.inputs['Specular'])
+    # prm_custom_vector_47_alpha_override -> smash_specular_factor[0]
+    inner_links.new(prm_custom_vector_47_alpha_override.outputs[0], smash_specular_factor.inputs[0])
+    # apply_colorset1_alpha -> alpha_to_transparency[1]
+    inner_links.new(apply_color_set_1_alpha.outputs[0], alpha_to_transparency.inputs[1])
+    # cv_3_emission_multiplier -> eevee_specular_shader['Emissive Color']
+    inner_links.new(emission_multiply.outputs[0], eevee_specular_shader.inputs['Emissive Color'])
+    # alpha_to_transparency -> eevee_specular_shader['Transparency']
+    inner_links.new(alpha_to_transparency.outputs[0], eevee_specular_shader.inputs['Transparency'])
+    # prm_separate_prm_rgb['G'] -> eevee_specular_shader['Roughness']
+    inner_links.new(prm_separate_prm_rgb.outputs['G'], eevee_specular_shader.inputs['Roughness'])
+    # separate_prm_rgb['B'] -> ao_clamp
+    inner_links.new(prm_separate_prm_rgb.outputs['B'], ao_clamp.inputs[0])
+    # ao_clamp -> eevee_specular_shader['Ambient Occlusion']
+    inner_links.new(ao_clamp.outputs[0], eevee_specular_shader.inputs['Ambient Occlusion'])
+    # nor_normal_map -> eevee_specular_shader['Normal']
+    inner_links.new(nor_normal_map.outputs[0], eevee_specular_shader.inputs['Normal'])
+    # eevee_specular_shader -> shader_to_rgb
+    inner_links.new(eevee_specular_shader.outputs[0], shader_to_rgb.inputs[0])
