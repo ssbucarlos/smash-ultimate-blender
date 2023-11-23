@@ -49,7 +49,7 @@ class SUB_PT_import_anim(Panel):
         else:
             row.label(text=f'The selected {obj.type.lower()} is not an armature or a camera.')
 
-class SUB_OP_import_anim(Operator, ImportHelper):
+class SUB_OP_import_anim(Operator):
     bl_idname = 'sub.import_anim'
     bl_label = 'Import Anim'
 
@@ -83,6 +83,8 @@ class SUB_OP_import_anim(Operator, ImportHelper):
         default=False,
     )
 
+    filepath: StringProperty(subtype="FILE_PATH")
+
     @classmethod
     def poll(cls, context):
         obj: bpy.types.Object = context.object
@@ -92,6 +94,11 @@ class SUB_OP_import_anim(Operator, ImportHelper):
             return False
         return True
     
+    def invoke(self, context, _event):
+        self.first_blender_frame = context.scene.frame_start
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
     def execute(self, context):
         obj: bpy.types.Object = context.object
         
