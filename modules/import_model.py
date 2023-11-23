@@ -323,63 +323,46 @@ def fix_bone_length(blender_bone: EditBone, edit_bones: bpy.types.ArmatureEditBo
             blender_bone.length = (blender_bone.head - neck_bone.head).length
 
 def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
-    # Bone groups only exist in pose mode, so enter pose mode.
+    # Pose bones only exist in pose mode, so enter pose mode to properly set thier colors.
     bpy.ops.object.mode_set(mode='POSE')
-    
-    """
-    default_group = arma_obj.pose.bone_groups.new()
-    default_group.name = 'Default'
-    default_group.color_set = 'DEFAULT'
-
-    helper_group = arma_obj.pose.bone_groups.new()
-    helper_group.name = 'Helper'
-    helper_group.color_set = 'THEME06'
-
-    swing_group = arma_obj.pose.bone_groups.new()
-    swing_group.name = 'Swing'
-    swing_group.color_set = 'THEME04'
-
-    system_group = arma_obj.pose.bone_groups.new()
-    system_group.name = 'System'
-    system_group.color_set = 'THEME10'
-
-    exo_group = arma_obj.pose.bone_groups.new()
-    exo_group.name = 'Exo Skel'
-    exo_group.color_set = 'THEME09'
-    """
+    bone_collections = arma_obj.data.collections
+    standard_collection = bone_collections.new("Standard Bones")
+    helper_collection = bone_collections.new("Helper Bones")
+    exo_collection = bone_collections.new('"Exo" Helper Bones')
+    swing_collection = bone_collections.new("Swing Bones")
+    null_collection = bone_collections.new("Null Swing Bones")
+    system_collection = bone_collections.new("System Bones")
 
     system_bone_names = ['Trans', 'Rot', 'Throw']
     system_bone_suffixes = ['_null', '_eff', '_offset']
     for bone in arma_obj.pose.bones:
         bone: PoseBone
-        #bone.bone.layers[16] = True
         if bone.name.startswith('H_Exo_'):
-            #bone.bone_group = exo_group
-            #bone.bone.layers[18] = True
-            pass
+            exo_collection.assign(bone)
+            bone.color.palette = 'THEME09'
+            bone.bone.color.palette = 'THEME09'
         elif bone.name.startswith('H_'):
-            #bone.bone_group = helper_group
-            #bone.bone.layers[2] = True
-            pass
+            helper_collection.assign(bone)
+            bone.color.palette = 'THEME06'
+            bone.bone.color.palette = 'THEME06'
         elif bone.name.startswith('S_'):
-            #bone.bone.layers[1] = True
-            #bone.bone.layers[17] = True
-            #bone.bone_group = swing_group
+            swing_collection.assign(bone)
+            bone.color.palette = 'THEME04'
+            bone.bone.color.palette = 'THEME04'
             if '_null' in bone.name:
-                #bone.bone_group = system_group
-                #bone.bone.layers[16] = False
-                #bone.bone.layers[17] = False
                 #bone.bone.use_deform = False # A few vanilla bones are actually weighted to null bones
-                pass
+                null_collection.assign(bone)
+                bone.color.palette = 'THEME10'
+                bone.bone.color.palette = 'THEME10'
         else:
             #bone.bone_group = default_group
+            standard_collection.assign(bone)
             if any(system_bone_name == bone.name for system_bone_name in system_bone_names) \
             or any(system_bone_suffix in bone.name for system_bone_suffix in system_bone_suffixes):
-                #bone.bone_group = system_group
-                #bone.bone.layers[16] = False
-                #bone.bone.layers[17] = False
                 #bone.bone.use_deform = False # A few vanilla bones are actually weighted to '_null' or '_eff' or '_offset' bones
-                pass
+                system_collection.assign(bone)
+                bone.color.palette = 'THEME10'
+                bone.bone.color.palette = 'THEME10'
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
