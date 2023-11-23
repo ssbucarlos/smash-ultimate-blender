@@ -2,6 +2,7 @@
 Tested on windows 10
 Untested on other platforms
 Please edit the `blender_bin` variable for different blender versions.
+make sure to pip install the right version as well
 """
 
 from zipfile import ZipFile
@@ -35,11 +36,12 @@ def main():
     temp_zip_path = Path(__file__).parent / Path('temp.zip')
     top_level_dir = Path(__file__).parent.parent
     ignore = {".git", "test", ".gitignore", "README.md"}
-    blender_bin = r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe"
-    
+    blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
+    print(blender_bin)
     zip_dir(top_level_dir, temp_zip_path, ignore)
     install_zipped_plugin(temp_zip_path, blender_bin)
-    temp_zip_path.unlink()
+    
+    #temp_zip_path.unlink()
     
 if __name__ == '__main__':
     main()

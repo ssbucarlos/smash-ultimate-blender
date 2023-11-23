@@ -46,21 +46,31 @@ def add_floats(node_tree: ShaderNodeTree):
     ]
     for custom_float_value in custom_float_values:
         socket_name = matl_params.param_id_to_ui_name[custom_float_value] 
-        input = node_tree.inputs.new("NodeSocketFloat", socket_name)
+        input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_name)
         input.default_value = 0.0
 
 def create_inputs(node_tree, name_to_inputs):
     for _, inputs in name_to_inputs.items():
-        for socket, name, default in inputs:
-            input = node_tree.inputs.new(socket, name)
+        for socket_type, name, default in inputs:
+            input = node_tree.interface.new_socket(in_out='INPUT', socket_type=socket_type, name=name)
+            input.default_value = default
+
+def create_bool_inputs_4_0_hack(node_tree, name_to_inputs):
+    """
+    In 4.0 seems like NodeSocketBool no longer can be used.
+    Will use NodeSocketFloat until its fixed
+    """
+    for _, inputs in name_to_inputs.items():
+        for socket_type, name, default in inputs:
+            input = node_tree.interface.new_socket(in_out='INPUT', socket_type="NodeSocketFloat", name=name)
             input.default_value = default
 
 def create_vec4_inputs(node_tree: NodeTree):
     for socket_params in matl_params.vec4_param_name_to_socket_params.values():
-        x_input = node_tree.inputs.new('NodeSocketFloat', socket_params.x_socket_name)
-        y_input = node_tree.inputs.new('NodeSocketFloat', socket_params.y_socket_name)
-        z_input = node_tree.inputs.new('NodeSocketFloat', socket_params.z_socket_name)
-        w_input = node_tree.inputs.new('NodeSocketFloat', socket_params.w_socket_name)
+        x_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.x_socket_name)
+        y_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.y_socket_name)
+        z_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.z_socket_name)
+        w_input = node_tree.interface.new_socket(in_out='INPUT', socket_type='NodeSocketFloat', name=socket_params.w_socket_name)
         x_input.default_value = socket_params.default_value[0]
         y_input.default_value = socket_params.default_value[1]
         z_input.default_value = socket_params.default_value[2]
@@ -68,8 +78,8 @@ def create_vec4_inputs(node_tree: NodeTree):
 
 def create_texture_input_sockets(node_group_node_tree: NodeTree):
     for socket_params in matl_params.texture_param_name_to_socket_params.values():
-        rgb_socket = node_group_node_tree.inputs.new('NodeSocketColor', socket_params.rgb_socket_name)
-        alpha_socket = node_group_node_tree.inputs.new('NodeSocketFloat', socket_params.alpha_socket_name)
+        rgb_socket = node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketColor', name=socket_params.rgb_socket_name)
+        alpha_socket = node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketFloat', name=socket_params.alpha_socket_name)
         # The alpha value of a RGB 'Color' socket is innaccessible, so the actual alpha value needs to be stored in a separate socket.
         rgb_socket.default_value = socket_params.default_rgba[0:3] + (1.0,) # The comma is for tuple concatentation, otherwise `(1.0)` evaluates to a float and causes an exception
         alpha_socket.default_value = socket_params.default_rgba[3]
@@ -101,15 +111,15 @@ def create_master_shader():
     node_group_node.name = 'Master'
 
     # Make the one output
-    node_group_node_tree.outputs.new('NodeSocketShader', 'Cycles Output')
-    node_group_node_tree.outputs.new('NodeSocketShader', 'EEVEE Output')
+    node_group_node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='Cycles Output')
+    node_group_node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='EEVEE Output')
 
     # Now we are ready to start adding inputs
     def add_color_node(name):
-        return node_group_node_tree.inputs.new('NodeSocketColor', name)
+        return node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketColor', name=name)
 
     def add_float_node(name):
-        return node_group_node_tree.inputs.new('NodeSocketFloat', name)
+        return node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketFloat', name=name)
     
     create_texture_input_sockets(node_group_node_tree)
 
@@ -125,11 +135,10 @@ def create_master_shader():
     input = add_float_node('colorSet5 Alpha')
     input.default_value = 1.0 / 3.0
 
-    #create_inputs(node_group_node_tree, material_inputs.vec4_param_to_inputs)
     create_vec4_inputs(node_group_node_tree)
-    #create_inputs(node_group_node_tree, material_inputs.float_param_to_inputs)
     add_floats(node_group_node_tree)
-    create_inputs(node_group_node_tree, material_inputs.bool_param_to_inputs)
+    #create_inputs(node_group_node_tree, material_inputs.bool_param_to_inputs)
+    create_bool_inputs_4_0_hack(node_group_node_tree, material_inputs.bool_param_to_inputs)
 
     # Wont be shown to users, should always be hidden
     input = add_float_node('use_custom_vector_47')
@@ -958,7 +967,7 @@ def create_master_shader():
     inner_links.new(reroute_2.outputs[0], reroute_3.inputs[0])
     #reroute_3.Output -> reroute_4.Input
     inner_links.new(reroute_3.outputs[0], reroute_4.inputs[0])
-    inner_links.new(prm_multiply_prm_alpha.outputs[0], eevee_principled_shader.inputs['Specular'])
+    #inner_links.new(prm_multiply_prm_alpha.outputs[0], eevee_principled_shader.inputs['Specular']) #in 4.0 this field no longer exists.
 
     # Each input node technically has all the group's inputs.
     # The duplicate node group input nodes are used to visually group inputs.
@@ -983,3 +992,91 @@ def create_master_shader():
     hide_unlinked_outputs(nor_group_input)
     hide_unlinked_outputs(eevee_cv8_input)
     hide_unlinked_outputs(eevee_colorset1_input)
+
+    """
+    4.0 is out, NodeToPython is understandibly not updated yet.
+    Due to changes in the principled shader, will replace with
+    specular bsdf despite potential upcoming deprecation
+    """
+    inner_nodes.remove(eevee_principled_shader)
+
+    eevee_specular_shader = inner_nodes.new("ShaderNodeEeveeSpecular")
+    eevee_specular_shader.name = "eevee_specular_shader"
+    eevee_specular_shader.label = "EEVEE Specular Shader"
+    eevee_specular_shader.parent = eevee_frame
+    eevee_specular_shader.location = (-336.16778564453125, 114.10406494140625)
+    eevee_specular_shader.width, eevee_specular_shader.height = 240.0, 100.0
+
+    eevee_base_color = inner_nodes.new("ShaderNodeMix")
+    eevee_base_color.name = "eevee_base_color"
+    eevee_base_color.label = "EEVEE Base Color"
+    eevee_base_color.data_type = 'RGBA'
+    eevee_base_color.blend_type ='MIX'
+    eevee_base_color.parent = eevee_frame
+    eevee_base_color.location = (-609.9298095703125, 518.8598022460938)
+    eevee_base_color.inputs['B'].default_value = (0,0,0,1)
+    
+    eevee_specular = inner_nodes.new("ShaderNodeMix")
+    eevee_specular.name = "eevee_specular"
+    eevee_specular.label = "EEVEE Specular"
+    eevee_specular.data_type = 'RGBA'
+    eevee_specular.blend_type ='MIX'
+    eevee_specular.parent = eevee_frame
+    eevee_specular.location = (-609.3526611328125, 281.890869140625)
+
+    smash_specular_factor = inner_nodes.new("ShaderNodeMath")
+    smash_specular_factor.name = "smash_specular_factor"
+    smash_specular_factor.label = "Ultimate Specular Factor"
+    smash_specular_factor.operation = 'MULTIPLY'
+    smash_specular_factor.inputs[1].default_value = 0.2
+    smash_specular_factor.parent = eevee_frame
+    smash_specular_factor.location = (-929.4102172851562, 349.277587890625)
+
+    alpha_to_transparency = inner_nodes.new("ShaderNodeMath")
+    alpha_to_transparency.name = "alpha_to_transparency"
+    alpha_to_transparency.label = "Alpha To Transparency"
+    alpha_to_transparency.operation = "SUBTRACT"
+    alpha_to_transparency.inputs[0].default_value = 1.0
+    alpha_to_transparency.parent = eevee_frame
+    alpha_to_transparency.location = (-990.0360107421875, -21.6279296875)
+
+    ao_clamp = inner_nodes.new("ShaderNodeMath")
+    ao_clamp.name = 'ao_clamp'
+    ao_clamp.label = 'AO Clamp'
+    ao_clamp.operation = 'MAXIMUM'
+    ao_clamp.inputs[1].default_value = 0.001
+    ao_clamp.parent = eevee_frame
+    ao_clamp.location = (-611.8629150390625, -157.5174560546875)
+
+    # prm_metal_minimum -> eevee_base_color['Factor']
+    inner_links.new(prm_metal_minimum.outputs[0], eevee_base_color.inputs['Factor'])
+    # baked_lighting_mix -> eevee_base_color['A']
+    inner_links.new(baked_lighting_mix.outputs[0], eevee_base_color.inputs['A'])
+    # eevee_base_color -> eevee_specular_shader['Base Color']
+    inner_links.new(eevee_base_color.outputs['Result'], eevee_specular_shader.inputs['Base Color'])
+    # prm_metal_minimum -> eevee_specular['Factor']
+    inner_links.new(prm_metal_minimum.outputs[0], eevee_specular.inputs['Factor'])
+    # smash_specular_factor -> eevee_specular['A']
+    inner_links.new(smash_specular_factor.outputs[0], eevee_specular.inputs['A'])
+    # baked_lighting_mix -> eevee_specular['B']
+    inner_links.new(baked_lighting_mix.outputs[0], eevee_specular.inputs['B'])
+    # eevee_specular -> eevee_specular_shader['Specular']
+    inner_links.new(eevee_specular.outputs['Result'], eevee_specular_shader.inputs['Specular'])
+    # prm_custom_vector_47_alpha_override -> smash_specular_factor[0]
+    inner_links.new(prm_custom_vector_47_alpha_override.outputs[0], smash_specular_factor.inputs[0])
+    # apply_colorset1_alpha -> alpha_to_transparency[1]
+    inner_links.new(apply_color_set_1_alpha.outputs[0], alpha_to_transparency.inputs[1])
+    # cv_3_emission_multiplier -> eevee_specular_shader['Emissive Color']
+    inner_links.new(emission_multiply.outputs[0], eevee_specular_shader.inputs['Emissive Color'])
+    # alpha_to_transparency -> eevee_specular_shader['Transparency']
+    inner_links.new(alpha_to_transparency.outputs[0], eevee_specular_shader.inputs['Transparency'])
+    # prm_separate_prm_rgb['G'] -> eevee_specular_shader['Roughness']
+    inner_links.new(prm_separate_prm_rgb.outputs['G'], eevee_specular_shader.inputs['Roughness'])
+    # separate_prm_rgb['B'] -> ao_clamp
+    inner_links.new(prm_separate_prm_rgb.outputs['B'], ao_clamp.inputs[0])
+    # ao_clamp -> eevee_specular_shader['Ambient Occlusion']
+    inner_links.new(ao_clamp.outputs[0], eevee_specular_shader.inputs['Ambient Occlusion'])
+    # nor_normal_map -> eevee_specular_shader['Normal']
+    inner_links.new(nor_normal_map.outputs[0], eevee_specular_shader.inputs['Normal'])
+    # eevee_specular_shader -> shader_to_rgb
+    inner_links.new(eevee_specular_shader.outputs[0], shader_to_rgb.inputs[0])

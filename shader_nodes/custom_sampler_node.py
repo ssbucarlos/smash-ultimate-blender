@@ -140,9 +140,9 @@ class SUB_CSN_ultimate_sampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         inner_links = self.node_tree.links
         inner_nodes = self.node_tree.nodes
         
-        self.node_tree.inputs.new('NodeSocketVector', 'UV Input')
-        #self.node_tree.inputs.new('NodeSocketVector', 'UV Transform')
-        self.node_tree.outputs.new('NodeSocketVector', 'UV Output')
+        interface = self.node_tree.interface
+        interface.new_socket(in_out='INPUT', socket_type='NodeSocketVector', name='UV Input')
+        interface.new_socket(in_out='OUTPUT', socket_type='NodeSocketVector', name='UV Output')
         
         separate_xyz = inner_nodes.new('ShaderNodeSeparateXYZ')
         separate_xyz.name = 'separate_xyz'
@@ -216,36 +216,3 @@ class SUB_CSN_ultimate_sampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
         layout.prop(self, 'border_color')
         layout.prop(self, 'lod_bias')
         layout.prop(self, 'max_anisotropy')
-
-'''
-import nodeitems_utils
-from nodeitems_utils import NodeCategory, NodeItem
-
-class UltimateNodeCategory(NodeCategory):
-    @classmethod
-    def poll(cls, context):
-        return context.space_data.tree_type == 'ShaderNodeTree'
-
-node_categories = [
-    UltimateNodeCategory('ULTIMATENODES', 'Smash Ultimate', items = [
-        NodeItem("CustomNodeUltimateSampler")
-    ]),
-]
-
-classes = (
-    CustomNodeUltimateSampler,
-)
-
-def register():
-    from bpy.utils import register_class
-    for cls in classes:
-        register_class(cls)
-    nodeitems_utils.register_node_categories('CUSTOM_ULTIMATE_NODES', node_categories)
-
-def unregister():
-    nodeitems_utils.unregister_node_categories('CUSTOM_ULTIMATE_NODES')
-    from bpy.utils import unregister_class
-    for cls in reversed(classes):
-        unregister_class(cls)
-
-'''
