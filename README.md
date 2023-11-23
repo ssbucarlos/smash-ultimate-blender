@@ -12,8 +12,12 @@ Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for 
 ![image](https://user-images.githubusercontent.com/77519735/131579719-3bf859ac-40ad-4661-8b4c-0d0d0e34da8a.png)
 
 ## System Requirements
-The plugin supports 64-bit versions of Blender 3.3 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
+The plugin supports 64-bit versions of Blender 4.0 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
 If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues).
+
+## Legacy Blender Version Support
+* Check the releases page for older versions of the plugin that work for the legacy blender version.
+* This started with 3.6 LTS, older versions of blender require digging through the commit history and finding a really old version that worked with that old blender version.
 
 ## Uninstalling / Updating (Please Read!)
 TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then you can install the newest version.
