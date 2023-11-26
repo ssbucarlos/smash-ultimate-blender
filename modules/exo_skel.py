@@ -275,11 +275,17 @@ class SUB_OP_make_combined_skeleton(Operator):
         for new_bone in new_arma.pose.bones:
             new_bone: PoseBone
             if new_bone.name.startswith('H_Exo_'):
-                exo_group = new_arma.pose.bone_groups.get('Exo Skel')
-                if exo_group:
+                #exo_group = new_arma.pose.bone_groups.get('Exo Skel')
+                exo_collection = new_arma.data.collections.get('"Exo" Helper Bones')
+                if exo_collection:
+                    """
                     new_bone.bone_group = exo_group
                     new_bone.bone.layers[16] = True
                     new_bone.bone.layers[18] = True
+                    """
+                    exo_collection.assign(new_bone)
+                    new_bone.color.palette = 'THEME09'
+                    new_bone.bone.color.palette = 'THEME09'
 
         for index, new_bone in enumerate(new_arma.pose.bones):
             new_bone: PoseBone
