@@ -5,7 +5,9 @@ Blender Plugin that contains utilities for Smash Ultimate models and animations.
 
 ## Installation
 Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for tutorials and usage instructions. 
-1. Click the green Code button and select Download ZIP. Don't unzip the file.
+1. Select a version
+  - For the latest version, click the green `Code` button and select `Download ZIP`.
+  - For a specific version, check the "Releases" page.
 2. Install the .ZIP in Blender under Edit > Preferences > Addons > Install. 
 3. Make sure the addon is enabled by searching for "Smash Ultimate".
 4. After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar. **If the addon panel doesn't show up, make sure you are in object mode!**  
