@@ -428,6 +428,9 @@ def create_blender_materials_from_matl(operator: bpy.types.Operator, ssbh_matl: 
     # Make new Blender Materials
     material_label_to_material: dict[str, bpy.types.Material] = \
         {entry.material_label : bpy.data.materials.new(entry.material_label) for entry in ssbh_matl.entries}
+    # Convert the .nutexbs to .pngs
+    from ..texture.io_nutexb import batch_convert_nutexb_to_png
+    batch_convert_nutexb_to_png(Path(bpy.context.scene.sub_scene_properties.model_import_folder_path))
     # Import the texture PNGs
     texture_name_to_image_dict = import_material_images(operator, ssbh_matl, bpy.context.scene.sub_scene_properties.model_import_folder_path)
     # Fill out the sub_matl_data of each material
