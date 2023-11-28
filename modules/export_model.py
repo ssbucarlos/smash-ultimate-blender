@@ -163,6 +163,11 @@ class SUB_OP_model_exporter(Operator):
         description="Export .NUHLPB",
         default=True,
     )
+    include_nutexb: BoolProperty(
+        name="Export .NUTEXB",
+        description="Export .NUTEXB",
+        default=True,
+    )
 
     linked_nusktb_settings: EnumProperty(
         name="Bone Linkage",
@@ -237,6 +242,8 @@ class SUB_OP_model_exporter(Operator):
 
     # Initially set the filename field to be nothing
     def invoke(self, context, _event):
+        if context.scene.sub_scene_properties.vanilla_nusktb == '':
+            self.linked_nusktb_settings = 'NO_LINK'
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     
@@ -244,7 +251,7 @@ class SUB_OP_model_exporter(Operator):
         start = time.perf_counter()
         with cProfile.Profile() as pr:
             export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
-                    self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.linked_nusktb_settings,
+                    self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.include_nutexb, self.linked_nusktb_settings,
                     self.optimize_mesh_weights_to_parent_bone, self.armature_position, self.apply_modifiers,
                     self.split_shape_keys, self.ignore_underscore_meshes)
         if self.use_debug_timer:
@@ -341,7 +348,7 @@ def weights_to_parent_bones(ssbh_mesh_data: ssbh_data_py.mesh_data.MeshData, ssb
             
 
 def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb,
-                include_numatb, include_nuhlpb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
+                include_numatb, include_nuhlpb, include_nutexb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
                 apply_modifiers: str, split_shape_keys: str, ignore_underscore_meshes:str):
     # Prepare the scene for export and find the meshes to export.
     arma: bpy.types.Object = context.scene.sub_scene_properties.model_export_arma
@@ -422,7 +429,13 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
                     trim_matl_texture_names(operator, ssbh_matl_data)
                 if ssbh_modl_data is not None and ssbh_matl_data is not None:
                     trim_material_labels(operator, ssbh_modl_data, ssbh_matl_data)
-            
+                if include_nutexb:
+                    try:
+                        materials = get_mesh_materials(operator, just_export_meshes)
+                        from .texture.export_nutexb import export_nutexb_from_blender_materials
+                        export_nutexb_from_blender_materials(operator, materials, folder)
+                    except Exception as e:
+                        operator.report({'ERROR'}, f'Texture exporting stopped early, error = {e} ; Traceback=\n{traceback.format_exc()}')
             if include_numshexb:
                 if ssbh_mesh_data is not None:
                     try:
@@ -549,7 +562,7 @@ def create_and_save_meshex(operator, folder, ssbh_mesh_data):
         operator.report({'ERROR'}, f'Failed to save {path}: {e}')
 
 
-def get_mesh_materials(operator, export_meshes):
+def get_mesh_materials(operator, export_meshes) -> set[bpy.types.Material]:
     #  Gather Material Info
     materials = set()
     for mesh in export_meshes:
