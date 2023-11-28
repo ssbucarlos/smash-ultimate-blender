@@ -71,7 +71,7 @@ def get_uv_layer_count(nodes: list[bpy.types.ShaderNode]) -> int:
     return len(uv_layer_names)
 
 def principled_uses_emission(node: ShaderNodeBsdfPrincipled) -> bool:
-    emission_input: NodeSocketColor = node.inputs['Emission']
+    emission_input: NodeSocketColor = node.inputs['Emission Color']
     strength_input: NodeSocketFloat = node.inputs['Emission Strength']
     if emission_input.is_linked or strength_input.is_linked:
         return True
@@ -85,17 +85,13 @@ def principled_uses_emission(node: ShaderNodeBsdfPrincipled) -> bool:
     return True
 
 def principled_uses_subsurface(node: ShaderNodeBsdfPrincipled) -> bool:
-    emission_input: NodeSocketColor = node.inputs['Emission']
-    strength_input: NodeSocketFloat = node.inputs['Emission Strength']
-    if emission_input.is_linked or strength_input.is_linked:
+    subsurface_weight_input: NodeSocketFloat = node.inputs['Subsurface Weight']
+    if subsurface_weight_input.is_linked:
         return True
     
-    if isclose(strength_input.default_value,0,abs_tol=0.01):
+    if isclose(subsurface_weight_input.default_value,0,abs_tol=0.01):
         return False
-    
-    if all(isclose(emission_input.default_value[col_index],0,abs_tol=0.01) for col_index in (0,1,2)):
-        return False 
-        
+
     return True
 
 def rename_mesh_attributes_of_meshes_using_material(operator: bpy.types.Operator, material: Material, preset:str = "FIGHTER"):
@@ -233,7 +229,7 @@ def convert_principled_emission(principled_node: ShaderNodeBsdfPrincipled, mater
     emi_layer_1 = None
     emi_layer_2 = None
     
-    emission_input = principled_node.inputs['Emission']
+    emission_input = principled_node.inputs['Emission Color']
     emission_color = emission_input.default_value[:]
     was_emission_input_linked = emission_input.is_linked
     emission_strength_input: NodeSocketFloat = principled_node.inputs['Emission Strength']
@@ -244,19 +240,19 @@ def convert_principled_emission(principled_node: ShaderNodeBsdfPrincipled, mater
         # Texture -> Mix -> Principled
         col_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Base Color"], mix_nodes_between=1, layer=1)
         col_layer_2 = get_tex_image_going_to_linked_input(principled_node.inputs["Base Color"], mix_nodes_between=1, layer=2)
-        emi_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission"], mix_nodes_between=1, layer=1)
-        emi_layer_2 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission"], mix_nodes_between=1, layer=2)
+        emi_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission Color"], mix_nodes_between=1, layer=1)
+        emi_layer_2 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission Color"], mix_nodes_between=1, layer=2)
         create_sub_matl_data_from_shader_label(material, "SFX_PBS_010000001a00824f_opaque") # PBR, 2 Diffuse, 2 Emmissive
     else:
         if vertex_color_count >= 1: 
             # Texture -> Mix -> Principled
             col_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Base Color"], mix_nodes_between=1, layer=1)
-            emi_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission"], mix_nodes_between=1, layer=1)
+            emi_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission Color"], mix_nodes_between=1, layer=1)
             create_sub_matl_data_from_shader_label(material, "SFX_PBS_010000000a088269_opaque") # PBR, 1 Diffuse, 1 Emmissive  + colorset1
         else:
             # Texture -> Principled
             col_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Base Color"], mix_nodes_between=0, layer=1)
-            emi_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission"], mix_nodes_between=0, layer=1)
+            emi_layer_1 = get_tex_image_going_to_linked_input(principled_node.inputs["Emission Color"], mix_nodes_between=0, layer=1)
             create_sub_matl_data_from_shader_label(material, "SFX_PBS_010000080a008269_opaque") # PBR, 1 Diffuse, 1 Emmissive
     
     sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
@@ -287,10 +283,13 @@ def convert_principled_subsurface(operator: Operator, principled_node: ShaderNod
     col_layer_2 = None
     sub_surface_color = None
     # Smash handles SSS differently and doesn't have a texture input for SSS color, its just uniform.
+    # As of blender 4.0, the 'Subsurface Color' input no longer exists, instead the subsurface uses the "Radius" vector input for making the RGB transmit further into the mesh.
+    """
     if principled_node.inputs['Subsurface Color'].is_linked:
         operator.report({'INFO'}, f"Material {material.name} converted to Ult PBR Mat w/ SSS, but please be aware the SSS color in smash is uniform (mesh-wide, set by CustomVector11), it can't be a map.")
     else:
         sub_surface_color = principled_node.inputs['Subsurface Color'].default_value[:]
+    """
 
     # The factor multiplies the subsurf radius, it doesn't really "mix", so will ignore and set CV30.x to .5 as a reasonable starting point
     # sub_surface_factor = None 
@@ -384,7 +383,7 @@ def convert_from_nodes(operator: bpy.types.Operator, material: bpy.types.Materia
         if principled_uses_emission(final_node):
             convert_principled_emission(final_node, material, vertex_color_count, uv_layer_count)
         elif principled_uses_subsurface(final_node):
-            convert_principled_subsurface(final_node, material, vertex_color_count, uv_layer_count)
+            convert_principled_subsurface(operator, final_node, material, vertex_color_count, uv_layer_count)
         else:
             convert_principled_standard(final_node, material, vertex_color_count, uv_layer_count)
     else: # More complex node setup
