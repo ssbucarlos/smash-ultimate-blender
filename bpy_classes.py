@@ -166,6 +166,7 @@ classes = [
     modules.swing.operators.SUB_OP_swing_data_connection_remove,
     modules.swing.operators.SUB_OP_swing_import,
     modules.swing.operators.SUB_OP_swing_export,
+    modules.updater.ui.SUB_PT_update_plugin,
     operators.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
     properties.SubSceneProperties,
     shader_nodes.custom_sampler_node.SUB_CSN_ultimate_sampler,

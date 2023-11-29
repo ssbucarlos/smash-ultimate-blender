@@ -8,12 +8,7 @@ from . import anim_data
 from . import helper_bone_data
 from . import misc_panel
 from . import attribute_renamer
-"""from .material import operators
-from .material import matl_params
-from .material import sub_matl_data
-from .material import ui
-from .swing import sub_swing_data
-from .swing import operators
-from .swing import ui"""
 from . import material
 from . import swing
+from . import texture
+from . import updater
