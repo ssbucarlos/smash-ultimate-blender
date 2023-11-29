@@ -4,7 +4,7 @@ bl_info = {
     'category': 'All',
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
-    'version': (1, 1, 1),
+    'version': (1, 2, 0),
     'blender': (4, 0, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
@@ -13,7 +13,6 @@ bl_info = {
 }
 
 import bpy
-import sys
 import traceback
 import nodeitems_utils
 
@@ -39,6 +38,9 @@ def register():
     properties.register()
     
     nodeitems_utils.register_node_categories('CUSTOM_ULTIMATE_NODES', shader_nodes.node_categories.node_categories)
+
+    from .modules.updater.version_check import check_for_newer_version
+    check_for_newer_version()
 
     print('Loaded Smash Ultimate Blender Tools!')
 
