@@ -1,11 +1,11 @@
 import bpy
 
 from pathlib import Path
-from subprocess import run
+from subprocess import run, CalledProcessError
 
 from .convert_nutexb_to_png import get_ultimate_tex_path
 from ..material.create_matl_from_blender_materials import has_sub_matl_data, get_linked_materials
-from ..material.create_blender_materials_from_matl import generated_default_texture_name_value
+from .default_textures import generated_default_texture_name_value
 from ..export_model import would_trimmed_names_be_unique, get_problematic_names, trim_name
 
 def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials: set[bpy.types.Material], export_dir: Path):
@@ -27,6 +27,12 @@ def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials
 
     temp_image_path = export_dir.joinpath("temp.png")
     for image in images:
+        # Incase a user attempts to export placeholder images.
+        if not image.packed_file:
+            if image.source == 'FILE':
+                if image.filepath == '':
+                    operator.report({'WARNING'}, f"The image `{image.name}` is just a placeholder in blender (likely due to a failed import), so it has no data and cannot be exported.")
+                    continue
         # For some image types, such as DDS, blender fails to save using "save", but "save_render" still works.
         try:
             image.save(filepath=str(temp_image_path))
@@ -53,7 +59,12 @@ def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials
             operator.report({'WARNING'}, f"Image `{image.name}` has unsupported color space of `{image.colorspace_settings.name}`, defaulting to BC7Unorm")
             format = "BC7Unorm"
 
-        run([get_ultimate_tex_path(), str(temp_image_path), str(nutexb_filepath), "--format", format])
-    
-    temp_image_path.unlink()
+        try:
+            run([get_ultimate_tex_path(), str(temp_image_path), str(nutexb_filepath), "--format", format], capture_output=True, check=True)
+        except CalledProcessError as e:
+            operator.report({'WARNING'}, f"failed to export `{image.name}` as .NUTEXB, error = {e.stderr}")
 
+    try:
+        temp_image_path.unlink()
+    except Exception as e:
+        operator.report({'WARNING'}, f"Failed to remove temporary .png file used for exporting textures, error = {e}")

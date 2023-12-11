@@ -19,19 +19,16 @@ def get_ultimate_tex_path() -> Path:
     else:
         raise RuntimeError(f"Unknown platform `{platform}`")
 
-def convert_nutexb_to_png(filepath: Path):
+def convert_nutexb_to_png(nutexb_filepath: Path, output_filepath: Path):
     ultimate_tex_path = get_ultimate_tex_path()
-    out_path = filepath.parent / (filepath.stem + ".png")
-    run([ultimate_tex_path, str(filepath),  str(out_path)])
+    run([ultimate_tex_path, str(nutexb_filepath),  str(output_filepath)], capture_output=True, check=True)
 
 def batch_convert_nutexb_to_png(dir: Path):
     nutexb_paths: set[Path] = {path for path in dir.glob("*.nutexb")}
-    png_paths: set[Path] = {path for path in dir.glob("*.png")}
-    missing_png_stems: set[str] = {nutexb_path.stem for nutexb_path in nutexb_paths} - {png_path.stem for png_path in png_paths}
-    
+
     for nutexb_path in nutexb_paths:
-        if nutexb_path.stem in missing_png_stems:
-            convert_nutexb_to_png(nutexb_path)
+        out_path = nutexb_path.parent / (nutexb_path.stem + ".png")
+        convert_nutexb_to_png(nutexb_path, out_path)
 
 def main():
     test_path = Path(r"C:\Users\Carlos\Documents\Switch Modding\Mod Creation\Programs For Modding\ArcCross\root\fighter\captain\model\body\c00")

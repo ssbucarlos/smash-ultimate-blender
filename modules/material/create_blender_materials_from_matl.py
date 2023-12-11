@@ -7,12 +7,15 @@ from bpy_extras import image_utils
 
 from enum import Enum
 from pathlib import Path
+from subprocess import CalledProcessError
 
 from ... import ssbh_data_py
 from .matl_params import texture_param_name_to_socket_params, vec4_param_name_to_socket_params
 from .sub_matl_data import *
+from ..texture.convert_nutexb_to_png import convert_nutexb_to_png
+from ..texture.default_textures import generated_default_texture_name_value
 
-generated_default_texture_name_value: dict[str, tuple[float, float, float, float]] = {
+"""generated_default_texture_name_value: dict[str, tuple[float, float, float, float]] = {
      "/common/shader/sfxpbs/default_black": (0, 0, 0, 0),
      "/common/shader/sfxpbs/default_color": (1,1,1,1),
      "/common/shader/sfxpbs/default_color2": (1,1,1,1),
@@ -32,7 +35,7 @@ generated_default_texture_name_value: dict[str, tuple[float, float, float, float
      "/common/shader/sfxpbs/fighter/default_normal": (0.5, 0.5, 1.0, 1.0),
      "/common/shader/sfxpbs/fighter/default_params": (0.0, 1.0, 1.0, 0.25),
      "#replace_cubemap": (1,1,1,1), # Not correct, but it needs to be here in case the user wants to use it without importing a model first
-}
+}"""
 
 def get_shader_db_file_path():
     # This file was generated with duplicates removed to optimize space.
@@ -40,30 +43,74 @@ def get_shader_db_file_path():
     this_file_path = Path(__file__)
     return this_file_path.parent.parent.parent.joinpath('shader_file').joinpath('Nufx.db').resolve()
 
+def create_default_texture(texture_name: str, value: tuple[float, float, float, float]):
+    if texture_name not in bpy.data.images.keys():
+        image = bpy.data.images.new(texture_name, 8, 8, alpha=True, is_data=True)
+        image.generated_color = value
+        image.use_fake_user = True
+
 def create_default_textures():
     for texture_name, value in generated_default_texture_name_value.items():
-        if texture_name not in bpy.data.images.keys():
-            image = bpy.data.images.new(texture_name, 8, 8, alpha=True, is_data=True)
-            image.generated_color = value
-            image.use_fake_user = True
+        create_default_texture(texture_name, value)
             
+def import_texture_to_blender(operator: bpy.types.Operator, texture_name: str, model_dir: Path) -> bpy.types.Image:
+    '''
+    In order for users to be able to export and re-load from the same folder, the priority will be .nutexb, then .png
+    '''
+    # Check if the image being referenced is a default image
+    default_texture_names: set[str] = set(generated_default_texture_name_value.keys())
+    if texture_name in default_texture_names:
+        # Default textures were just generated, so they should be in the .blend already
+        return bpy.data.images[texture_name]
+    
+    # The image wasn't a default image, so will need to create the new image
+    image = bpy.data.images.new(texture_name, 8, 8) # Ignore the x/y values here, its just because the new image is of type "Generated" before we change it to "File"
+    image.name = texture_name
+    #image.type = 'FILE' # Its read-only
+    image.source = 'FILE'
 
-def import_material_images(operator: bpy.types.Operator, ssbh_matl: ssbh_data_py.matl_data.MatlData, dir) -> dict[str, bpy.types.Image]:
-    texture_name_to_image_dict = {}
+    nutexb_file_name = texture_name + ".nutexb"
+    nutexb_file_names: set[str] = {nutexb_file.name for nutexb_file in Path(model_dir).glob("*.nutexb")}
+    nutexb_file_path = Path(model_dir) / nutexb_file_name
+
+    png_file_names: set[str] = {png_file.name for png_file in Path(model_dir).glob("*.png")}
+    png_file_name = texture_name + ".png"
+    png_file_path = Path(model_dir) / png_file_name
+
+    if nutexb_file_name in nutexb_file_names and png_file_name in png_file_names:
+        operator.report({"INFO"}, f"Both a .nutexb and a .png were found for texture `{texture_name}`. The import priority will be nutexb if possible, followed by the png.")
+
+    if nutexb_file_name in nutexb_file_names:
+        temp_png_file_path = Path(model_dir) / (texture_name + "_temp.png")
+        try:
+            convert_nutexb_to_png(nutexb_file_path, temp_png_file_path)
+        except CalledProcessError as e:
+            if png_file_name in png_file_names:
+                operator.report({"INFO"}, f"Failed to convert .nutexb `{nutexb_file_name}` to PNG, but the .PNG was available so that will be used instead. Error=`{e.stderr}`")
+                image.filepath = str(png_file_path)
+                # The image wont be packed since its an existing external file.
+            else:
+                operator.report({"WARNING"}, f"Failed to convert .nutexb `{nutexb_file_name}` to PNG, please manually convert the .nutexb to a .png and place it in the folder. Error=`{e.stderr}`")
+        else:
+            image.filepath = str(temp_png_file_path)
+            image.pack()
+            try:
+                temp_png_file_path.unlink()
+            except Exception as e:
+                operator.report({"WARNING"}, f"Failed to remove temporary png file `{temp_png_file_path}`, error=`{e}`")
+    elif png_file_name in png_file_names:
+        image.filepath = str(png_file_path)
+    else:
+        operator.report({"WARNING"}, f"No .nutexb or .png was found for texture `{texture_name}`! Please include the .nutexb or .png")
+
+    return image
+
+def import_material_images(operator: bpy.types.Operator, ssbh_matl: ssbh_data_py.matl_data.MatlData, model_dir:str ) -> dict[str, bpy.types.Image]:
+    texture_name_to_image_dict: dict[str, bpy.types.Image] = {}
     texture_names_in_matl = {tex.data for mat in ssbh_matl.entries for tex in mat.textures}
-    default_texture_names = set(generated_default_texture_name_value.keys())
     
     for texture_name in texture_names_in_matl:
-        if texture_name in default_texture_names:
-            image = bpy.data.images[texture_name]
-        else:
-            image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
-            try: # TODO: Is this the only reliable way to see if an image wasn't loaded correctly?
-                image.update()
-            except RuntimeError:
-                operator.report({'WARNING'}, f"Failed to find PNG file for the texture '{texture_name}', the Material will look wrong! Please convert the NUTEXB to a PNG before importing.") 
-            image.name = texture_name
-        texture_name_to_image_dict[texture_name] = image
+        texture_name_to_image_dict[texture_name] = import_texture_to_blender(operator, texture_name, Path(model_dir))
 
     return texture_name_to_image_dict
 
@@ -428,10 +475,7 @@ def create_blender_materials_from_matl(operator: bpy.types.Operator, ssbh_matl: 
     # Make new Blender Materials
     material_label_to_material: dict[str, bpy.types.Material] = \
         {entry.material_label : bpy.data.materials.new(entry.material_label) for entry in ssbh_matl.entries}
-    # Convert the .nutexbs to .pngs
-    from ..texture.convert_nutexb_to_png import batch_convert_nutexb_to_png
-    batch_convert_nutexb_to_png(Path(bpy.context.scene.sub_scene_properties.model_import_folder_path))
-    # Import the texture PNGs
+    # Import images 
     texture_name_to_image_dict = import_material_images(operator, ssbh_matl, bpy.context.scene.sub_scene_properties.model_import_folder_path)
     # Fill out the sub_matl_data of each material
     for entry in ssbh_matl.entries:
