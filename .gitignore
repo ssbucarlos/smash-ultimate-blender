@@ -2,3 +2,4 @@
 *.sh
 *.bat
 test/temp.zip
+test/*.zip

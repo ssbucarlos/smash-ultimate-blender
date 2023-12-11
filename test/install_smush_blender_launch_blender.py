@@ -5,7 +5,7 @@ Please edit the `blender_bin` variable for different blender versions.
 make sure to pip install the right version as well
 """
 
-from zipfile import ZipFile
+from zipfile import ZipFile, ZIP_DEFLATED
 from pathlib import Path
 
 def zip_dir(dir_to_zip: Path, zip_file_path: Path, file_names_to_ignore: set[Path]) -> None:
@@ -20,7 +20,7 @@ def zip_dir(dir_to_zip: Path, zip_file_path: Path, file_names_to_ignore: set[Pat
 
     with ZipFile(zip_file_path, 'w') as zip:
         for path in paths_to_zip:
-            zip.write(path, arcname=Path("smash-ultimate-blender") / path.relative_to(dir_to_zip))
+            zip.write(path, arcname=Path("smash-ultimate-blender") / path.relative_to(dir_to_zip), compress_type=ZIP_DEFLATED, compresslevel=1)
 
 def install_zipped_plugin(zipped_plugin: Path, blender_bin: Path) -> None:
     import bpy
@@ -33,7 +33,9 @@ def install_zipped_plugin(zipped_plugin: Path, blender_bin: Path) -> None:
     subprocess.run([blender_bin])
 
 def main():
-    temp_zip_path = Path(__file__).parent / Path('temp.zip')
+    from ..__init__ import bl_info
+    version = bl_info['version']
+    temp_zip_path = Path(__file__).parent / Path(f'smash-ultimate-blender_{version[0]}_{version[1]}_{version[2]}.zip')
     top_level_dir = Path(__file__).parent.parent
     ignore = {".git", "test", ".gitignore", "README.md"}
     blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
@@ -43,5 +45,12 @@ def main():
     
     #temp_zip_path.unlink()
     
-if __name__ == '__main__':
+if __name__ == '__main__' and __package__ is None:
+    if __package__ is None:
+        import sys
+        import importlib
+        repos_path = Path(__file__).parent.parent.parent
+        sys.path.append(str(repos_path))
+        smash_ultimate_blender = importlib.import_module("smash-ultimate-blender")
+        __package__ = "smash-ultimate-blender.test"
     main()
