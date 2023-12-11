@@ -22,7 +22,7 @@ class SUB_CSN_ultimate_sprite_sheet_params(ShaderNodeCustomGroup):
     
     def init(self, context):
         # This has to be first, or the inputs to the node cannot be made at all
-        self.node_tree: ShaderNodeTree = bpy.data.node_groups.new(self.bl_idname + '_node_tree', SHADER_NODE_TREE)
+        self.node_tree: ShaderNodeTree = bpy.data.node_groups.new('.' + self.bl_idname + '_node_tree', SHADER_NODE_TREE)
 
         self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 X (Column Count)')
         self.node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 Y (Row Count)')

@@ -132,7 +132,7 @@ class SUB_CSN_ultimate_sampler(ShaderNodeCustomGroup, CustomNodeUltimateBase):
     )
 
     def init(self, context):
-        self.node_tree = bpy.data.node_groups.new(self.bl_idname + '_node_tree', 'ShaderNodeTree')
+        self.node_tree = bpy.data.node_groups.new('.' + self.bl_idname + '_node_tree', 'ShaderNodeTree')
         
         internal_input = self.node_tree.nodes.new('NodeGroupInput')
         internal_output = self.node_tree.nodes.new('NodeGroupOutput') 

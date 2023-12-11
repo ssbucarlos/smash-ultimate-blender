@@ -208,10 +208,10 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
     # Clone Master Shader
     master_shader_name = get_master_shader_name()
     master_node_group = bpy.data.node_groups.get(master_shader_name)
-    clone_group = master_node_group.copy()
+    #clone_group = master_node_group.copy()
 
     # Setup Clone
-    clone_group.name = sub_matl_data.shader_label
+    #clone_group.name = sub_matl_data.shader_label
 
     # Prep the node_tree for the new nodes
     material.use_nodes = True
@@ -234,9 +234,11 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
 
     node_group_node = nodes.new('ShaderNodeGroup')
     node_group_node.name = 'smash_ultimate_shader'
+    node_group_node.label = sub_matl_data.shader_label
     node_group_node.width = 600
     node_group_node.location = (-300, 300)
-    node_group_node.node_tree = clone_group
+    #node_group_node.node_tree = clone_group
+    node_group_node.node_tree = master_node_group
 
     links = material.node_tree.links
     links.new(node_group_node.outputs[0], cycles_output.inputs[0])
@@ -282,6 +284,7 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         texture_node.name = texture.node_name
         texture_node.label = texture.ui_name
         texture_node.image = texture.image
+        texture_node.show_options = False
 
         # For now, manually set the colorspace types....
         linear_textures_names = {ParamId.Texture4.name, ParamId.Texture6.name}

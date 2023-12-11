@@ -159,7 +159,7 @@ class SUB_PG_matl_sampler(PropertyGroup, SubMatlPropertyGroup):
         name='Min',
         description='Min Filter',
         items=min_filter_types,
-        default='Nearest',
+        default='LinearMipmapLinear',
         update=update_active_material,
     )
     
@@ -167,14 +167,14 @@ class SUB_PG_matl_sampler(PropertyGroup, SubMatlPropertyGroup):
         name='Mag',
         description='Mag Filter',
         items=mag_filter_types,
-        default='Nearest',
+        default='Linear',
         update=update_active_material,
     )
     
     anisotropic_filtering: BoolProperty(
         name='Anisotropic Filtering',
         description='Anisotropic Filtering',
-        default=False,
+        default=True,
         update=update_active_material,
     )
     
@@ -200,7 +200,7 @@ class SUB_PG_matl_sampler(PropertyGroup, SubMatlPropertyGroup):
         name='Max Anisotropy',
         description='Max Anisotropy',
         items=max_anisotropy_levels,
-        default='One',
+        default='Eight',
         update=update_active_material,
     )
     """

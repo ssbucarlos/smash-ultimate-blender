@@ -35,7 +35,7 @@ class SUB_CSN_ultimate_uv_transform(ShaderNodeCustomGroup):
         The workaround is for the caller to set the default_value after creating an instance of this custom node. 
         '''
         # This has to be first, or the inputs to the node cannot be made at all
-        self.node_tree: ShaderNodeTree = bpy.data.node_groups.new(self.bl_idname + '_node_tree', SHADER_NODE_TREE)
+        self.node_tree: ShaderNodeTree = bpy.data.node_groups.new('.' + self.bl_idname + '_node_tree', SHADER_NODE_TREE)
         
         # The sockets that go on the node itself
         # As of blender 3.4.1, creating node sockets using `self.inputs.new` is no longer supported

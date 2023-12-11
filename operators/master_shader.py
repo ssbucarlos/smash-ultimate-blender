@@ -155,6 +155,7 @@ def create_master_shader():
     cycles_shader = inner_nodes.new('ShaderNodeBsdfPrincipled')
     cycles_shader.name = 'cycles_shader'
     cycles_shader.label = 'Cycles Principled'
+    cycles_shader.inputs['Emission Strength'].default_value = 1.0
 
     # Diffuse Frame
     diffuse_main_frame: NodeFrame = inner_nodes.new('NodeFrame')
@@ -866,15 +867,15 @@ def create_master_shader():
     #baked_lighting_mix.Color -> colorset1_albedo.Color1
     inner_links.new(baked_lighting_mix.outputs[0], colorset1_albedo.inputs[1])
     #prm_metal_minimum.Value -> cycles_shader.Metallic
-    inner_links.new(prm_metal_minimum.outputs[0], cycles_shader.inputs[6])
+    inner_links.new(prm_metal_minimum.outputs[0], cycles_shader.inputs['Metallic'])
     #colorset1_albedo.Color -> cycles_shader.Base Color
-    inner_links.new(colorset1_albedo.outputs[0], cycles_shader.inputs[0])
+    inner_links.new(colorset1_albedo.outputs[0], cycles_shader.inputs['Base Color'])
     #cv30_x_input.CV 30 X (Fake SSS Blend Factor) -> prm_compare_cv30_x.Value
     inner_links.new(cv30_x_input.outputs[164], prm_compare_cv30_x.inputs[1])
     #prm_separate_prm_rgb.G -> cycles_shader.Roughness
-    inner_links.new(prm_separate_prm_rgb.outputs[1], cycles_shader.inputs[9])
+    inner_links.new(prm_separate_prm_rgb.outputs[1], cycles_shader.inputs['Roughness'])
     #prm_multiply_prm_alpha.Value -> cycles_shader.Specular
-    inner_links.new(prm_multiply_prm_alpha.outputs[0], cycles_shader.inputs[7])
+    #inner_links.new(prm_multiply_prm_alpha.outputs[0], cycles_shader.inputs[7])
     #emission_textures_group_input.Texture5 RGB (Emissive Map Layer 1) -> emission_mix_rgb.Color1
     inner_links.new(emission_textures_group_input.outputs[10], emission_mix_rgb.inputs[1])
     #emission_textures_group_input.Texture14 RGB (Emissive Map Layer 2) -> emission_mix_rgb.Color2
@@ -892,7 +893,7 @@ def create_master_shader():
     #emission_mix_rgb.Color -> emission_multiply.Color1
     inner_links.new(emission_mix_rgb.outputs[0], emission_multiply.inputs[1])
     #emission_multiply.Color -> cycles_shader.Emission
-    inner_links.new(emission_multiply.outputs[0], cycles_shader.inputs[19])
+    inner_links.new(emission_multiply.outputs[0], cycles_shader.inputs['Emission Color'])
     #layer1_tex_alphas.Texture0 Alpha (Col Map Layer 1) -> get_lowest_tex_alpha.Value
     inner_links.new(layer1_tex_alphas.outputs[1], get_lowest_tex_alpha.inputs[0])
     #layer1_tex_alphas.Texture5 Alpha (Emissive Map Layer 1) -> get_lowest_tex_alpha.Value
@@ -908,7 +909,7 @@ def create_master_shader():
     #colorset1_alpha.colorSet1 Alpha -> alpha_color_set1_scale.Value
     inner_links.new(colorset1_alpha.outputs[41], alpha_color_set1_scale.inputs[0])
     #apply_color_set_1_alpha.Value -> cycles_shader.Alpha
-    inner_links.new(apply_color_set_1_alpha.outputs[0], cycles_shader.inputs[21])
+    inner_links.new(apply_color_set_1_alpha.outputs[0], cycles_shader.inputs['Alpha'])
     #nor_group_input.Texture4 RGB (NOR Map) -> nor_separate_rgb.Image
     inner_links.new(nor_group_input.outputs[8], nor_separate_rgb.inputs[0])
     #nor_separate_rgb.R -> nor_combine_rgb.R
@@ -918,7 +919,7 @@ def create_master_shader():
     #nor_combine_rgb.Image -> nor_normal_map.Color
     inner_links.new(nor_combine_rgb.outputs[0], nor_normal_map.inputs[1])
     #nor_normal_map.Normal -> cycles_shader.Normal
-    inner_links.new(nor_normal_map.outputs[0], cycles_shader.inputs[22])
+    inner_links.new(nor_normal_map.outputs[0], cycles_shader.inputs['Normal'])
     #prm_metal_minimum.Value -> eevee_principled_shader.Metallic
     inner_links.new(prm_metal_minimum.outputs[0], eevee_principled_shader.inputs[6])
     #prm_separate_prm_rgb.G -> eevee_principled_shader.Roughness
