@@ -65,6 +65,7 @@ def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials
             operator.report({'WARNING'}, f"failed to export `{image.name}` as .NUTEXB, error = {e.stderr}")
 
     try:
-        temp_image_path.unlink()
+        if temp_image_path.exists():
+            temp_image_path.unlink()
     except Exception as e:
         operator.report({'WARNING'}, f"Failed to remove temporary .png file used for exporting textures, error = {e}")
