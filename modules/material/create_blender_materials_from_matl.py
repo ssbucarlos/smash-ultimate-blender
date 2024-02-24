@@ -2,7 +2,7 @@ import bpy
 import sqlite3
 import re 
 
-from bpy.types import ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial, ShaderNodeVertexColor
+from bpy.types import ShaderNodeTexImage, ShaderNodeUVMap, ShaderNodeValue, ShaderNodeOutputMaterial, ShaderNodeVertexColor, Operator
 from bpy_extras import image_utils
 
 from enum import Enum
@@ -52,7 +52,21 @@ def create_default_texture(texture_name: str, value: tuple[float, float, float, 
 def create_default_textures():
     for texture_name, value in generated_default_texture_name_value.items():
         create_default_texture(texture_name, value)
-            
+
+def get_matching_nutexb_path(texture_name: str, model_dir: Path) -> Path | None:
+    lower_case_nutexb_file_name = texture_name.lower() + ".nutexb"
+    for nutexb_file_path in Path(model_dir).glob("*.nutexb"):
+        if nutexb_file_path.name.lower() == lower_case_nutexb_file_name:
+            return nutexb_file_path
+    return None
+
+def get_matching_png_path(texture_name: str, model_dir: Path) -> Path | None:
+    lower_case_png_file_name = texture_name.lower() + ".png"
+    for png_file_path in Path(model_dir).glob("*.png"):
+        if png_file_path.name.lower() == lower_case_png_file_name:
+            return png_file_path
+    return None
+
 def import_texture_to_blender(operator: bpy.types.Operator, texture_name: str, model_dir: Path) -> bpy.types.Image:
     '''
     In order for users to be able to export and re-load from the same folder, the priority will be .nutexb, then .png
@@ -69,40 +83,43 @@ def import_texture_to_blender(operator: bpy.types.Operator, texture_name: str, m
     #image.type = 'FILE' # Its read-only
     image.source = 'FILE'
 
-    nutexb_file_name = texture_name + ".nutexb"
-    nutexb_file_names: set[str] = {nutexb_file.name for nutexb_file in Path(model_dir).glob("*.nutexb")}
-    nutexb_file_path = Path(model_dir) / nutexb_file_name
-
-    png_file_names: set[str] = {png_file.name for png_file in Path(model_dir).glob("*.png")}
-    png_file_name = texture_name + ".png"
-    png_file_path = Path(model_dir) / png_file_name
-
-    if nutexb_file_name in nutexb_file_names and png_file_name in png_file_names:
-        operator.report({"INFO"}, f"Both a .nutexb and a .png were found for texture `{texture_name}`. The import priority will be nutexb if possible, followed by the png.")
-
-    if nutexb_file_name in nutexb_file_names:
-        temp_png_file_path = Path(model_dir) / (texture_name + "_temp.png")
-        try:
-            convert_nutexb_to_png(nutexb_file_path, temp_png_file_path)
-        except CalledProcessError as e:
-            if png_file_name in png_file_names:
-                operator.report({"INFO"}, f"Failed to convert .nutexb `{nutexb_file_name}` to PNG, but the .PNG was available so that will be used instead. Error=`{e.stderr}`")
-                image.filepath = str(png_file_path)
+    matching_nutexb_path = get_matching_nutexb_path(texture_name, model_dir)
+    matching_png_path = get_matching_png_path(texture_name, model_dir)
+    match (matching_nutexb_path is not None, matching_png_path is not None):
+        case (True, True):
+            operator.report({"INFO"}, f"Both a .nutexb and a .png were found for texture `{texture_name}`. The import priority will be nutexb if possible, followed by the png.")
+            try:
+                temp_png_file_path = Path(model_dir) / (texture_name + "_temp.png")
+                convert_nutexb_to_png(matching_nutexb_path, temp_png_file_path)
+            except CalledProcessError as e:
+                operator.report({"INFO"}, f"Failed to convert .nutexb `{matching_nutexb_path.name}` to PNG, but the .PNG was available so that will be used instead. Error=`{e.stderr}`")
+                image.filepath = str(matching_png_path)
                 # The image wont be packed since its an existing external file.
             else:
-                operator.report({"WARNING"}, f"Failed to convert .nutexb `{nutexb_file_name}` to PNG, please manually convert the .nutexb to a .png and place it in the folder. Error=`{e.stderr}`")
-        else:
-            image.filepath = str(temp_png_file_path)
-            image.pack()
+                image.filepath = str(temp_png_file_path)
+                image.pack()
+                try:
+                    temp_png_file_path.unlink()
+                except Exception as e:
+                    operator.report({"WARNING"}, f"Failed to remove temporary png file `{temp_png_file_path.name}`, error=`{e}`")
+        case (True, False):
             try:
-                temp_png_file_path.unlink()
-            except Exception as e:
-                operator.report({"WARNING"}, f"Failed to remove temporary png file `{temp_png_file_path}`, error=`{e}`")
-    elif png_file_name in png_file_names:
-        image.filepath = str(png_file_path)
-    else:
-        operator.report({"WARNING"}, f"No .nutexb or .png was found for texture `{texture_name}`! Please include the .nutexb or .png")
-
+                temp_png_file_path = Path(model_dir) / (texture_name + "_temp.png")
+                convert_nutexb_to_png(matching_nutexb_path, temp_png_file_path)
+            except CalledProcessError as e:
+                operator.report({"WARNING"}, f"Failed to convert .nutexb `{matching_nutexb_path.name}` to PNG, please manually convert the .nutexb to a .png and place it in the folder. Error=`{e.stderr}`")
+            else:
+                image.filepath = str(temp_png_file_path)
+                image.pack()
+                try:
+                    temp_png_file_path.unlink()
+                except Exception as e:
+                    operator.report({"WARNING"}, f"Failed to remove temporary png file `{temp_png_file_path.name}`, error=`{e}`")
+        case (False, True):
+            image.filepath = str(matching_png_path)
+        case (False, False):
+            operator.report({"WARNING"}, f"No .nutexb or .png was found for texture `{texture_name}`! Please include the .nutexb or .png")
+            
     return image
 
 def import_material_images(operator: bpy.types.Operator, ssbh_matl: ssbh_data_py.matl_data.MatlData, model_dir:str ) -> dict[str, bpy.types.Image]:
