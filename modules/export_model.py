@@ -250,14 +250,22 @@ class SUB_OP_model_exporter(Operator):
     def execute(self, context):
         start = time.perf_counter()
         with cProfile.Profile() as pr:
+            """
             export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
+                    self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.include_nutexb, self.linked_nusktb_settings,
+                    self.optimize_mesh_weights_to_parent_bone, self.armature_position, self.apply_modifiers,
+                    self.split_shape_keys, self.ignore_underscore_meshes)
+            """
+            arma = context.scene.sub_scene_properties.model_export_arma
+            export_model_ex_windows(self, context, arma, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.include_nutexb, self.linked_nusktb_settings,
                     self.optimize_mesh_weights_to_parent_bone, self.armature_position, self.apply_modifiers,
                     self.split_shape_keys, self.ignore_underscore_meshes)
         if self.use_debug_timer:
             stats = pstats.Stats(pr)
             stats.sort_stats(pstats.SortKey.TIME)
-            stats.print_stats()
+            #stats.print_stats()
+            stats.dump_stats(str(Path(self.directory) / "timing_debug.prof"))
         end = time.perf_counter()
         print(f"Model Export finished in {end - start} seconds!")
         return {'FINISHED'}
@@ -345,7 +353,124 @@ def weights_to_parent_bones(ssbh_mesh_data: ssbh_data_py.mesh_data.MeshData, ssb
         
         mesh_object.parent_bone_name = bone_name
         mesh_object.bone_influences.clear()
-            
+
+def calc_loop_triangles(mesh: Mesh):
+    mesh.calc_loop_triangles()
+
+def calc_normals_split(mesh: Mesh):
+    mesh.calc_normals_split()
+
+def calc_tangents(mesh: Mesh):
+    mesh.calc_tangents(uvmap="map1" if mesh.uv_layers.get("map1") else mesh.uv_layers[0].name)
+
+def validate_material_indices(mesh: Mesh):
+    mesh.validate_material_indices()
+
+def validate_mesh(mesh: Mesh):
+    calc_loop_triangles(mesh)
+    #calc_normals_split(mesh) #Not necessary since calc_tangents also calculates normals anyways
+    calc_tangents(mesh)
+    validate_material_indices(mesh)
+
+def export_model_ex_windows(operator: Operator, context: Context, arma: bpy.types.Object, output_dir: str, include_numdlb, include_numshb, include_numshexb, include_nusktb,
+                include_numatb, include_nuhlpb, include_nutexb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
+                apply_modifiers: str, split_shape_keys: str, ignore_underscore_meshes:str):
+    from .mesh.export_mesh import create_ssbh_mesh_modl_entries_from_blender_mesh, create_ssbh_mesh_modl_entries_from_blender_mesh_with_shapekeys
+    from .mesh.export_mesh import get_tris_per_material, get_ssbh_data_from_mesh_loops, get_data_from_mesh_ex
+
+    mesh_objects: list[bpy.types.Object] = [child for child in arma.children if child.type == 'MESH']
+
+    ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
+    depsgraph = context.evaluated_depsgraph_get()
+    meshes_eval = [mesh_object.evaluated_get(depsgraph).data for mesh_object in mesh_objects]
+    # TODO: Shape key export lol
+    mesh_data_to_export = []
+    for mesh_eval in meshes_eval:
+        mesh_eval: Mesh
+        validate_mesh(mesh_eval)
+        mesh_data = get_data_from_mesh_ex(mesh_eval, mesh_eval.materials)
+        mesh_data_to_export.append(mesh_data)
+
+    from .material.create_matl_from_blender_materials import create_matl_from_blender_materials
+    materials = {material for mesh in mesh_objects for material in mesh.data.materials}
+    ssbh_matl_data = create_matl_from_blender_materials(operator, materials)
+
+    ssbh_skel_data, prc = make_skel(operator, context, linked_nusktb_settings)
+
+    # Modl
+    ssbh_modl_data.model_name = 'model'
+    ssbh_modl_data.skeleton_file_name = 'model.nusktb'
+    ssbh_modl_data.material_file_names = ['model.numatb']
+    ssbh_modl_data.animation_file_name = None
+    ssbh_modl_data.mesh_file_name = 'model.numshb'
+
+    if ssbh_matl_data is not None:
+        trim_matl_texture_names(operator, ssbh_matl_data)
+    if ssbh_modl_data is not None and ssbh_matl_data is not None:
+        trim_material_labels(operator, ssbh_modl_data, ssbh_matl_data)
+
+    output_dir = Path(output_dir)
+    #ssbh_modl_data.save(str(output_dir / "model.numdlb"))
+    from ..dependencies import ssbh_mesh_optimizer
+    ssbh_mesh_optimizer.write_blender_meshes_to_file(mesh_data_to_export, Path(output_dir))
+    #ssbh_matl_data.save(str(output_dir / "model.numatb"))
+    ssbh_skel_data.save(str(output_dir / "model.nusktb"))
+
+    from .texture.export_nutexb import export_nutexb_from_blender_materials
+    
+    if include_nutexb:
+        export_nutexb_from_blender_materials(operator, materials, output_dir)    
+
+def export_model_ex(operator: Operator, context: Context, arma: bpy.types.Object, output_dir: str, include_numdlb, include_numshb, include_numshexb, include_nusktb,
+                include_numatb, include_nuhlpb, include_nutexb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
+                apply_modifiers: str, split_shape_keys: str, ignore_underscore_meshes:str, pr):
+    from .mesh.export_mesh import create_ssbh_mesh_modl_entries_from_blender_mesh, create_ssbh_mesh_modl_entries_from_blender_mesh_with_shapekeys
+
+    mesh_objects: list[bpy.types.Object] = [child for child in arma.children if child.type == 'MESH']
+
+    ssbh_mesh_data = ssbh_data_py.mesh_data.MeshData()
+    ssbh_modl_data = ssbh_data_py.modl_data.ModlData()
+
+    for mesh_object in mesh_objects:
+        if mesh_object.data.shape_keys:
+            new_ssbh_mesh_objects, new_ssbh_modl_entries = create_ssbh_mesh_modl_entries_from_blender_mesh_with_shapekeys(context, mesh_object, mesh_object.data)
+        else:
+            depsgraph = context.evaluated_depsgraph_get()
+            obj_eval: Object = mesh_object.evaluated_get(depsgraph)
+            mesh_eval = obj_eval.data
+            new_ssbh_mesh_objects, new_ssbh_modl_entries = create_ssbh_mesh_modl_entries_from_blender_mesh(mesh_eval, mesh_eval.name)
+        ssbh_mesh_data.objects.extend(new_ssbh_mesh_objects)
+        ssbh_modl_data.entries.extend(new_ssbh_modl_entries)
+    
+    from .material.create_matl_from_blender_materials import create_matl_from_blender_materials
+    materials = {material for mesh in mesh_objects for material in mesh.data.materials}
+    ssbh_matl_data = create_matl_from_blender_materials(operator, materials)
+
+    ssbh_skel_data, prc = make_skel(operator, context, linked_nusktb_settings)
+
+    # Modl
+    ssbh_modl_data.model_name = 'model'
+    ssbh_modl_data.skeleton_file_name = 'model.nusktb'
+    ssbh_modl_data.material_file_names = ['model.numatb']
+    ssbh_modl_data.animation_file_name = None
+    ssbh_modl_data.mesh_file_name = 'model.numshb'
+
+    if ssbh_matl_data is not None:
+        trim_matl_texture_names(operator, ssbh_matl_data)
+    if ssbh_modl_data is not None and ssbh_matl_data is not None:
+        trim_material_labels(operator, ssbh_modl_data, ssbh_matl_data)
+
+    output_dir = Path(output_dir)
+    ssbh_modl_data.save(str(output_dir / "model.numdlb"))
+    ssbh_mesh_data.save(str(output_dir / "model.numshb"))
+    ssbh_matl_data.save(str(output_dir / "model.numatb"))
+    ssbh_skel_data.save(str(output_dir / "model.nusktb"))
+
+    from .texture.export_nutexb import export_nutexb_from_blender_materials
+    
+    if include_nutexb:
+        export_nutexb_from_blender_materials(operator, materials, output_dir)    
+    
 
 def export_model(operator: bpy.types.Operator, context, directory, include_numdlb, include_numshb, include_numshexb, include_nusktb,
                 include_numatb, include_nuhlpb, include_nutexb, linked_nusktb_settings, optimize_mesh_weights:str, armature_position: str,
@@ -754,7 +879,7 @@ def find_principled_node(material):
         return None
 
 
-def make_matl(operator, materials):
+"""def make_matl(operator, materials):
     matl = ssbh_data_py.matl_data.MatlData()
 
     for material in materials:
@@ -777,9 +902,9 @@ def make_matl(operator, materials):
 
         matl.entries.append(entry)
 
-    return matl
+    return matl"""
 
-
+"""
 def create_material_entry_from_node_group(operator, node: bpy.types.Node):
     material_label = node.inputs['Material Name'].default_value
     entry = ssbh_data_py.matl_data.MatlEntryData(material_label, node.inputs['Shader Label'].default_value)
@@ -842,6 +967,7 @@ def create_material_entry_from_node_group(operator, node: bpy.types.Node):
         exported_params.add(param_name)
     return entry
 
+"""
 
 def create_blend_state(node):
     data = ssbh_data_py.matl_data.BlendStateData()
@@ -1469,6 +1595,16 @@ def get_smash_root_transform(bone: bpy.types.EditBone) -> Matrix:
     bone.transform(Matrix.Rotation(math.radians(90), 4, 'X'))
     return unreoriented_matrix
 
+def read_vanilla_nusktb_ex(operator: Operator, path: Path) -> ssbh_data_py.skel_data.SkelData | None:
+    if not path:
+        return None
+    try:
+        skel = ssbh_data_py.skel_data.read_skel(path)
+    except Exception as e:
+        operator.report(f"Failed to read vanilla .NUSKTB! The exported model won't be `Wifi-Safe`! Please ensure the vanilla .NUSKTB exists and is a valid .NUSKTB, and try again! \n Error={e}")
+        return None
+    return skel
+
 def read_vanilla_nusktb(path, mode):
     if not path:
         raise RuntimeError(f'Link mode {mode} requires a vanilla .NUSKTB file to be selected.')
@@ -1541,6 +1677,32 @@ def find_non_helper_ancestor_index(bone: EditBone, bones: list[EditBone]) -> int
     if bone.parent.name.startswith('H_'):
         return find_non_helper_ancestor_index(bone.parent, bones)
     return bones.index(bone.parent)
+
+def make_skel_ex(operator, arma: bpy.types.Armature, reference_skel_path: Path|None):
+    """
+    This rework eliminates the need to enter Edit mode.
+    Also, the vanilla skell values are automatically used, rather than having
+    the user input which "Link" mode to use.
+    """
+    if reference_skel_path:
+        return export_skel_with_reference(operator, arma, reference_skel_path)
+    
+    hierarchical_ordered_bones = []
+    for blender_bone in arma.bones:
+        if not blender_bone.parent:
+            hierarchical_ordered_bones.append(blender_bone)
+            hierarchical_ordered_bones.extend(child for child in blender_bone.children_recursive)
+    
+    export_skel = ssbh_data_py.skel_data.SkelData()
+    for blender_bone in hierarchical_ordered_bones:
+        blender_bone: bpy.types.Bone
+        blender_value = blender_bone.head_local
+        export_skel.bones.append(ssbh_data_py.skel_data.BoneData(
+            name=blender_bone.name,
+            transform=None,
+        ))
+
+
 
 def make_skel(operator, context, mode):
     ssp: SubSceneProperties = context.scene.sub_scene_properties
