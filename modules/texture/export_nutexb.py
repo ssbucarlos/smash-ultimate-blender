@@ -35,6 +35,7 @@ def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials
                     continue
         # For some image types, such as DDS, blender fails to save using "save", but "save_render" still works.
         try:
+            image.file_format = 'PNG' # This feels like a hack... but changing this before saving ensures blender exports as a PNG even if its on-disk as a JPG or BMP etc
             image.save(filepath=str(temp_image_path))
         except Exception as e:
             operator.report({'WARNING'}, f"Unable to save the blender image {image.name} to disk using `save`, but will attempt using `save_render`. Error = {e}")
