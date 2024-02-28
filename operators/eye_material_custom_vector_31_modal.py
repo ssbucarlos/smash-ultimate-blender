@@ -97,8 +97,8 @@ class SUB_OP_eye_material_custom_vector_31_modal(Operator):
             v3d = context.space_data
             rv3d = v3d.region_3d
 
-            if rv3d.view_perspective == 'CAMERA':
-                rv3d.view_perspective = 'PERSP'
+            #if rv3d.view_perspective == 'CAMERA':
+            #    rv3d.view_perspective = 'PERSP'
 
             self._initial_mouse = Vector((event.mouse_x, event.mouse_y, 0.0))
             self.temp_mouse = self._initial_mouse.copy()
