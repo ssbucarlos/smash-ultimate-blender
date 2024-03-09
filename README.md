@@ -3,6 +3,21 @@
 
 Blender Plugin that contains utilities for Smash Ultimate models and animations.
 
+## Current Features
+1. Import/Export of Model, Material, Texture, Animation, and Swing files
+   - Model Files: `.numdlb`, `.numshb`, `.nusktb`, `.nuhlpb`, `update.prc`, `.numeshexb`, `.adjb`
+   - Material & Texture Files: `.numatb`, `.nutexb`
+   - Animation Files: `.nuanmb` 
+   - Swing Files: `swing.prc`
+2. Tools for creating a "Magic Exo Skel" for real-time animation retargeting in-game.
+   - UI panel for step-by-step creation
+   - Modifier setup for previewing real-time retargeting pre-export
+3. Extra QOL Features for Animators
+   - Import/Export Camera `.nuanmb`
+   - Drivers for previewing `Visibilty` and `Material` data in animation files.
+   - UI Panels for easily editing `Visiblity` and `Material` data in animation files.
+   - Modal Operator for intuitively editing Characters eyes in animations.
+
 ## Installation
 Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for tutorials and usage instructions. 
 1. Select a version
@@ -28,13 +43,6 @@ TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "R
 1. Export Issues? Please go read the [export issues](https://github.com/ssbucarlos/smash-ultimate-blender/wiki/Read-this-if-you-have-export-issues.-Or-want-to-avoid-Export-Issues) wiki page and see if your issue gets fixed, if not...
 2. Please read the wiki to see if that issue is mentioned in the [List of Known Issues](https://github.com/ssbucarlos/smash-ultimate-blender/wiki/Known-Blender-Issues) wiki page, if not...
 3. Please go add a new issue in the Issues page so the issue can be tracked.
-
-## Current Features
-1.  Creates the .NUSKTB and .NUHLPB needed for real-time animation retargeting on custom models.
-2.  .NUMDLB, .NUMSHB, .NUSKTB, .NUMATB, .NUMSHEXB, .NUANMB Import And Export
-
-## Planned Features
-1. Swing bone visualization
 
 ## Useful Tools
 * SSBH Editor (view models and animations and edit materials) https://github.com/ScanMountGoat/ssbh_editor
