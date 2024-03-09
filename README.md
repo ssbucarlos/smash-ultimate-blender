@@ -3,7 +3,7 @@
 
 Blender Plugin that contains utilities for Smash Ultimate models and animations.
 
-## Current Features
+## Key Features
 1. Import/Export of Model, Material, Texture, Animation, and Swing files
    - Model Files: `.numdlb`, `.numshb`, `.nusktb`, `.nuhlpb`, `update.prc`, `.numeshexb`, `.adjb`
    - Material & Texture Files: `.numatb`, `.nutexb`
@@ -36,10 +36,10 @@ If your computer can run a supported version of Blender but fails to install the
 * Check the releases page for older versions of the plugin that work for the legacy blender version.
 * This started with 3.6 LTS, older versions of blender require digging through the commit history and finding a really old version that worked with that old blender version.
 
-## Uninstalling / Updating (Please Read!)
+## Uninstalling / Updating
 TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall. Then you can install the newest version.
 
-## In case of problems?
+## In case of problems
 1. Export Issues? Please go read the [export issues](https://github.com/ssbucarlos/smash-ultimate-blender/wiki/Read-this-if-you-have-export-issues.-Or-want-to-avoid-Export-Issues) wiki page and see if your issue gets fixed, if not...
 2. Please read the wiki to see if that issue is mentioned in the [List of Known Issues](https://github.com/ssbucarlos/smash-ultimate-blender/wiki/Known-Blender-Issues) wiki page, if not...
 3. Please go add a new issue in the Issues page so the issue can be tracked.
