@@ -4,7 +4,7 @@ bl_info = {
     'category': 'All',
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
-    'version': (1, 3, 0),
+    'version': (1, 3, 2),
     'blender': (4, 0, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
@@ -37,6 +37,8 @@ def register():
 
     properties.register()
     
+    bpy.types.VIEW3D_MT_paint_vertex.append(operators.set_linear_vertex_color.menu_func)
+
     nodeitems_utils.register_node_categories('CUSTOM_ULTIMATE_NODES', shader_nodes.node_categories.node_categories)
 
     from .modules.updater.version_check import check_for_newer_version
@@ -54,6 +56,8 @@ def unregister():
     from . import properties
 
     nodeitems_utils.unregister_node_categories('CUSTOM_ULTIMATE_NODES')
+
+    bpy.types.VIEW3D_MT_paint_vertex.remove(operators.set_linear_vertex_color.menu_func)
 
     from .bpy_classes import classes
     for cls in reversed(classes):

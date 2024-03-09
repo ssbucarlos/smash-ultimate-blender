@@ -168,6 +168,7 @@ classes = [
     modules.swing.operators.SUB_OP_swing_export,
     modules.updater.ui.SUB_PT_update_plugin,
     operators.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
+    operators.set_linear_vertex_color.SUB_OP_LinearColorSet,
     properties.SubSceneProperties,
     shader_nodes.custom_sampler_node.SUB_CSN_ultimate_sampler,
     shader_nodes.custom_uv_transform_node.SUB_CSN_ultimate_uv_transform,
