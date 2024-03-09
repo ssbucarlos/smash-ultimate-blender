@@ -121,6 +121,7 @@ class SUB_PT_import_model(Panel):
 class SUB_OP_select_model_import_folder(Operator):
     bl_idname = 'sub.ssbh_model_folder_selector'
     bl_label = 'Folder Selector'
+    bl_options = {'UNDO'}
 
     filter_glob: StringProperty(
         default='*.numdlb;*.nusktb;*.numshb;*.numatb;*.nuhlpb',
@@ -159,7 +160,8 @@ class SUB_OP_select_model_import_folder(Operator):
 class SUB_OP_import_model(bpy.types.Operator):
     bl_idname = 'sub.model_importer'
     bl_label = 'Model Importer'
-
+    bl_options = {'UNDO'}
+    
     def execute(self, context):
         start = time.time()
 
