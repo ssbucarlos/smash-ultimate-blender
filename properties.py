@@ -151,6 +151,15 @@ class SubSceneProperties(PropertyGroup):
         description='If true, switching modes will "undo" the changes made while in that mode',
         default=False,
     )
+    last_anim_import_dir: StringProperty(
+        subtype="DIR_PATH",
+        default=""
+    )
+
+    last_anim_export_dir: StringProperty(
+        subtype="DIR_PATH",
+        default=""
+    )
 
 
 

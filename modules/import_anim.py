@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .anim_data import SUB_PG_sub_anim_data, SUB_PG_mat_track, SUB_PG_mat_track_property
     from bpy.types import ShaderNodeGroup, Material
     from .material.sub_matl_data import SUB_PG_sub_matl_data
+    from ..properties import SubSceneProperties
 
 class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -52,6 +53,7 @@ class SUB_PT_import_anim(Panel):
 class SUB_OP_import_anim(Operator):
     bl_idname = 'sub.import_anim'
     bl_label = 'Import Anim'
+    bl_options = {'UNDO'}
 
     filter_glob: StringProperty(
         default='*.nuanmb',
@@ -100,6 +102,11 @@ class SUB_OP_import_anim(Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
+        if self.filepath == '' or Path(self.filepath).is_dir():
+            self.report({"ERROR"}, f"No file selected!")
+            return {'CANCELLED'}
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp.last_anim_import_dir = str(Path(self.filepath).parent)
         obj: bpy.types.Object = context.object
         
         with cProfile.Profile() as pr:
@@ -307,7 +314,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
     arma: bpy.types.Object = context.object
     if arma.animation_data is None: # For the bones
         arma.animation_data_create()
-    arma.animation_data.action = bpy.data.actions.new(arma.name + ' ' + Path(filepath).name)
+    arma.animation_data.action = bpy.data.actions.new(Path(filepath).name)
     if arma.data.animation_data is None: # For vis and mat tracks
         arma.data.animation_data_create()
     arma.data.animation_data.action = bpy.data.actions.new(arma.name + ' ' + Path(filepath).name + ' SAP Data')

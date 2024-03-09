@@ -8,8 +8,10 @@ import cProfile
 import pstats
 
 from mathutils import Matrix, Quaternion
-from bpy.types import Operator, Panel
+from bpy.types import Operator, Panel, Context
 from bpy.props import IntProperty, StringProperty, BoolProperty
+
+from pathlib import Path
 
 from .. import ssbh_data_py
 from .import_anim import get_heirarchy_order
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
     TextureTransform = ssbh_data_py.anim_data.UvTransform
     pose_bone: bpy.types.PoseBone # Workaround for typechecking, remove if obsolete
     fcurve: bpy.types.FCurve # Workaround for typechecking, remove if obsolete
+    from ..properties import SubSceneProperties
 
 class SUB_PT_export_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -113,24 +116,32 @@ class SUB_OP_anim_export(Operator):
             return False
         return True
 
-    def invoke(self, context, _event):
+    def invoke(self, context: Context, _event):
         obj: bpy.types.Object = context.object
         self.first_blender_frame = context.scene.frame_start
         self.last_blender_frame = context.scene.frame_end
-        self.filepath = f'{obj.animation_data.action.name}'
+
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        if ssp.last_anim_export_dir != "":
+            self.filepath = f'{ssp.last_anim_export_dir}/{obj.animation_data.action.name}'
+        elif ssp.last_anim_import_dir != "":
+            self.filepath = f'{ssp.last_anim_import_dir}/{obj.animation_data.action.name}'
+        else:
+            self.filepath = f'{obj.animation_data.action.name}'
+
         if not self.filepath.endswith('.nuanmb'):
             self.filepath += '.nuanmb'
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp.last_anim_export_dir = str(Path(self.filepath).parent)
         print("Starting Animation Export...")
         start = time.perf_counter()
 
         obj: bpy.types.Object = context.object
 
-        if self.filepath == "":
-            self.filepath = f'{obj.animation_data.action.name}.nuanmb'
         if not self.filepath.endswith('.nuanmb'):
             self.filepath += '.nuanmb'
 
