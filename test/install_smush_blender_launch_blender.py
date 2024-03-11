@@ -37,7 +37,7 @@ def main():
     version = bl_info['version']
     temp_zip_path = Path(__file__).parent / Path(f'smash-ultimate-blender_{version[0]}_{version[1]}_{version[2]}.zip')
     top_level_dir = Path(__file__).parent.parent
-    ignore = {".git", "test", ".gitignore", "README.md"}
+    ignore = {".git", "test", ".gitignore", "README.md", "__pycache__"}
     blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
     print(blender_bin)
     zip_dir(top_level_dir, temp_zip_path, ignore)
