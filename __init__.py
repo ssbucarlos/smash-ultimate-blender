@@ -45,20 +45,18 @@ def register():
     print('Loaded Smash Ultimate Blender Tools!')
 
 def unregister():
-    print('Unloading Smash Ultimate Blender Tools')
+    print('Unloading Smash Ultimate Blender Tools...')
 
     from .source.extras import set_linear_vertex_color
+    from .source import new_classes_to_register
 
     nodeitems_utils.unregister_node_categories('CUSTOM_ULTIMATE_NODES')
 
     bpy.types.VIEW3D_MT_paint_vertex.remove(set_linear_vertex_color.menu_func)
 
-    from .source.new_classes_to_register import classes
-    for cls in reversed(classes):
-        try:
-            bpy.utils.unregister_class(cls)
-        except RuntimeError as e:
-            print(f'Failed to unregister smash_ultimate_blender; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+    new_classes_to_register.unregister()
+
+    print('Unloaded Smash Ultimate Blender Tools!')
             
 if __name__ == '__main__':
     register()
