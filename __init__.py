@@ -23,7 +23,7 @@ from .source.model.material import shader_nodes
 def check_unsupported_blender_versions():
     if bpy.app.version < (4, 0):
         raise ImportError('Cant use a Blender version older than 4.0, please use 4.0 or newer')
-    elif bpy.app.version > (4, 1):
+    elif bpy.app.version >= (4, 1):
         raise ImportError("Can't use a Blender version newer than 4.1, please use blender 4.0 or download a 4.1+ compatible version")
     
 def register():
