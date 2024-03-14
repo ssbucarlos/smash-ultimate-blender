@@ -73,9 +73,9 @@ def import_texture_to_blender(operator: bpy.types.Operator, texture_name: str, m
     '''
     # Check if the image being referenced is a default image
     default_texture_names: set[str] = set(generated_default_texture_name_value.keys())
-    if texture_name in default_texture_names:
+    if texture_name.lower() in default_texture_names:
         # Default textures were just generated, so they should be in the .blend already
-        return bpy.data.images[texture_name]
+        return bpy.data.images[texture_name.lower()]
     
     # The image wasn't a default image, so will need to create the new image
     image = bpy.data.images.new(texture_name, 8, 8) # Ignore the x/y values here, its just because the new image is of type "Generated" before we change it to "File"
@@ -374,6 +374,10 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         sampler_node.lod_bias = matched_sampler.lod_bias 
 
         sampler_node.show_options = False
+
+        # Now that the samplers loaded we can assign the texture filtering
+        if matched_sampler.mag_filter == 'Nearest':
+            texture_node.interpolation = 'Closest'
 
         # Link these nodes together
         links.new(uv_map_node.outputs[0], uv_transform_node.inputs[4])

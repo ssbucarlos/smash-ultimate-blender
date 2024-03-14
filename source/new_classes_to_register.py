@@ -1,3 +1,13 @@
+"""
+The order of the classes below matters for 2 reasons.
+    1.) Dependency chains
+    2.) Blender UI Order
+
+As such, while it is possible to take care of (1) and
+hook the python import system to automatically register new classes, unfortunately
+using an automatic process would cause the UI panels to become randomly ordered.
+"""
+
 import bpy
 
 from .. import source

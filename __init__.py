@@ -4,18 +4,15 @@ bl_info = {
     'category': 'All',
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
-    'version': (1, 3, 2),
+    'version': (1, 3, 3),
     'blender': (4, 0, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
     'tracker_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/issues',
-    'special thanks': 'SMG for making SSBH_DATA_PY, which none of this would be possible without. and also the rokoko plugin for being the reference used to make this UI'
+    'special thanks': 'SMG for making SSBH_DATA_PY, which none of this would be possible without. and also the rokoko plugin for being the reference used to make the exo_skel UI'
 }
 
-import inspect
-import sys
 import traceback
-
 import bpy
 import nodeitems_utils
 
@@ -26,19 +23,9 @@ from .source.model.material import shader_nodes
 def check_unsupported_blender_versions():
     if bpy.app.version < (4, 0):
         raise ImportError('Cant use a Blender version older than 4.0, please use 4.0 or newer')
-
-def get_bpy_derived_classes():
-    bpy_derived_classes = set()
-    for _name, obj in inspect.getmembers(sys.modules[__name__]):
-        if not inspect.isclass(obj):
-            continue
-        if not obj.__module__ == __name__:
-            continue
-        if not issubclass(obj, bpy.types.bpy_struct):
-            continue
-        bpy_derived_classes.add(obj)
-    return bpy_derived_classes
-
+    elif bpy.app.version > (4, 1):
+        raise ImportError("Can't use a Blender version newer than 4.1, please use blender 4.0 or download a 4.1+ compatible version")
+    
 def register():
     print('Loading Smash Ultimate Blender Tools...')
 

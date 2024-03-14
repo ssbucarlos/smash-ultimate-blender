@@ -25,7 +25,7 @@ mat_sub_types = (
 
 class SUB_PT_sub_smush_anim_data_main(Panel):
     bl_label = "Ultimate Animation Data"
-    bl_idname = __name__
+    bl_idname = __qualname__
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "data"
