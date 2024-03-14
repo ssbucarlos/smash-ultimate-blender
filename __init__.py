@@ -4,7 +4,7 @@ bl_info = {
     'category': 'All',
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
-    'version': (1, 3, 3),
+    'version': (1, 3, 4),
     'blender': (4, 0, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
@@ -16,10 +16,6 @@ import traceback
 import bpy
 import nodeitems_utils
 
-from .source import blender_property_extensions, new_classes_to_register
-from .source.extras import set_linear_vertex_color
-from .source.model.material import shader_nodes
-
 def check_unsupported_blender_versions():
     if bpy.app.version < (4, 0):
         raise ImportError('Cant use a Blender version older than 4.0, please use 4.0 or newer')
@@ -30,6 +26,10 @@ def register():
     print('Loading Smash Ultimate Blender Tools...')
 
     check_unsupported_blender_versions()
+
+    from .source import blender_property_extensions, new_classes_to_register
+    from .source.extras import set_linear_vertex_color
+    from .source.model.material import shader_nodes
 
     new_classes_to_register.register()
 
@@ -46,6 +46,8 @@ def register():
 
 def unregister():
     print('Unloading Smash Ultimate Blender Tools')
+
+    from .source.extras import set_linear_vertex_color
 
     nodeitems_utils.unregister_node_categories('CUSTOM_ULTIMATE_NODES')
 
