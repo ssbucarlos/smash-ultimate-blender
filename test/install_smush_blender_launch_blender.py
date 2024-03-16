@@ -2,7 +2,7 @@
 Tested on windows 10
 Untested on other platforms
 Please edit the `blender_bin` variable for different blender versions.
-make sure to pip install the right version as well
+make sure to pip install the right version as well (pip install bpy)
 """
 
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -38,7 +38,7 @@ def main():
     temp_zip_path = Path(__file__).parent / Path(f'smash-ultimate-blender_{version[0]}_{version[1]}_{version[2]}.zip')
     top_level_dir = Path(__file__).parent.parent
     ignore = {".git", "test", ".gitignore", "README.md", "__pycache__"}
-    blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
+    blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe"
     print(blender_bin)
     zip_dir(top_level_dir, temp_zip_path, ignore)
     install_zipped_plugin(temp_zip_path, blender_bin)
