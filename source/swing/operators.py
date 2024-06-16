@@ -1160,7 +1160,7 @@ def swing_prc_import(operator: Operator, context: Context, filepath: str):
     arma_data: bpy.types.Armature = context.object.data
     ssd: SUB_PG_sub_swing_data = arma_data.sub_swing_data
     prc_root = pyprc.param(filepath)
-    labels_path = (Path(__file__).parent.parent.parent / 'pyprc' / 'ParamLabels.csv').resolve()
+    labels_path = (Path(__file__).parent.parent.parent / 'dependencies' / 'pyprc' / 'ParamLabels.csv').resolve()
     pyprc.hash.load_labels(str(labels_path))
 
     raw_hash_to_blender_bone = {pyprc.hash(bone.name.lower()) : bone for bone in arma_data.bones}

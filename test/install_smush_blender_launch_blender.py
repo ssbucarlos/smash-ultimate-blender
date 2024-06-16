@@ -1,12 +1,16 @@
+#!python3.10
 """
 Tested on windows 10
-Untested on other platforms
 Please edit the `blender_bin` variable for different blender versions.
-make sure to pip install the right version as well (pip install bpy)
+make sure to pip install the right version as well, if possible.
+also change the comment at the top of the file if windows is launching the incorrect python version.
+Sometimes the newest blender version's bpy module wont be available yet for pip installation, causing issues with the install portion of this script.
+Example installing bpy module for specific python version: py -3.10 -m pip install bpy
 """
 
 from zipfile import ZipFile, ZIP_DEFLATED
 from pathlib import Path
+from platform import python_version
 
 def zip_dir(dir_to_zip: Path, zip_file_path: Path, file_names_to_ignore: set[Path]) -> None:
     paths_to_zip: set[Path] = set()
@@ -40,12 +44,19 @@ def main():
     ignore = {".git", "test", ".gitignore", "README.md", "__pycache__"}
     blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe"
     print(blender_bin)
+    print(python_version())
     zip_dir(top_level_dir, temp_zip_path, ignore)
-    install_zipped_plugin(temp_zip_path, blender_bin)
+    try:
+        import bpy
+    except Exception as e:
+        print("Unable to import bpy, won't attempt automatic install")
+    else:
+        install_zipped_plugin(temp_zip_path, blender_bin)
     
     #temp_zip_path.unlink()
     
 if __name__ == '__main__' and __package__ is None:
+    
     if __package__ is None:
         import sys
         import importlib
@@ -53,4 +64,5 @@ if __name__ == '__main__' and __package__ is None:
         sys.path.append(str(repos_path))
         smash_ultimate_blender = importlib.import_module("smash-ultimate-blender")
         __package__ = "smash-ultimate-blender.test"
+    
     main()

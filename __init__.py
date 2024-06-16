@@ -12,15 +12,13 @@ bl_info = {
     'special thanks': 'SMG for making SSBH_DATA_PY, which none of this would be possible without. and also the rokoko plugin for being the reference used to make the exo_skel UI'
 }
 
-import traceback
-import bpy
-import nodeitems_utils
-
 def check_unsupported_blender_versions():
     if bpy.app.version < (4, 1):
         raise ImportError('Cant use a Blender version older than 4.1, please use 4.1 or newer')
     
 def register():
+    import bpy
+    import nodeitems_utils
     print('Loading Smash Ultimate Blender Tools...')
 
     check_unsupported_blender_versions()
@@ -43,6 +41,8 @@ def register():
     print('Loaded Smash Ultimate Blender Tools!')
 
 def unregister():
+    import bpy
+    import nodeitems_utils
     print('Unloading Smash Ultimate Blender Tools...')
 
     from .source.extras import set_linear_vertex_color
