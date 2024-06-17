@@ -589,7 +589,7 @@ class SUB_OP_insert_all_vis_entry_keyframes(Operator):
         arma: bpy.types.Object = context.object
         sap: SUB_PG_sub_anim_data = arma.data.sub_anim_properties
         for index, vis_entry in enumerate(sap.vis_track_entries):
-            arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{index}].value', group='Visibility', options={'INSERTKEY_NEEDED'})
+            arma.data.keyframe_insert(data_path=f'sub_anim_properties.vis_track_entries[{index}].value', group='Visibility')
         return {'FINISHED'}
 
 def remove_visibility_drivers(context):

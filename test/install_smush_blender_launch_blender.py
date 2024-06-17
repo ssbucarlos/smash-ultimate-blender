@@ -1,4 +1,4 @@
-#!python3.10
+#!python3.11
 """
 Tested on windows 10
 Please edit the `blender_bin` variable for different blender versions.
