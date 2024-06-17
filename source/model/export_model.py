@@ -995,7 +995,6 @@ def process_mesh(operator: Operator, context: Context, mesh_object_copy: Object,
     
     # Get the custom normals from the original mesh.
     # We use the copy here since applying transforms alters the normals.
-    mesh_object_copy.data.calc_normals_split()
     loop_normals = np.zeros(len(mesh_object_copy.data.loops) * 3, dtype=np.float32)
     mesh_object_copy.data.loops.foreach_get('normal', loop_normals)
 
@@ -1076,8 +1075,6 @@ def process_mesh(operator: Operator, context: Context, mesh_object_copy: Object,
 
         # Assign the preserved custom normals to the temp mesh.
         split_mesh.data.normals_split_custom_set(loop_normals)
-        split_mesh.data.use_auto_smooth = True
-        split_mesh.data.calc_normals_split()
         split_mesh.data.update()
 
     return split_meshes

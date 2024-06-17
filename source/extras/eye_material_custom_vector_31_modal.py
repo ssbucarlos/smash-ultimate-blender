@@ -137,11 +137,15 @@ def insert_cv31_keyframes(arma: bpy.types.Object, cv31_l: SUB_PG_mat_track_prope
         mat_track: SUB_PG_mat_track = sap.mat_tracks.get('EyeL')
         mat_track_index = sap.mat_tracks.find('EyeL')
         prop_index = mat_track.properties.find('CustomVector31')
-        arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
-
+        # The behavior of the 'INSERTKEY_NEEDED' option was changed in 4.1
+        # It now throws an error when inserting a value thats the same as that was already there
+        # since the modal only changes Z/W values, then inserting the keyframe on all channels will cause an error since X/Y are unmodified
+        #arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
+        arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})')
     if cv31_r:
         mat_track: SUB_PG_mat_track = sap.mat_tracks.get('EyeR')
         mat_track_index = sap.mat_tracks.find('EyeR')
         prop_index = mat_track.properties.find('CustomVector31')
-        arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
+        #arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})', options={'INSERTKEY_NEEDED'})
+        arma.data.keyframe_insert(data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector', group=f'Material ({mat_track.name})')
     

@@ -1,4 +1,4 @@
-#!python3.10
+#!python3.11
 """
 Tested on windows 10
 Please edit the `blender_bin` variable for different blender versions.
@@ -42,7 +42,7 @@ def main():
     temp_zip_path = Path(__file__).parent / Path(f'smash-ultimate-blender_{version[0]}_{version[1]}_{version[2]}.zip')
     top_level_dir = Path(__file__).parent.parent
     ignore = {".git", "test", ".gitignore", "README.md", "__pycache__"}
-    blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
+    blender_bin = r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe"
     print(blender_bin)
     print(python_version())
     zip_dir(top_level_dir, temp_zip_path, ignore)
