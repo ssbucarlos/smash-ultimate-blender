@@ -25,8 +25,14 @@ Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for 
   - For a specific version, check the "Releases" page.
 2. Install the .ZIP in Blender under Edit > Preferences > Addons > Install. 
 3. Make sure the addon is enabled by searching for "Smash Ultimate".
-4. After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar. **If the addon panel doesn't show up, make sure you are in object mode!**  
-![image](https://user-images.githubusercontent.com/77519735/131579719-3bf859ac-40ad-4661-8b4c-0d0d0e34da8a.png)
+4. After installing the plugin in blender, in the 3D Viewport pull up the Sidebar (Hotkey is 'N'), and look for the new 'Ultimate' tab in the Sidebar. **If the addon panel doesn't show up, make sure you are in object mode!**
+
+    ![image](https://user-images.githubusercontent.com/77519735/131579719-3bf859ac-40ad-4661-8b4c-0d0d0e34da8a.png)
+5. Click on the 'Ultimate' tab.
+
+    ![image](https://github.com/ssbucarlos/smash-ultimate-blender/assets/77519735/b9fab746-2ddf-45f8-8cec-4351993219d5)
+
+
 
 ## System Requirements
 The plugin supports 64-bit versions of Blender 4.0 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
