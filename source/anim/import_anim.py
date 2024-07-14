@@ -547,7 +547,7 @@ def keyframe_insert_camera_locrotscale(camera, frame):
             data_path=f'{parameter}',
             frame=frame,
             group='Transform',
-            options={'INSERTKEY_NEEDED'},
+            #options={'INSERTKEY_NEEDED'}, started causing errors errors in 4.1
         ) 
 
 def uvtransform_to_list(uvtransform) -> list[float]:
