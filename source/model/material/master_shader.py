@@ -1076,7 +1076,7 @@ def create_master_shader():
     # separate_prm_rgb['B'] -> ao_clamp
     inner_links.new(prm_separate_prm_rgb.outputs['B'], ao_clamp.inputs[0])
     # ao_clamp -> eevee_specular_shader['Ambient Occlusion']
-    inner_links.new(ao_clamp.outputs[0], eevee_specular_shader.inputs['Ambient Occlusion'])
+    # inner_links.new(ao_clamp.outputs[0], eevee_specular_shader.inputs['Ambient Occlusion']) #blender 4.2 removed this input
     # nor_normal_map -> eevee_specular_shader['Normal']
     inner_links.new(nor_normal_map.outputs[0], eevee_specular_shader.inputs['Normal'])
     # eevee_specular_shader -> shader_to_rgb
