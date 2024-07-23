@@ -15,7 +15,7 @@ bl_info = {
 def check_unsupported_blender_versions():
     import bpy
     if bpy.app.version < (4, 2):
-        raise ImportError('Cant use a Blender version older than 4.2, please use 4.1 or newer')
+        raise ImportError('Cant use a Blender version older than 4.2, please use 4.2 or newer')
     
 def register():
     import bpy
