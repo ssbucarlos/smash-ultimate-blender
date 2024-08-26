@@ -93,12 +93,12 @@ class SUB_OP_eye_material_custom_vector_31_modal(Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
+        self.cv31_l = None
+        self.cv31_r = None
+
         if context.space_data.type == 'VIEW_3D':
             v3d = context.space_data
             rv3d = v3d.region_3d
-
-            #if rv3d.view_perspective == 'CAMERA':
-            #    rv3d.view_perspective = 'PERSP'
 
             self._initial_mouse = Vector((event.mouse_x, event.mouse_y, 0.0))
             self.temp_mouse = self._initial_mouse.copy()
@@ -120,7 +120,10 @@ class SUB_OP_eye_material_custom_vector_31_modal(Operator):
                 if cv31_r:
                     self._initial_cv31_r = [cv31_r.custom_vector[0], cv31_r.custom_vector[1], cv31_r.custom_vector[2], cv31_r.custom_vector[3]]
                     self.temp_cv31_r = [cv31_r.custom_vector[0], cv31_r.custom_vector[1], cv31_r.custom_vector[2], cv31_r.custom_vector[3]]
-                    self.cv31_r = cv31_r                
+                    self.cv31_r = cv31_r
+            if self.cv31_l is None and self.cv31_r is None:
+                self.report({'WARNING'}, "Must load or create an animation first with `EyeL` or `EyeR` material tracks with the CustomVector31 property! (Make sure to hit 'Refresh Material Drivers')")
+                return {'CANCELLED'}            
             context.window_manager.modal_handler_add(self)
             return {'RUNNING_MODAL'}
         else:
