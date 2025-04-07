@@ -6,13 +6,11 @@ from bpy.types import (
 
 from math import isclose
 import os
-import tempfile
 
 from ....dependencies import ssbh_data_py
 from .load_from_shader_label import create_sub_matl_data_from_shader_label
 from .sub_matl_data import *
 from .create_blender_materials_from_matl import create_default_textures
-from .texture.convert_textures import create_nor_from_material, create_prm_from_material
 ParamId = ssbh_data_py.matl_data.ParamId
 
 def convert_from_no_nodes(operator: bpy.types.Operator, material: bpy.types.Material):
@@ -398,176 +396,14 @@ def convert_from_nodes(operator: bpy.types.Operator, material: bpy.types.Materia
             else:
                 create_sub_matl_data_from_shader_label(material, "SFX_PBS_0100000008008269_opaque") # PBR, 1 Layer
    
-def convert_blender_material(operator: bpy.types.Operator, material: bpy.types.Material, bake_size: int = 1024):
+def convert_blender_material_original(operator: bpy.types.Operator, material: bpy.types.Material):
+    """The original conversion function without texture creation"""
     
     # Setup default textures if not already made
     create_default_textures()
-    
-    # Check if Cycles render engine is available and active
-    try:
-        cycles_available = 'CYCLES' in [getattr(render, 'bl_idname', '') for render in bpy.types.RenderEngine.__subclasses__()]
-        if not cycles_available:
-            operator.report({'ERROR'}, "Cycles render engine is required for texture baking but is not available. Please enable the Cycles addon.")
-            return
-    except Exception as e:
-        operator.report({'ERROR'}, f"Error checking render engines: {str(e)}. Cycles is required for texture baking.")
-        return
-    
-    # Store original render engine to restore later
-    original_engine = bpy.context.scene.render.engine
-    
-    # Extract data from the original material before we modify it
-    prm_img = None
-    normal_map_img = None
-    prm_path = None
-    
-    try:
-        operator.report({'INFO'}, f"Processing material: {material.name} with texture size: {bake_size}x{bake_size}")
-        
-        # Find the Principled BSDF node if it exists
-        principled_node = None
-        if material.use_nodes and material.node_tree:
-            for node in material.node_tree.nodes:
-                if node.type == 'BSDF_PRINCIPLED':
-                    principled_node = node
-                    break
-        
-        if principled_node:
-            operator.report({'INFO'}, f"Found Principled BSDF node in material")
-            
-            # Extract existing normal map if present
-            normal_input = principled_node.inputs["Normal"]
-            if normal_input.is_linked:
-                from_node = normal_input.links[0].from_node
-                # Normal maps typically go through a Normal Map node before the Principled BSDF
-                if from_node.type == 'NORMAL_MAP' and from_node.inputs["Color"].is_linked:
-                    tex_node = from_node.inputs["Color"].links[0].from_node
-                    if tex_node.type == 'TEX_IMAGE' and tex_node.image:
-                        normal_map_img = tex_node.image
-                        operator.report({'INFO'}, f"Found existing normal map: {normal_map_img.name}")
-            
-            # Set render engine to Cycles for baking
-            bpy.context.scene.render.engine = 'CYCLES'
-            
-            # Create a temporary directory to save the PRM texture
-            temp_dir = tempfile.gettempdir()
-            material_name = material.name
-            
-            # Create the PRM texture only
-            prm_path = os.path.join(temp_dir, f"{material_name}_PRM.png")
-            try:
-                operator.report({'INFO'}, f"Creating PRM texture at: {prm_path}")
-                prm_path = create_prm_from_material(material, prm_path, bake_size=bake_size)
-                if not os.path.exists(prm_path) or os.path.getsize(prm_path) < 1000:  # Check if file exists and is not too small
-                    operator.report({'ERROR'}, f"PRM texture creation failed - file is missing or too small. Check Cycles settings and GPU compatibility.")
-            except Exception as e:
-                operator.report({'WARNING'}, f"Failed to create PRM texture: {str(e)}")
-        else:
-            operator.report({'WARNING'}, f"No Principled BSDF node found in material, skipping texture extraction")
-    except Exception as e:
-        operator.report({'WARNING'}, f"Error during material processing: {str(e)}")
-    finally:
-        # Restore original render engine
-        bpy.context.scene.render.engine = original_engine
     
     # Now convert the material
     if material.use_nodes is False:
         convert_from_no_nodes(operator, material)
     else:
-        convert_from_nodes(operator, material)
-    
-    # Assign the normal map if we found one
-    if normal_map_img:
-        operator.report({'INFO'}, f"Assigning existing normal map: {normal_map_img.name}")
-        # Make sure the image is packed and has correct color space
-        if not normal_map_img.packed_file:
-            normal_map_img.pack()
-        normal_map_img.colorspace_settings.name = 'Non-Color'
-        
-        # Find the right texture parameter and assign the image
-        sub_matl_data = material.sub_matl_data
-        for texture in sub_matl_data.textures:
-            if texture.param_id_name == "Texture4":  # NOR texture
-                texture.image = normal_map_img
-                break
-    else:
-        # Assign a default normal map
-        operator.report({'INFO'}, "No normal map found, using default normal map")
-        default_normal = bpy.data.images.get('/common/shader/sfxpbs/default_normal') or bpy.data.images.get('/common/shader/sfxpbs/fighter/default_normal')
-        if default_normal:
-            sub_matl_data = material.sub_matl_data
-            for texture in sub_matl_data.textures:
-                if texture.param_id_name == "Texture4":  # NOR texture
-                    texture.image = default_normal
-                    break
-            
-    # Assign the PRM texture if created
-    if prm_path and os.path.exists(prm_path):
-        prm_img = load_and_assign_texture(material, prm_path, "Texture6")
-        if prm_img:
-            operator.report({'INFO'}, f"Assigned PRM texture: {prm_path}")
-        else:
-            operator.report({'WARNING'}, f"Failed to assign PRM texture: {prm_path}")
-
-def has_principled_bsdf_node(material):
-    """Check if the material has a Principled BSDF node"""
-    if not material or not material.node_tree:
-        return False
-    
-    for node in material.node_tree.nodes:
-        if node.type == 'BSDF_PRINCIPLED':
-            return True
-    
-    return False
-
-def load_and_assign_texture(material, texture_path, param_id_name):
-    """Load a texture from a file and assign it to the appropriate texture parameter in the material"""
-    if not os.path.exists(texture_path):
-        print(f"Texture path does not exist: {texture_path}")
-        return None
-    
-    # Load the image
-    image_name = os.path.basename(texture_path)
-    try:
-        # Check if image is already loaded
-        if image_name in bpy.data.images:
-            image = bpy.data.images[image_name]
-        else:
-            image = bpy.data.images.load(texture_path)
-            image.name = image_name
-            
-        # Pack the image into the .blend file
-        if not image.packed_file:
-            image.pack()
-        
-        # Set correct color space for NOR/PRM
-        if param_id_name in ["Texture4", "Texture6"]:  # NOR and PRM
-            image.colorspace_settings.name = 'Non-Color'
-            
-        # Assign the image to the material's texture parameter
-        sub_matl_data = material.sub_matl_data
-        
-        # Debug info
-        print(f"Available textures in material:")
-        for texture in sub_matl_data.textures:
-            print(f"  - {texture.param_id_name}")
-            
-        for texture in sub_matl_data.textures:
-            if texture.param_id_name == param_id_name:
-                print(f"Found matching texture param: {param_id_name}")
-                texture.image = image
-                return image
-        
-        print(f"No matching texture parameter found: {param_id_name}")
-        
-    except Exception as e:
-        print(f"Error loading texture {texture_path}: {str(e)}")
-        return None
-    
-    return None
-
-
-
-
-    
-
+        convert_from_nodes(operator, material) 

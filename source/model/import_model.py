@@ -31,91 +31,41 @@ class SUB_PT_import_model(Panel):
     bl_label = 'Model Importer'
     bl_options = {'DEFAULT_CLOSED'}
 
+    @classmethod
+    def poll(cls, context):
+        return True
+
     def draw(self, context):
-        ssp:SubSceneProperties = context.scene.sub_scene_properties
-        
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
         layout = self.layout
         layout.use_property_split = False
-        
-        if '' == ssp.model_import_folder_path:
+
+        # Try to load last directory when panel is first drawn
+        if ssp.model_import_folder_path == '' and ssp.last_model_folder and os.path.exists(ssp.last_model_folder):
+            ssp.model_import_folder_path = ssp.last_model_folder
+            bpy.ops.sub.ssbh_model_folder_selector(directory=ssp.last_model_folder)
+            
+        if ssp.model_import_folder_path == '':
             row = layout.row(align=True)
             row.label(text='Please select a folder...')
             row = layout.row(align=True)
-            row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for the model folder')
+            row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for mods directory')
+            row = layout.row(align=True)
+            row.operator(SUB_OP_select_individual_model.bl_idname, icon='ZOOM_ALL', text='Browse for individual model')
             return
         
         row = layout.row(align=True)
         row.label(text='Selected Folder: "' + ssp.model_import_folder_path +'"')
         row = layout.row(align=True)
-        row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for a different model folder')
+        row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for a different mods directory')
+        row = layout.row(align=True)
+        row.operator(SUB_OP_select_individual_model.bl_idname, icon='ZOOM_ALL', text='Browse for individual model')
 
-        all_requirements_met = True
-        min_requirements_met = True
+        row = layout.row()
+        row.template_list("SUB_UL_model_import_list", "", ssp, "model_import_models", ssp, "model_import_models_index")
 
-        if '' == ssp.model_import_numshb_file_name:
-            row = layout.row(align=True)
-            row.alert = True
-            row.label(text='No .numshb file found! Cannot import without it!', icon='ERROR')
-            all_requirements_met = False
-            min_requirements_met = False
-        else:
-            row = layout.row(align=True)
-            row.alert = False
-            row.label(text=f'NUMSHB file: "{ssp.model_import_numshb_file_name}"', icon='FILE')
-
-        if '' == ssp.model_import_nusktb_file_name:
-            row = layout.row(align=True)
-            row.alert = True
-            row.label(text='No .nusktb file found! Cannot import without it!', icon='ERROR')
-            all_requirements_met = False
-            min_requirements_met = False
-        else:
-            row = layout.row(align=True)
-            row.alert = False
-            row.label(text=f'NUSKTB file: "{ssp.model_import_nusktb_file_name}"', icon='FILE')
-
-        if '' == ssp.model_import_numdlb_file_name:
-            row = layout.row(align=True)
-            row.alert = True
-            row.label(text='No .numdlb file found! Can import, but without materials...', icon='ERROR')
-            all_requirements_met = False
-        else:
-            row = layout.row(align=True)
-            row.alert = False
-            row.label(text=f'NUMDLB file: "{ssp.model_import_numdlb_file_name}"', icon='FILE')
-
-        if '' ==  ssp.model_import_numatb_file_name:
-            row = layout.row(align=True)
-            row.alert = True
-            row.label(text='No .numatb file found! Can import, but without materials...', icon='ERROR')
-            all_requirements_met = False
-        else:
-            row = layout.row(align=True)
-            row.alert = False
-            row.label(text=f'NUMATB file: "{ssp.model_import_numatb_file_name}"', icon='FILE')
-
-        if '' == ssp.model_import_nuhlpb_file_name:
-            row = layout.row(align=True)
-            row.alert = True
-            row.label(text='No .nuhlpb file found! Can import, but without helper bones...', icon='ERROR')
-            all_requirements_met = False
-        else:
-            row = layout.row(align=True)
-            row.alert = False
-            row.label(text=f'NUHLPB file: "{ssp.model_import_nuhlpb_file_name}"', icon='FILE')
-
-        if not min_requirements_met:
-            row = layout.row(align=True)
-            row.alert = True
-            row.label(text='Needs .NUMSHB and .NUSKTB at a minimum to import!', icon='ERROR')
-            return
-        elif not all_requirements_met:
-            row = layout.row(align=True)
-            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Limited Model Import')
-        else:
-            row = layout.row(align=True)
-            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Import Model')
-        
+        row = layout.row()
+        row.operator(SUB_OP_import_selected_model.bl_idname, text="Import Selected Model")
 
 class SUB_OP_select_model_import_folder(Operator):
     bl_idname = 'sub.ssbh_model_folder_selector'
@@ -133,68 +83,181 @@ class SUB_OP_select_model_import_folder(Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        ssp:SubSceneProperties = context.scene.sub_scene_properties
-        ssp.model_import_numdlb_file_name = ''
-        ssp.model_import_nusktb_file_name = ''
-        ssp.model_import_numshb_file_name = ''
-        ssp.model_import_numatb_file_name = ''
-        ssp.model_import_nuhlpb_file_name = ''
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
         ssp.model_import_folder_path = self.directory
-        #all_files = os.listdir(ssp.model_import_folder_path)
-        #model_files = [file for file in all_files if 'model' in file]
-        for file_name in os.listdir(ssp.model_import_folder_path):
-            _root, extension = os.path.splitext(file_name)
-            if '.numshb' == extension:
-                ssp.model_import_numshb_file_name = file_name
-            elif '.nusktb' == extension:
-                ssp.model_import_nusktb_file_name = file_name
-            elif '.numdlb' == extension:
-                ssp.model_import_numdlb_file_name = file_name
-            elif '.numatb' == extension:
-                ssp.model_import_numatb_file_name = file_name
-            elif '.nuhlpb' == extension:
-                ssp.model_import_nuhlpb_file_name = file_name
+        ssp.last_model_folder = self.directory  # Save the last used directory
+        ssp.model_import_models.clear()
+
+        for root, dirs, files in os.walk(ssp.model_import_folder_path):
+            for dir_name in dirs:
+                body_folder_path = os.path.join(root, dir_name, "body")
+                if os.path.exists(body_folder_path):
+                    for sub_dir_name in os.listdir(body_folder_path):
+                        model_folder_path = os.path.join(body_folder_path, sub_dir_name)
+                        if os.path.isdir(model_folder_path):
+                            model_files = [file for file in os.listdir(model_folder_path) if file.endswith(('.numdlb', '.nusktb', '.numshb', '.numatb', '.nuhlpb'))]
+                            if model_files:
+                                character_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(model_folder_path))))))
+                                model_item = ssp.model_import_models.add()
+                                model_item.name = character_name  # Use the character's folder name
+                                model_item.path = model_folder_path
+                                for file in model_files:
+                                    if file.endswith('.numdlb'):
+                                        ssp.model_import_numdlb_file_name = file
+                                    elif file.endswith('.nusktb'):
+                                        ssp.model_import_nusktb_file_name = file
+                                    elif file.endswith('.numshb'):
+                                        ssp.model_import_numshb_file_name = file
+                                    elif file.endswith('.numatb'):
+                                        ssp.model_import_numatb_file_name = file
+                                    elif file.endswith('.nuhlpb'):
+                                        ssp.model_import_nuhlpb_file_name = file
+                                break  # Only add the first model folder found in each character's directory
+                    break  # Move to the next character's directory
+
         return {'FINISHED'}
 
 class SUB_OP_import_model(bpy.types.Operator):
     bl_idname = 'sub.model_importer'
     bl_label = 'Model Importer'
     bl_options = {'UNDO'}
-    
+
+    model_path: StringProperty()
+
     def execute(self, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp.model_import_folder_path = self.model_path
         start = time.time()
 
-        import_model(self,context)
+        import_model(self, context)
 
         end = time.time()
         print(f'Imported model in {end - start} seconds')
         return {'FINISHED'}
 
+class SUB_UL_model_import_list(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            layout.label(text=item.name)
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="")
+
+    def draw_filter(self, context, layout):
+        pass
+
+    def filter_items(self, context, data, propname):
+        # Return empty lists to use default filtering
+        return [], []
+
+class SUB_OP_import_selected_model(bpy.types.Operator):
+    bl_idname = 'sub.import_selected_model'
+    bl_label = 'Import Selected Model'
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        selected_model = ssp.model_import_models[ssp.model_import_models_index]
+        ssp.model_import_folder_path = selected_model.path
+        start = time.time()
+
+        import_model(self, context)
+
+        end = time.time()
+        print(f'Imported model in {end - start} seconds')
+        return {'FINISHED'}
+
+class SUB_OP_select_individual_model(Operator):
+    bl_idname = 'sub.ssbh_individual_model_selector'
+    bl_label = 'Individual Model Selector'
+    bl_options = {'UNDO'}
+
+    filter_glob: StringProperty(
+        default='*.numdlb;*.nusktb;*.numshb;*.numatb;*.nuhlpb',
+        options={'HIDDEN'}
+    )
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
+
+    def invoke(self, context, _event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp.model_import_folder_path = self.directory
+        ssp.last_model_folder = self.directory  # Save the last used directory
+        ssp.model_import_models.clear()
+
+        # Direct folder search for model files
+        files = [f for f in os.listdir(self.directory) if f.endswith(('.numdlb', '.nusktb', '.numshb', '.numatb', '.nuhlpb'))]
+        if files:
+            model_item = ssp.model_import_models.add()
+            # Use just the immediate folder name instead of the full path
+            model_item.name = os.path.basename(os.path.normpath(self.directory))
+            model_item.path = self.directory
+            for file in files:
+                if file.endswith('.numdlb'):
+                    ssp.model_import_numdlb_file_name = file
+                elif file.endswith('.nusktb'):
+                    ssp.model_import_nusktb_file_name = file
+                elif file.endswith('.numshb'):
+                    ssp.model_import_numshb_file_name = file
+                elif file.endswith('.numatb'):
+                    ssp.model_import_numatb_file_name = file
+                elif file.endswith('.nuhlpb'):
+                    ssp.model_import_nuhlpb_file_name = file
+
+        return {'FINISHED'}
 
 def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
-    ssp:SubSceneProperties = context.scene.sub_scene_properties
+    ssp: SubSceneProperties = context.scene.sub_scene_properties
     dir = Path(ssp.model_import_folder_path)
-    numdlb_name = dir.joinpath(ssp.model_import_numdlb_file_name)
-    numshb_name = dir.joinpath(ssp.model_import_numshb_file_name)
-    nusktb_name = dir.joinpath(ssp.model_import_nusktb_file_name)
-    numatb_name = dir.joinpath(ssp.model_import_numatb_file_name)
-    nuhlpb_name = dir.joinpath(ssp.model_import_nuhlpb_file_name) if ssp.model_import_nuhlpb_file_name != '' else ''
+    numdlb_name = dir / ssp.model_import_numdlb_file_name
+    numshb_name = dir / ssp.model_import_numshb_file_name
+    nusktb_name = dir / ssp.model_import_nusktb_file_name
+    numatb_name = dir / ssp.model_import_numatb_file_name
+    nuhlpb_name = dir / ssp.model_import_nuhlpb_file_name if ssp.model_import_nuhlpb_file_name != '' else ''
+
+    print(f'NUMDLB file: {numdlb_name}')
+    print(f'NUMSHB file: {numshb_name}')
+    print(f'NUSKTB file: {nusktb_name}')
+    print(f'NUMATB file: {numatb_name}')
+    print(f'NUHLPB file: {nuhlpb_name}')
+
+    # Check if files exist
+    if not numdlb_name.exists():
+        operator.report({'ERROR'}, f'NUMDLB file not found: {numdlb_name}')
+        return {'CANCELLED'}
+    if not numshb_name.exists():
+        operator.report({'ERROR'}, f'NUMSHB file not found: {numshb_name}')
+        return {'CANCELLED'}
+    if not nusktb_name.exists():
+        operator.report({'ERROR'}, f'NUSKTB file not found: {nusktb_name}')
+        return {'CANCELLED'}
+    if not numatb_name.exists():
+        operator.report({'ERROR'}, f'NUMATB file not found: {numatb_name}')
+        return {'CANCELLED'}
+    if nuhlpb_name and not nuhlpb_name.exists():
+        operator.report({'ERROR'}, f'NUHLPB file not found: {nuhlpb_name}')
+        return {'CANCELLED'}
 
     start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(str(numdlb_name)) if numdlb_name != '' else None
 
     # Numpy provides much faster performance than Python lists.
-    # TODO(SMG): This API for ssbh_data_py will likely have changes and improvements in the future.
+    # TODO: This API for ssbh_data_py will likely have changes and improvements in the future.
     ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(str(numshb_name), use_numpy=True) if numshb_name != '' else None
-    ssbh_skel = ssbh_data_py.skel_data.read_skel(str(nusktb_name)) if numshb_name != '' else None
+    ssbh_skel = ssbh_data_py.skel_data.read_skel(str(nusktb_name)) if nusktb_name != '' else None
     ssbh_matl = ssbh_data_py.matl_data.read_matl(str(numatb_name)) if numatb_name != '' else None
     end = time.time()
     print(f'Read files in {end - start} seconds')
 
-    try:
-        armature = create_armature(operator, ssbh_skel, context)
-    except Exception as e:
-        operator.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+    armature = None
+    if ssbh_skel is not None:
+        try:
+            armature = create_armature(operator, ssbh_skel, context)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     material_label_to_material = {}
     if ssbh_matl is not None:
@@ -203,12 +266,13 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
         except Exception as e:
             operator.report({'ERROR'}, f'Failed to import materials; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
-    try:
-        create_mesh(ssbh_model, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material)
-    except Exception as e:
-        operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+    if armature is not None:
+        try:
+            create_mesh(ssbh_model, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material)
+        except Exception as e:
+            operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
-    if nuhlpb_name != '':
+    if nuhlpb_name != '' and armature is not None:
         try:
             read_nuhlpb_data(nuhlpb_name, armature)
         except Exception as e:
@@ -216,9 +280,150 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
         else:
             setup_helper_bone_constraints(armature)
         
-        
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-    return
+
+    # Store the model path for animation importing
+    ssp.last_imported_model_path = str(dir)
+    
+    # Get related animation path
+    model_path = str(dir)
+    motion_path = model_path.replace("model", "motion")
+    anim_path = Path(motion_path)
+    
+    # Clear previous animation files
+    ssp.animation_import_files.clear()
+    
+    # First, try the direct motion path
+    if anim_path.exists():
+        # Store animation path
+        ssp.animation_import_folder_path = str(anim_path)
+        
+        # Search for animation files (.nuanmb)
+        nuanmb_files = [f for f in os.listdir(anim_path) if f.endswith('.nuanmb')]
+        
+        # Add found animations to the list
+        for anim_file in nuanmb_files:
+            anim_item = ssp.animation_import_files.add()
+            # Strip the .nuanmb extension from the displayed name
+            anim_item.name = os.path.splitext(anim_file)[0]
+            anim_item.path = str(anim_path / anim_file)
+        
+        # If animations were found, report success  
+        if nuanmb_files:
+            operator.report({'INFO'}, f'Found {len(nuanmb_files)} animations in: {anim_path}')
+        # If no animations were found in the direct motion path, look in subfolders    
+        else:
+            # Try to find the structure motion/body/[first subfolder]
+            try:
+                # Check if this is a fighter folder (contains "motion" subfolder)
+                fighter_folder = Path(model_path).parent.parent.parent
+                motion_folder = fighter_folder / "motion"
+                
+                if motion_folder.exists():
+                    body_folder = motion_folder / "body"
+                    
+                    if body_folder.exists():
+                        # Get the first subfolder in body
+                        try:
+                            subfolders = [f for f in os.listdir(body_folder) if os.path.isdir(body_folder / f)]
+                            if subfolders:
+                                deep_anim_path = body_folder / subfolders[0]
+                                
+                                if deep_anim_path.exists():
+                                    # Update the stored animation path
+                                    ssp.animation_import_folder_path = str(deep_anim_path)
+                                    
+                                    # Search for animation files (.nuanmb)
+                                    deep_nuanmb_files = [f for f in os.listdir(deep_anim_path) if f.endswith('.nuanmb')]
+                                    
+                                    # Add found animations to the list
+                                    for anim_file in deep_nuanmb_files:
+                                        anim_item = ssp.animation_import_files.add()
+                                        # Strip the .nuanmb extension from the displayed name
+                                        anim_item.name = os.path.splitext(anim_file)[0]
+                                        anim_item.path = str(deep_anim_path / anim_file)
+                                    
+                                    if deep_nuanmb_files:
+                                        operator.report({'INFO'}, f'Found {len(deep_nuanmb_files)} animations in deep path: {deep_anim_path}')
+                                    else:
+                                        operator.report({'INFO'}, f'No animations found in deep path: {deep_anim_path}')
+                        except Exception as e:
+                            operator.report({'INFO'}, f'Failed to search in deep animation path: {str(e)}')
+            except Exception as e:
+                operator.report({'INFO'}, f'Failed to find deep animation structure: {str(e)}')
+            
+            if len(ssp.animation_import_files) == 0:
+                operator.report({'INFO'}, f'No animations found in any location')
+    else:
+        # If no direct motion path exists, try the deep path immediately
+        try:
+            # Check if this is a fighter folder path
+            fighter_folder = Path(model_path).parent.parent.parent
+            motion_folder = fighter_folder / "motion"
+            
+            if motion_folder.exists():
+                body_folder = motion_folder / "body"
+                
+                if body_folder.exists():
+                    # Get the first subfolder in body
+                    try:
+                        subfolders = [f for f in os.listdir(body_folder) if os.path.isdir(body_folder / f)]
+                        if subfolders:
+                            deep_anim_path = body_folder / subfolders[0]
+                            
+                            if deep_anim_path.exists():
+                                # Store animation path
+                                ssp.animation_import_folder_path = str(deep_anim_path)
+                                
+                                # Search for animation files (.nuanmb)
+                                deep_nuanmb_files = [f for f in os.listdir(deep_anim_path) if f.endswith('.nuanmb')]
+                                
+                                # Add found animations to the list
+                                for anim_file in deep_nuanmb_files:
+                                    anim_item = ssp.animation_import_files.add()
+                                    # Strip the .nuanmb extension from the displayed name
+                                    anim_item.name = os.path.splitext(anim_file)[0]
+                                    anim_item.path = str(deep_anim_path / anim_file)
+                                
+                                if deep_nuanmb_files:
+                                    operator.report({'INFO'}, f'Found {len(deep_nuanmb_files)} animations in deep path: {deep_anim_path}')
+                                else:
+                                    operator.report({'INFO'}, f'No animations found in deep path: {deep_anim_path}')
+                    except Exception as e:
+                        operator.report({'INFO'}, f'Failed to search in deep animation path: {str(e)}')
+        except Exception as e:
+            operator.report({'INFO'}, f'Failed to find deep animation structure: {str(e)}')
+        
+        if len(ssp.animation_import_files) == 0:
+            operator.report({'INFO'}, f'Animation directory not found: {anim_path}')
+
+    # Auto-store the idle animation (a00wait1) if it exists
+    if len(ssp.animation_import_files) > 0:
+        # Look for a00wait1.nuanmb in the animation list
+        idle_anim_path = None
+        for anim_item in ssp.animation_import_files:
+            if anim_item.name == "a00wait1":
+                idle_anim_path = anim_item.path
+                break
+        
+        # If found, automatically store it using the idle pose library
+        if idle_anim_path:
+            # Make sure the armature is selected
+            if armature:
+                # Select the armature
+                for obj in bpy.context.selected_objects:
+                    obj.select_set(False)
+                armature.select_set(True)
+                context.view_layer.objects.active = armature
+                
+                # Store the idle pose
+                try:
+                    bpy.ops.sub.store_idle_pose(filepath=idle_anim_path)
+                    operator.report({'INFO'}, f"Auto-stored idle pose from a00wait1.nuanmb")
+                except Exception as e:
+                    operator.report({'WARNING'}, f"Failed to auto-store idle pose: {str(e)}")
+
+    return {'FINISHED'}
 
 def get_shader_db_file_path():
     # This file was generated with duplicates removed to optimize space.
@@ -324,7 +529,7 @@ def fix_bone_length(blender_bone: EditBone, edit_bones: bpy.types.ArmatureEditBo
             blender_bone.length = (blender_bone.head - neck_bone.head).length
 
 def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
-    # Pose bones only exist in pose mode, so enter pose mode to properly set thier colors.
+    # Pose bones only exist in pose mode, so enter pose mode to properly set their colors.
     bpy.ops.object.mode_set(mode='POSE')
     bone_collections = arma_obj.data.collections
     standard_collection = bone_collections.new("Standard Bones")
@@ -336,6 +541,7 @@ def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
 
     system_bone_names = ['Trans', 'Rot', 'Throw']
     system_bone_suffixes = ['_null', '_eff', '_offset']
+    
     for bone in arma_obj.pose.bones:
         bone: PoseBone
         if bone.name.startswith('H_Exo_'):
@@ -351,22 +557,19 @@ def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
             bone.color.palette = 'THEME04'
             bone.bone.color.palette = 'THEME04'
             if '_null' in bone.name:
-                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to null bones
                 null_collection.assign(bone)
                 bone.color.palette = 'THEME10'
                 bone.bone.color.palette = 'THEME10'
         else:
-            #bone.bone_group = default_group
             standard_collection.assign(bone)
-            if any(system_bone_name == bone.name for system_bone_name in system_bone_names) \
-            or any(system_bone_suffix in bone.name for system_bone_suffix in system_bone_suffixes):
-                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to '_null' or '_eff' or '_offset' bones
+            # Fixed the variable names in the any() expressions
+            if any(name == bone.name for name in system_bone_names) or \
+               any(suffix in bone.name for suffix in system_bone_suffixes):
                 system_collection.assign(bone)
                 bone.color.palette = 'THEME10'
                 bone.bone.color.palette = 'THEME10'
 
     bpy.ops.object.mode_set(mode='OBJECT')
-
 
 def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelData, context: bpy.types.Context) -> bpy.types.Object: 
     '''
@@ -423,7 +626,7 @@ def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelDa
         fix_bone_length(edit_bone, arma_data.edit_bones)
         # Fallback in case the bone was made to be too short
         if edit_bone.length < .001:
-            operator.report({'INFO'}, f"The bone \"{edit_bone.name}\" has a length less than .001, so it was set to .001.")
+            operator.report({'INFO'}, f"The bone \"{edit_bone.name}\" has a length less than .001, so it was set to .001.") 
             edit_bone.length = .001
 
 
@@ -606,8 +809,14 @@ def import_material_images(ssbh_matl, dir):
             texture_name_set.add(attribute.data)
 
     for texture_name in texture_name_set:
-        image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
-        texture_name_to_image_dict[texture_name] = image
+        try:
+            image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
+            texture_name_to_image_dict[texture_name] = image
+        except Exception as e:
+            if "UnexpectedMipmapCount" in str(e):
+                operator.report({'WARNING'}, f'Failed to convert texture {texture_name}. Please convert manually to PNG.')
+            else:
+                operator.report({'ERROR'}, f'Failed to convert texture {texture_name}: {str(e)}')
 
     return texture_name_to_image_dict
 
@@ -884,6 +1093,9 @@ def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=N
     return fallback
 
 def read_nuhlpb_data(nuhlpb_path: Path, armature: bpy.types.Armature):
+    if armature is None:
+        raise ValueError("Armature is None, cannot read NUHLPB data.")
+    
     ssbh_hlpb = ssbh_data_py.hlpb_data.read_hlpb(str(nuhlpb_path))
     shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
     shbd.major_version = ssbh_hlpb.major_version

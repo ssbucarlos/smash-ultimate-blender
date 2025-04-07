@@ -301,6 +301,14 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
             transform_subtype = matches.groups()[1]
             if transform_subtype == 'location':
                 for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                    # Check if the bone exists in our dictionary before accessing it
+                    if bone_name not in bone_name_to_location_values:
+                        # Create entries for this bone if it doesn't exist (likely an IK bone)
+                        bone_name_to_location_values[bone_name] = [Location(0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        bone_name_to_rotation_values[bone_name] = [Rotation(1.0, 0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        bone_name_to_scale_values[bone_name] = [Scale(1.0, 1.0, 1.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        operator.report({'INFO'}, f"Added missing bone '{bone_name}' to animation export data")
+                    
                     if fcurve.array_index == 0:
                         bone_name_to_location_values[bone_name][index].x = fcurve.evaluate(frame)
                     elif fcurve.array_index == 1:
@@ -309,6 +317,14 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                         bone_name_to_location_values[bone_name][index].z = fcurve.evaluate(frame)
             elif transform_subtype == 'rotation_quaternion':
                 for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                    # Check if the bone exists in our dictionary before accessing it
+                    if bone_name not in bone_name_to_rotation_values:
+                        # Create entries for this bone if it doesn't exist (likely an IK bone)
+                        bone_name_to_location_values[bone_name] = [Location(0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        bone_name_to_rotation_values[bone_name] = [Rotation(1.0, 0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        bone_name_to_scale_values[bone_name] = [Scale(1.0, 1.0, 1.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        operator.report({'INFO'}, f"Added missing bone '{bone_name}' to animation export data")
+                        
                     if fcurve.array_index == 0:
                         bone_name_to_rotation_values[bone_name][index].w = fcurve.evaluate(frame)
                     elif fcurve.array_index == 1:
@@ -319,6 +335,14 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
                         bone_name_to_rotation_values[bone_name][index].z = fcurve.evaluate(frame)
             elif transform_subtype == 'scale':
                 for index, frame in enumerate(range(first_blender_frame, last_blender_frame+1)):
+                    # Check if the bone exists in our dictionary before accessing it
+                    if bone_name not in bone_name_to_scale_values:
+                        # Create entries for this bone if it doesn't exist (likely an IK bone)
+                        bone_name_to_location_values[bone_name] = [Location(0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        bone_name_to_rotation_values[bone_name] = [Rotation(1.0, 0.0, 0.0, 0.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        bone_name_to_scale_values[bone_name] = [Scale(1.0, 1.0, 1.0) for _ in range(first_blender_frame, last_blender_frame + 1)]
+                        operator.report({'INFO'}, f"Added missing bone '{bone_name}' to animation export data")
+                        
                     if fcurve.array_index == 0:
                         bone_name_to_scale_values[bone_name][index].x = fcurve.evaluate(frame)
                     elif fcurve.array_index == 1:

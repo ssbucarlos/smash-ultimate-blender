@@ -39,7 +39,67 @@ def register():
         type=sub_swing_data.SUB_PG_sub_swing_master_collection_props
     )
 
+class ModelImportFile(PropertyGroup):
+    name: StringProperty()
+
+class ModelImportItem(PropertyGroup):
+    name: StringProperty()
+    path: StringProperty()
+    files: CollectionProperty(type=ModelImportFile)
+
+class AnimationImportFile(PropertyGroup):
+    name: StringProperty()
+    path: StringProperty()
+
+bpy.utils.register_class(ModelImportFile)
+bpy.utils.register_class(ModelImportItem)
+bpy.utils.register_class(AnimationImportFile)
+
 class SubSceneProperties(PropertyGroup):
+    model_import_folder_path: StringProperty(
+        name="Model Import Folder Path",
+        description="Path to the folder containing the model files",
+        default=""
+    )
+    last_model_folder: StringProperty(
+        name="Last Model Folder",
+        description="Path to the last folder used for model import",
+        default=""
+    )
+    model_import_numdlb_file_name: StringProperty(
+        name="NUMDLB File Name",
+        description="Name of the NUMDLB file",
+        default=""
+    )
+    model_import_numshb_file_name: StringProperty(
+        name="NUMSHB File Name",
+        description="Name of the NUMSHB file",
+        default=""
+    )
+    model_import_nusktb_file_name: StringProperty(
+        name="NUSKTB File Name",
+        description="Name of the NUSKTB file",
+        default=""
+    )
+    model_import_numatb_file_name: StringProperty(
+        name="NUMATB File Name",
+        description="Name of the NUMATB file",
+        default=""
+    )
+    model_import_nuhlpb_file_name: StringProperty(
+        name="NUHLPB File Name",
+        description="Name of the NUHLPB file",
+        default=""
+    )
+    model_import_models: CollectionProperty(
+        name="Model Import Models",
+        description="List of found models",
+        type=ModelImportItem
+    )
+    model_import_models_index: IntProperty(
+        name="Model Import Models Index",
+        default=0
+    )
     model_export_arma: PointerProperty(
         name='Armature',
         description='Select the Armature',
@@ -65,36 +125,6 @@ class SubSceneProperties(PropertyGroup):
     vanilla_update_prc: StringProperty(
         name='Vanilla update.prc file path',
         description='The path to the vanilla update.prc file',
-        default='',
-    )
-    model_import_numatb_file_name: StringProperty(
-        name='.numatb file name',
-        description='The name of the .numatb file',
-        default='',
-    )
-    model_import_numshb_file_name: StringProperty(
-        name='.numshb file name',
-        description='The name of the .numshb file',
-        default='',
-    )
-    model_import_nusktb_file_name: StringProperty(
-        name='.nusktb file name',
-        description='The name of the .nusktb file',
-        default='',
-    )
-    model_import_numdlb_file_name: StringProperty(
-        name='.numdlb file name',
-        description='The name of the .numdlb file',
-        default='',
-    )
-    model_import_nuhlpb_file_name: StringProperty(
-        name='.nuhlpb file name',
-        description='The name the .nuhlpb file',
-        default='',
-    )
-    model_import_folder_path: StringProperty(
-        name='Model folder path',
-        description='The path to the model folder',
         default='',
     )
     smash_armature: PointerProperty(
@@ -162,10 +192,28 @@ class SubSceneProperties(PropertyGroup):
         subtype="DIR_PATH",
         default=""
     )
-
     last_anim_export_dir: StringProperty(
         subtype="DIR_PATH",
         default=""
+    )
+    last_imported_model_path: StringProperty(
+        name="Last Imported Model Path",
+        description="Path to the last imported model",
+        default=""
+    )
+    animation_import_folder_path: StringProperty(
+        name="Animation Import Folder Path",
+        description="Path to the folder containing animation files related to imported model",
+        default=""
+    )
+    animation_import_files: CollectionProperty(
+        name="Animation Import Files",
+        description="List of found animations for imported model",
+        type=AnimationImportFile
+    )
+    animation_import_files_index: IntProperty(
+        name="Animation Import Files Index",
+        default=0
     )
 
 

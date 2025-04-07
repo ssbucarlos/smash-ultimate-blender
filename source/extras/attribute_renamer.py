@@ -18,9 +18,15 @@ class SUB_PT_attribute_renamer(Panel):
         layout = self.layout
         layout.use_property_split = False
 
-        # TODO: Give a warning if no meshes are selected?
-        row = layout.row(align=True)
+        # Each button gets its own row for individual spacing
+        row = layout.row()
         row.operator("sub.rename_mesh_attributes")
+        
+        row = layout.row()
+        row.operator("sub.rename_material_to_mesh")
+        
+        row = layout.row()
+        row.operator("sub.rename_texture_to_material")
 
 
 class SUB_OP_rename_mesh_attributes(Operator):
@@ -74,3 +80,61 @@ class SUB_OP_rename_mesh_attributes(Operator):
                 self.report({'WARNING'}, message)
 
         return {'FINISHED'}
+
+
+class SUB_OP_rename_material_to_mesh(Operator):
+    bl_idname = 'sub.rename_material_to_mesh'
+    bl_label = 'Rename Materials to Mesh'
+    bl_description = 'Renames materials based on their mesh object names'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        for obj in bpy.data.objects:
+            if obj.type == 'MESH':
+                for i, slot in enumerate(obj.material_slots):
+                    if slot.material:
+                        new_name = f"{obj.name}_mat{i+1}" if len(obj.material_slots) > 1 else obj.name
+                        cleaned_name = self.clean_name(new_name)
+                        slot.material.name = cleaned_name
+        
+        self.report({'INFO'}, "Successfully renamed materials to match mesh names")
+        return {'FINISHED'}
+
+    def clean_name(self, name):
+        """Removes specific substrings from the material name."""
+        name = name.replace("Pikachu_", "").replace("_VIS_O_OBJShape", "")
+        return name
+
+
+class SUB_OP_rename_texture_to_material(Operator):
+    bl_idname = 'sub.rename_texture_to_material'
+    bl_label = 'Rename Textures to Material'
+    bl_description = 'Renames textures to match their material names'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        for mat in bpy.data.materials:
+            if mat.node_tree:
+                for node in mat.node_tree.nodes:
+                    if node.type == 'TEX_IMAGE' and node.image:
+                        node.image.name = mat.name
+        
+        self.report({'INFO'}, "Successfully renamed textures to match material names")
+        return {'FINISHED'}
+
+
+# Register
+classes = (
+    SUB_PT_attribute_renamer,
+    SUB_OP_rename_mesh_attributes,
+    SUB_OP_rename_material_to_mesh,
+    SUB_OP_rename_texture_to_material,
+)
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+def unregister():
+    for cls in classes:
+        bpy.utils.unregister_class(cls)

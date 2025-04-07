@@ -15,8 +15,11 @@ from . import blender_property_extensions
 
 classes = [
     source.model.import_model.SUB_PT_import_model,
+    source.model.import_model.SUB_OP_select_individual_model,
     source.model.import_model.SUB_OP_select_model_import_folder,
     source.model.import_model.SUB_OP_import_model,
+    source.model.import_model.SUB_UL_model_import_list,
+    source.model.import_model.SUB_OP_import_selected_model,
     source.model.export_model.SUB_PT_export_model,
     source.model.export_model.SUB_OP_model_exporter,
     source.model.export_model.SUB_OP_vanilla_nusktb_selector,
@@ -30,10 +33,23 @@ classes = [
     source.exo.magic_exo_skel.PairableBoneListItem,
     source.exo.magic_exo_skel.SUB_UL_BoneList,
     source.exo.magic_exo_skel.SUB_OP_make_combined_skeleton,
+    source.exo.exo_weight_transfer.SUB_OP_transfer_exo_weights,
+    source.exo.exo_bone_align.SUB_OP_align_exo_bones,
+    source.exo.exo_bone_cleanup.SUB_OP_cleanup_unused_exo_bones,
     source.anim.import_anim.SUB_PT_import_anim,
     source.anim.import_anim.SUB_OP_import_anim,
+    source.anim.import_anim.SUB_UL_animation_import_list,
+    source.anim.import_anim.SUB_OP_import_selected_anim,
+    source.anim.import_anim.SUB_OP_select_animation_folder,
     source.anim.export_anim.SUB_PT_export_anim,
     source.anim.export_anim.SUB_OP_anim_export,
+    source.extras.misc_panel.SUB_PT_animation_tools,
+    source.extras.misc_panel.SUB_PT_misc_utilities,
+    source.extras.apply_ik_animation.SUB_OP_apply_ik_animation_operator,
+    source.extras.ik_influence_toggle.SUB_OP_toggle_ik_influence,
+    source.extras.hip_animation_transfer.SUB_OP_transfer_hip_animation,
+    source.extras.idle_pose_library.SUB_OP_store_idle_pose,
+    source.extras.idle_pose_library.SUB_OP_apply_idle_pose,
     source.anim.anim_data.SUB_PT_sub_smush_anim_data_main,
     source.anim.anim_data.SUB_PT_sub_smush_anim_data_vis_tracks,
     source.anim.anim_data.SUB_PT_sub_smush_anim_data_mat_tracks,
@@ -84,11 +100,14 @@ classes = [
     source.model.material.reimport_materials.SUB_OP_reimport_materials,
     source.extras.attribute_renamer.SUB_OP_rename_mesh_attributes,
     source.extras.attribute_renamer.SUB_PT_attribute_renamer,
-    source.extras.misc_panel.SUB_PT_misc,
+    source.extras.attribute_renamer.SUB_OP_rename_material_to_mesh,
+    source.extras.attribute_renamer.SUB_OP_rename_texture_to_material,
     source.model.material.operators.SUB_OP_change_render_pass,
     source.model.material.operators.SUB_OP_create_sub_matl_data_from_shader_label,  
     source.model.material.operators.SUB_OP_apply_material_preset,  
     source.model.material.operators.SUB_OP_convert_blender_material,
+    source.model.material.operators.SUB_OP_convert_blender_material_no_textures,
+    source.model.material.operators.SUB_OP_set_texture_size,
     source.model.material.operators.SUB_OP_copy_from_ult_material,    
     source.model.material.ui.SUB_PT_matl_data_master,
     source.model.material.ui.SUB_PT_matl_data_bools,
@@ -125,6 +144,10 @@ classes = [
     source.swing.sub_swing_data.SUB_PG_blender_bone_data,
     source.swing.sub_swing_data.SUB_PG_sub_swing_data_linked_mesh,
     source.swing.sub_swing_data.SUB_PG_sub_swing_master_collection_props,
+    source.swing.sub_swing_data.SUB_OT_swing_bone_copy_values,
+    source.swing.sub_swing_data.SUB_OT_swing_bone_paste_values,
+    source.swing.sub_swing_data.SUB_OT_swing_bone_copy_collisions,
+    source.swing.sub_swing_data.SUB_OT_swing_bone_paste_collisions,
     source.swing.ui.SUB_PT_swing_io,
     source.swing.ui.SUB_PT_active_bone_swing_info,
     source.swing.ui.SUB_PT_active_mesh_swing_info,
@@ -177,6 +200,10 @@ classes = [
     source.swing.operators.SUB_OP_swing_export,
     source.updater.ui.SUB_PT_update_plugin,
     source.extras.eye_material_custom_vector_31_modal.SUB_OP_eye_material_custom_vector_31_modal,
+    source.extras.bone_removal.SUB_OT_remove_selected_bones,
+    source.extras.create_ik_arms.SUB_OP_create_arm_ik_operator,
+    source.extras.create_ik_armsandlegs.SUB_OP_create_ik_bones_operator,
+    source.extras.create_ik_legs.SUB_OP_create_foot_ik_operator,
     source.extras.set_linear_vertex_color.SUB_OP_LinearColorSet,
     blender_property_extensions.SubSceneProperties,
     source.model.material.shader_nodes.custom_sampler_node.SUB_CSN_ultimate_sampler,
@@ -186,8 +213,14 @@ classes = [
 
 def register():
     for cls in classes:
-        bpy.utils.register_class(cls)
+        try:
+            bpy.utils.register_class(cls)
+        except ValueError:
+            print(f"Class {cls.__name__} is already registered")
 
 def unregister():
     for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+        try:
+            bpy.utils.unregister_class(cls)
+        except ValueError:
+            print(f"Class {cls.__name__} is not registered")
