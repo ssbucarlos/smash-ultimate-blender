@@ -6,7 +6,7 @@ from mathutils import Vector
 class SUB_OP_align_exo_bones(Operator):
     bl_idname = "sub.align_exo_bones"
     bl_label = "Align Exo Bones"
-    bl_description = "Align Smash bones to their corresponding Exo bones in edit mode"
+    bl_description = "Align Smash bones to their corresponding Exo bones. IMPORTANT: You must be in EDIT MODE to use this function."
     bl_options = {'REGISTER', 'UNDO'}
     
     finger_chains_as_units: BoolProperty(

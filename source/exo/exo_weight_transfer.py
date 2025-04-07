@@ -5,7 +5,7 @@ from bpy.props import BoolProperty, FloatProperty
 class SUB_OP_transfer_exo_weights(Operator):
     bl_idname = "sub.transfer_exo_weights"
     bl_label = "Transfer Exo Weights"
-    bl_description = "Transfer weights from Exo helper bones to their controlling Smash bones"
+    bl_description = "Transfer weights from Exo helper bones to their controlling Smash bones. IMPORTANT: Select all meshes AND the armature before using."
     bl_options = {'REGISTER', 'UNDO'}
     
     delete_original_groups: BoolProperty(
