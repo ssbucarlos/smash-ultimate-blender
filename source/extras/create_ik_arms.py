@@ -2,12 +2,19 @@ import bpy
 import mathutils
 from mathutils import Vector
 import math
+from . import fk_to_ik
 
 class SUB_OP_create_arm_ik_operator(bpy.types.Operator):
     """Generate Arm and Hand IK Bones with Constraints and Coloring"""
     bl_idname = "sub.create_arm_ik"
     bl_label = "Create Arm IK Bones"
     bl_options = {'REGISTER', 'UNDO'}
+    
+    match_position: bpy.props.BoolProperty(
+        name="Match IK to FK Position",
+        description="Match IK bones position to FK bones after creation",
+        default=True
+    )
 
     @classmethod
     def poll(cls, context):
@@ -27,20 +34,27 @@ class SUB_OP_create_arm_ik_operator(bpy.types.Operator):
         length_factor = 10.0
         
         for i in side:
-            arm_pose = armature_object.pose.bones.get("Arm" + i)
-            hand_pose = armature_object.pose.bones.get("Hand" + i)
+            shoulder_bone = armature.edit_bones.get("Shoulder"+i)
+            arm_bone = armature.edit_bones.get("Arm"+i)
+            hand_bone = armature.edit_bones.get("Hand"+i)
             
-            if not arm_pose or not hand_pose:
+            if not arm_bone or not hand_bone:
                 continue
+                
+            # Add small offset to improve IK solving
+            if shoulder_bone:
+                shoulder_bone.tail += Vector((0.0, -0.05, 0.0))
+            arm_bone.head += Vector((0.0, -0.05, 0.0))
             
             arm_ik_bone = armature.edit_bones.new("ArmIK" + i)
-            arm_ik_bone.head = arm_pose.head.copy()
-            arm_ik_bone.tail = arm_pose.head.copy() + Vector((0, 1.5, 0))
+            # Position the pole target at a fixed distance behind
+            arm_ik_bone.head = Vector((arm_bone.head.x, 4.0, arm_bone.head.z))
+            arm_ik_bone.tail = Vector((arm_bone.head.x, 5.5, arm_bone.head.z))
             
             hand_ik_bone = armature.edit_bones.new("HandIK" + i)
-            hand_ik_bone.head = hand_pose.head.copy()
-            hand_ik_bone.tail = hand_pose.head.copy() + Vector((0, 0, 0.5 * length_factor))
-            hand_ik_bone.matrix = hand_pose.matrix.copy()
+            hand_ik_bone.head = arm_bone.tail
+            hand_ik_bone.tail = Vector((arm_bone.tail.x, arm_bone.tail.y, 0.5))
+            hand_ik_bone.roll = math.radians(0.0)  # Set explicit roll value
         
         bpy.ops.object.mode_set(mode="POSE")
         
@@ -83,7 +97,20 @@ class SUB_OP_create_arm_ik_operator(bpy.types.Operator):
                 ik_bone_collection.assign(bone)
         
         self.report({'INFO'}, "IK bones created, colored red, and assigned to 'IK Bones' collection.")
+        
+        # Prompt for position matching if requested
+        if self.match_position:
+            fk_to_ik.invoke_position_match_dialog()
+            
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self)
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "match_position")
 
 class SUB_PT_arm_ik_panel(bpy.types.Panel):
     """Creates a Panel in the 3D Viewport"""

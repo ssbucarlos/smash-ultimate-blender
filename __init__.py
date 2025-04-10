@@ -29,6 +29,10 @@ def register():
     from .source.model.material import shader_nodes
     from .source.blender_property_extensions import SubSceneProperties
 
+    # Register extras first to ensure the reset_animation operator is available
+    from .source import extras
+    extras.register()
+
     new_classes_to_register.register()
 
     blender_property_extensions.register()
@@ -71,6 +75,10 @@ def unregister():
         del bpy.types.Scene.sub_scene_properties
 
     new_classes_to_register.unregister()
+    
+    # Unregister extras module
+    from .source import extras
+    extras.unregister()
 
     print('Unloaded Smash Ultimate Blender Tools!')
             

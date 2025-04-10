@@ -1,12 +1,20 @@
 import bpy
 import mathutils
 from mathutils import Vector
+import math
+from . import fk_to_ik
 
 class SUB_OP_create_foot_ik_operator(bpy.types.Operator):
     """Generate Foot and Knee IK Bones with Constraints"""
     bl_idname = "sub.create_foot_ik"
     bl_label = "Create Foot IK Bones"
     bl_options = {'REGISTER', 'UNDO'}
+    
+    match_position: bpy.props.BoolProperty(
+        name="Match IK to FK Position",
+        description="Match IK bones position to FK bones after creation",
+        default=True
+    )
 
     def execute(self, context):
         armature_object = context.object
@@ -21,20 +29,28 @@ class SUB_OP_create_foot_ik_operator(bpy.types.Operator):
         side = ("L", "R")
         length_factor = 10.0  # Increased factor to make foot IK bones much longer
 
+        # Add small offsets to help with IK alignment
         for i in side:
-            knee_pose = armature_object.pose.bones.get("Knee"+i)
-            foot_pose = armature_object.pose.bones.get("Foot"+i)
-            if not knee_pose or not foot_pose:
+            leg_bone = armature.edit_bones.get("Leg"+i)
+            knee_bone = armature.edit_bones.get("Knee"+i)
+            foot_bone = armature.edit_bones.get("Foot"+i)
+            
+            if not knee_bone or not foot_bone or not leg_bone:
                 continue
+                
+            # Add small offset to improve IK solving
+            leg_bone.tail += Vector((0.0, -0.05, 0.0))
+            knee_bone.head += Vector((0.0, -0.05, 0.0))
 
             knee_ik_bone = armature.edit_bones.new("KneeIK"+i)
-            knee_ik_bone.head = knee_pose.head.copy()
-            knee_ik_bone.tail = knee_pose.head.copy() + Vector((0, -1.5, 0))
+            # Position the pole target at a fixed distance in front
+            knee_ik_bone.head = Vector((knee_bone.head.x, -4.0, knee_bone.head.z))
+            knee_ik_bone.tail = Vector((knee_bone.head.x, -5.5, knee_bone.head.z))
 
             foot_ik_bone = armature.edit_bones.new("FootIK"+i)
-            foot_ik_bone.head = foot_pose.head.copy()
-            foot_ik_bone.tail = foot_pose.head.copy() + Vector((0, 0, -0.5 * length_factor))
-            foot_ik_bone.matrix = foot_pose.matrix.copy()
+            foot_ik_bone.head = knee_bone.tail
+            foot_ik_bone.tail = Vector((knee_bone.tail.x, knee_bone.tail.y, -2.5))
+            foot_ik_bone.roll = math.radians(90.0)  # Set explicit roll value
 
         bpy.ops.object.mode_set(mode="POSE")
 
@@ -73,7 +89,20 @@ class SUB_OP_create_foot_ik_operator(bpy.types.Operator):
                 ik_bone_collection.assign(bone)
 
         self.report({'INFO'}, "Foot and knee IK bones successfully created and assigned.")
+        
+        # Prompt for position matching if requested
+        if self.match_position:
+            fk_to_ik.invoke_position_match_dialog()
+            
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self)
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "match_position")
 
 
 class SUB_PT_foot_ik_panel(bpy.types.Panel):

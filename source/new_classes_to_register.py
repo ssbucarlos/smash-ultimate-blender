@@ -50,6 +50,8 @@ classes = [
     source.extras.hip_animation_transfer.SUB_OP_transfer_hip_animation,
     source.extras.idle_pose_library.SUB_OP_store_idle_pose,
     source.extras.idle_pose_library.SUB_OP_apply_idle_pose,
+    source.extras.limit_weights.SUB_OP_limit_weights,
+    source.extras.fk_to_ik.SUB_OP_fk_to_ik_transfer,
     source.anim.anim_data.SUB_PT_sub_smush_anim_data_main,
     source.anim.anim_data.SUB_PT_sub_smush_anim_data_vis_tracks,
     source.anim.anim_data.SUB_PT_sub_smush_anim_data_mat_tracks,

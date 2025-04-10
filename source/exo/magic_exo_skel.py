@@ -370,7 +370,11 @@ class SUB_PT_ultimate_exo_skel(Panel):
             # Smart un-exo model section - Always visible
             layout.separator()
             box = layout.box()
-            box.label(text="Smart un-exo model")
+            box.label(text="Smart un-exo model (for movesets)")
+            
+            # Add explanatory text
+            row = box.row(align=True)
+            row.label(text="This process is primarily meant for movesets, not skins")
             
             # Cleanup Unused Exo Bones button (at the top)
             row = box.row(align=True)
@@ -406,7 +410,11 @@ class SUB_PT_ultimate_exo_skel(Panel):
         # Smart un-exo model section is duplicated here for when a bone list exists
         layout.separator()
         box = layout.box()
-        box.label(text="Smart un-exo model")
+        box.label(text="Smart un-exo model (for movesets)")
+        
+        # Add explanatory text
+        row = box.row(align=True)
+        row.label(text="This process is primarily meant for movesets, not skins")
         
         # Cleanup Unused Exo Bones button (at the top)
         row = box.row(align=True)

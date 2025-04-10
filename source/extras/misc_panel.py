@@ -42,10 +42,23 @@ class SUB_PT_animation_tools(Panel):
         # Add button for IK influence toggle
         layout.operator("sub.toggle_ik_influence", text="Toggle IK Influence")
         
+        # Add FK to IK transfer button (disabled if not in pose mode)
+        row = layout.row()
+        if context.mode == 'POSE':
+            row.operator("sub.fk_to_ik_transfer", text="Position IK to Match FK Pose")
+        else:
+            row.enabled = False
+            row.operator("sub.fk_to_ik_transfer", text="Position IK to Match FK Pose (Pose Mode Only)")
+        
         # Add button for hip animation transfer
         layout.separator()
         row = layout.row(align=True)
         row.operator("sub.transfer_hip_animation", text="Transfer Hip Animation to Trans")
+        
+        # Add Reset Bone Locations button - just a button, not a section
+        layout.separator()
+        row = layout.row(align=True)
+        row.operator("sub.reset_bone_locations", text="Reset Bone Locations")
         
         # Add idle pose library buttons
         layout.separator()
@@ -91,10 +104,33 @@ class SUB_PT_misc_utilities(Panel):
             row.enabled = False
             row.operator("sub.remove_selected_bones", text="Remove Bones (Edit Mode Only)")
         
-        # The three Exo-related buttons have been removed:
-        # - Transfer Exo Weights
-        # - Align Smash Bones to Exo Bones
-        # - Cleanup Unused Exo Bones
+        # Add weight limiting operator
+        layout.separator()
+        box = layout.box()
+        box.label(text="Weight Tools")
+        row = box.row(align=True)
+        row.operator("sub.limit_weights", text="Limit Weights to 4")
+        
+        # Add renaming tools operators (only available in Object mode)
+        layout.separator()
+        box = layout.box()
+        box.label(text="Renaming Tools")
+        
+        # Rename Materials to Mesh button
+        row = box.row(align=True)
+        if context.mode == 'OBJECT':
+            row.operator("sub.rename_materials_to_mesh", text="Rename Materials to Mesh")
+        else:
+            row.enabled = False
+            row.operator("sub.rename_materials_to_mesh", text="Rename Materials to Mesh (Object Mode Only)")
+        
+        # Rename Textures to Material button
+        row = box.row(align=True)
+        if context.mode == 'OBJECT':
+            row.operator("sub.rename_textures_to_material", text="Rename Textures to Material")
+        else:
+            row.enabled = False
+            row.operator("sub.rename_textures_to_material", text="Rename Textures to Material (Object Mode Only)")
         
     
         
