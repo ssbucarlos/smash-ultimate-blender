@@ -45,14 +45,14 @@ class SUB_OP_apply_ik_animation_operator(bpy.types.Operator):
                     while bone.constraints:
                         bone.constraints.remove(bone.constraints[0])
         
-        # Now delete the IK bones
-        bpy.ops.object.mode_set(mode='EDIT')
-        
-        # Get a list of IK bones to delete
+        # Get a list of IK bones to delete (store them before switching to edit mode)
         ik_bones_to_delete = []
-        for bone in armature_object.data.edit_bones:
+        for bone in armature_object.pose.bones:
             if "IK" in bone.name:
                 ik_bones_to_delete.append(bone.name)
+        
+        # Now delete the IK bones
+        bpy.ops.object.mode_set(mode='EDIT')
         
         # Delete all IK bones
         for bone_name in ik_bones_to_delete:
@@ -62,6 +62,26 @@ class SUB_OP_apply_ik_animation_operator(bpy.types.Operator):
         
         # Return to object mode
         bpy.ops.object.mode_set(mode='OBJECT')
+        
+        # Clean up keyframes for deleted bones
+        if armature_object.animation_data and armature_object.animation_data.action:
+            action = armature_object.animation_data.action
+            fcurves_to_remove = []
+            
+            # Find all fcurves related to the deleted IK bones
+            for i, fcurve in enumerate(action.fcurves):
+                for bone_name in ik_bones_to_delete:
+                    # Check if fcurve data_path contains bone name in the format pose.bones["BoneName"]
+                    if f'pose.bones["{bone_name}"]' in fcurve.data_path:
+                        fcurves_to_remove.append(i)
+                        break
+            
+            # Remove the identified fcurves in reverse order to avoid index shifting issues
+            for i in sorted(fcurves_to_remove, reverse=True):
+                action.fcurves.remove(action.fcurves[i])
+            
+            if fcurves_to_remove:
+                self.report({'INFO'}, f"Removed {len(fcurves_to_remove)} keyframe channels from deleted IK bones.")
         
         self.report({'INFO'}, "Animation baked to original bones and IK bones removed.")
         return {'FINISHED'}
