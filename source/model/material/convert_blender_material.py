@@ -398,74 +398,103 @@ def convert_from_nodes(operator: bpy.types.Operator, material: bpy.types.Materia
             else:
                 create_sub_matl_data_from_shader_label(material, "SFX_PBS_0100000008008269_opaque") # PBR, 1 Layer
    
-def convert_blender_material(operator: bpy.types.Operator, material: bpy.types.Material, bake_size: int = 1024):
+def convert_blender_material(operator: bpy.types.Operator, material: bpy.types.Material, bake_size=1024):
+    """
+    Convert a Blender material to Smash Ultimate format with PRM and normal textures
     
-    # Setup default textures if not already made
-    create_default_textures()
+    Args:
+        operator: The operator calling this function (for reporting)
+        material: The Blender material to convert
+        bake_size: The size of textures to bake
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    original_engine = bpy.context.scene.render.engine
     
     # Check if Cycles render engine is available and active
     try:
         cycles_available = 'CYCLES' in [getattr(render, 'bl_idname', '') for render in bpy.types.RenderEngine.__subclasses__()]
         if not cycles_available:
-            operator.report({'ERROR'}, "Cycles render engine is required for texture baking but is not available. Please enable the Cycles addon.")
-            return
-    except Exception as e:
-        operator.report({'ERROR'}, f"Error checking render engines: {str(e)}. Cycles is required for texture baking.")
-        return
-    
-    # Store original render engine to restore later
-    original_engine = bpy.context.scene.render.engine
-    
-    # Extract data from the original material before we modify it
-    prm_img = None
-    normal_map_img = None
-    prm_path = None
-    
-    try:
-        operator.report({'INFO'}, f"Processing material: {material.name} with texture size: {bake_size}x{bake_size}")
+            operator.report({'WARNING'}, "Cycles render engine is required for baking textures but is not available")
+            # We'll still try to convert but without baking
         
-        # Find the Principled BSDF node if it exists
-        principled_node = None
+        # Look for existing textures
+        normal_map_img = None
         if material.use_nodes and material.node_tree:
             for node in material.node_tree.nodes:
-                if node.type == 'BSDF_PRINCIPLED':
-                    principled_node = node
-                    break
+                if node.type == 'NORMAL_MAP':
+                    if node.inputs['Color'].links:
+                        tex_node = node.inputs['Color'].links[0].from_node
+                        if tex_node.type == 'TEX_IMAGE' and tex_node.image:
+                            normal_map_img = tex_node.image
+                            break
+                elif node.type == 'TEX_IMAGE' and node.image:
+                    # Check if the image name contains common normal map identifiers
+                    if any(x in node.image.name.lower() for x in ['normal', 'nor', '_n.', '_n_']):
+                        normal_map_img = node.image
+                        break
         
-        if principled_node:
-            operator.report({'INFO'}, f"Found Principled BSDF node in material")
-            
-            # Extract existing normal map if present
-            normal_input = principled_node.inputs["Normal"]
-            if normal_input.is_linked:
-                from_node = normal_input.links[0].from_node
-                # Normal maps typically go through a Normal Map node before the Principled BSDF
-                if from_node.type == 'NORMAL_MAP' and from_node.inputs["Color"].is_linked:
-                    tex_node = from_node.inputs["Color"].links[0].from_node
-                    if tex_node.type == 'TEX_IMAGE' and tex_node.image:
-                        normal_map_img = tex_node.image
-                        operator.report({'INFO'}, f"Found existing normal map: {normal_map_img.name}")
-            
-            # Set render engine to Cycles for baking
-            bpy.context.scene.render.engine = 'CYCLES'
-            
-            # Create a temporary directory to save the PRM texture
-            temp_dir = tempfile.gettempdir()
-            material_name = material.name
-            
-            # Create the PRM texture only
-            prm_path = os.path.join(temp_dir, f"{material_name}_PRM.png")
+        # Create the PRM texture
+        prm_path = os.path.join(tempfile.gettempdir(), f"{material.name}_PRM.png")
+        if cycles_available:
             try:
-                operator.report({'INFO'}, f"Creating PRM texture at: {prm_path}")
-                prm_path = create_prm_from_material(material, prm_path, bake_size=bake_size)
-                if not os.path.exists(prm_path) or os.path.getsize(prm_path) < 1000:  # Check if file exists and is not too small
-                    operator.report({'ERROR'}, f"PRM texture creation failed - file is missing or too small. Check Cycles settings and GPU compatibility.")
+                operator.report({'INFO'}, f"Creating PRM texture for material '{material.name}'")
+                # Use the new direct image creation approach
+                prm_img = create_prm_from_material(material, None, bake_size=bake_size)
+                
+                # No path means it returned the image object directly
+                if isinstance(prm_img, bpy.types.Image):
+                    operator.report({'INFO'}, f"Successfully created PRM texture as internal Blender image")
+                else:
+                    operator.report({'INFO'}, f"Successfully created PRM texture at: {prm_img}")
             except Exception as e:
                 operator.report({'WARNING'}, f"Failed to create PRM texture: {str(e)}")
+                # Try to create a default PRM texture
+                try:
+                    # Create a default PRM texture with reasonable values
+                    operator.report({'INFO'}, "Creating default PRM texture")
+                    prm_img = bpy.data.images.new(f"{material.name}_PRM", width=bake_size, height=bake_size, alpha=True)
+                    prm_img.colorspace_settings.name = 'Non-Color'
+                    
+                    # Fill with default values
+                    # R: Metalness (0)
+                    # G: Roughness (0.5)
+                    # B: AO (1.0)
+                    # A: Specular (0.16)
+                    pixels = [0.0, 0.5, 1.0, 0.16] * (bake_size * bake_size)
+                    prm_img.pixels = pixels
+                    
+                    # Pack the image
+                    if not prm_img.packed_file:
+                        prm_img.pack()
+                except Exception as e2:
+                    operator.report({'ERROR'}, f"Failed to create default PRM texture: {str(e2)}")
+                    prm_img = None
         else:
-            operator.report({'WARNING'}, f"No Principled BSDF node found in material, skipping texture extraction")
+            # If Cycles is not available, create a simple PRM texture with default values
+            operator.report({'INFO'}, "Creating simple PRM texture (Cycles not available)")
+            try:
+                prm_img = bpy.data.images.new(f"{material.name}_PRM", width=bake_size, height=bake_size, alpha=True)
+                prm_img.colorspace_settings.name = 'Non-Color'
+                
+                # Fill with default values
+                # R: Metalness (0)
+                # G: Roughness (0.5)
+                # B: AO (1.0)
+                # A: Specular (0.16)
+                pixels = [0.0, 0.5, 1.0, 0.16] * (bake_size * bake_size)
+                prm_img.pixels = pixels
+                
+                # Pack the image
+                if not prm_img.packed_file:
+                    prm_img.pack()
+            except Exception as e:
+                operator.report({'ERROR'}, f"Failed to create simple PRM texture: {str(e)}")
+                prm_img = None
     except Exception as e:
         operator.report({'WARNING'}, f"Error during material processing: {str(e)}")
+        prm_img = None
     finally:
         # Restore original render engine
         bpy.context.scene.render.engine = original_engine
@@ -492,22 +521,41 @@ def convert_blender_material(operator: bpy.types.Operator, material: bpy.types.M
                 break
     else:
         # Assign a default normal map
-        operator.report({'INFO'}, "No normal map found, using default normal map")
-        default_normal = bpy.data.images.get('/common/shader/sfxpbs/default_normal') or bpy.data.images.get('/common/shader/sfxpbs/fighter/default_normal')
-        if default_normal:
+        try:
+            operator.report({'INFO'}, "Creating default normal map")
+            # Create a flat normal map (neutral blue)
+            nor_img = bpy.data.images.new(f"{material.name}_NOR", width=bake_size, height=bake_size, alpha=True)
+            nor_img.colorspace_settings.name = 'Non-Color'
+            
+            # Fill with default normal values (0.5, 0.5, 1.0, 1.0)
+            pixels = [0.5, 0.5, 1.0, 1.0] * (bake_size * bake_size)
+            nor_img.pixels = pixels
+            
+            # Pack the image
+            if not nor_img.packed_file:
+                nor_img.pack()
+                
+            # Assign to material
             sub_matl_data = material.sub_matl_data
             for texture in sub_matl_data.textures:
                 if texture.param_id_name == "Texture4":  # NOR texture
-                    texture.image = default_normal
+                    texture.image = nor_img
                     break
-            
-    # Assign the PRM texture if created
-    if prm_path and os.path.exists(prm_path):
-        prm_img = load_and_assign_texture(material, prm_path, "Texture6")
-        if prm_img:
-            operator.report({'INFO'}, f"Assigned PRM texture: {prm_path}")
-        else:
-            operator.report({'WARNING'}, f"Failed to assign PRM texture: {prm_path}")
+        except Exception as e:
+            operator.report({'WARNING'}, f"Failed to create default normal map: {str(e)}")
+    
+    # Assign the PRM texture if we created one
+    if prm_img:
+        operator.report({'INFO'}, f"Assigning PRM texture: {prm_img.name}")
+        
+        # Find the right texture parameter and assign the image
+        sub_matl_data = material.sub_matl_data
+        for texture in sub_matl_data.textures:
+            if texture.param_id_name == "Texture6":  # PRM texture
+                texture.image = prm_img
+                break
+    
+    return False
 
 def has_principled_bsdf_node(material):
     """Check if the material has a Principled BSDF node"""
