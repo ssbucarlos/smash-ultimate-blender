@@ -227,6 +227,7 @@ class SUB_PT_swing_bone_chains(Panel, SwingPropertyPanel):
     def draw(self, context):
         layout = self.layout
         sub_swing_data: SUB_PG_sub_swing_data = context.object.data.sub_swing_data
+
         col = layout.column()
         row = col.row()
         split = row.split(factor=.33)
@@ -279,7 +280,7 @@ class SUB_PT_swing_bone_chains(Panel, SwingPropertyPanel):
                     )
                     c.enabled = True
 
-        # Button Row, composed of 3 Sub Rows algined with the above columns
+        # Button Row, composed of 3 Sub Rows aligned with the above columns
         row = layout.row()
         # Sub Row 1
         split = row.split(factor=.33)
@@ -294,7 +295,24 @@ class SUB_PT_swing_bone_chains(Panel, SwingPropertyPanel):
         split = split.split()
         sr = split.row(align=True)
         sr.menu('SUB_MT_swing_bone_collision_add', text='+')
-        sr.operator(SUB_OP_swing_bone_collision_remove.bl_idname, text='-')  
+        sr.operator(SUB_OP_swing_bone_collision_remove.bl_idname, text='-')
+
+        # Add copy/paste buttons after the list section but before bone info
+        if len(sub_swing_data.swing_bone_chains) > 0 and len(sub_swing_data.swing_bone_chains[sub_swing_data.active_swing_bone_chain_index].swing_bones) > 0:
+            # Add separators above and below the buttons with bigger spacing
+            layout.separator(factor=1.2)
+            
+            # Values copy/paste row
+            row = layout.row(align=True)
+            row.operator('sub.swing_bone_copy_values', icon='COPYDOWN', text="Copy Values")
+            row.operator('sub.swing_bone_paste_values', icon='PASTEDOWN', text="Paste Values")
+            
+            # Collisions copy/paste row
+            row = layout.row(align=True)
+            row.operator('sub.swing_bone_copy_collisions', icon='COPYDOWN', text="Copy Collisions")
+            row.operator('sub.swing_bone_paste_collisions', icon='PASTEDOWN', text="Paste Collisions")
+            
+            layout.separator(factor=1.2)
 
         # Swing Bone Chain & Bone Info Area
         if len(sub_swing_data.swing_bone_chains) == 0:
@@ -329,6 +347,7 @@ class SUB_PT_swing_bone_chains(Panel, SwingPropertyPanel):
         c.prop(active_swing_bone, 'fall_speed_scale')
         c.prop(active_swing_bone, 'ground_hit')
         c.prop(active_swing_bone, 'wind_affect')
+
         return
 
 class SUB_UL_swing_bone_chains(UIList):

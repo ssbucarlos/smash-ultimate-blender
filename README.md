@@ -17,6 +17,40 @@ Blender Plugin that contains utilities for Smash Ultimate models and animations.
    - Drivers for previewing `Visibilty` and `Material` data in animation files.
    - UI Panels for easily editing `Visiblity` and `Material` data in animation files.
    - Modal Operator for intuitively editing Characters eyes in animations.
+4. Advanced Material Conversion System
+   - One-click conversion from Blender's Principled BSDF materials to Smash Ultimate materials
+   - Smart material detection for emission, subsurface scattering, and standard PBR materials
+   - Two workflow options:
+     - Full workflow: Automatically generates PRM textures with customizable resolution (64-8192px)
+     - Simple workflow: Converts materials without generating textures (faster)
+   - Smart normal map handling - uses existing normal maps when available
+   - Ambient Occlusion support through dedicated AO nodes
+   - Resource-aware processing with appropriate warnings for texture generation
+   - Auto-detection of material features (diffuse, emission, SSS) and UV/vertex color setups
+   - Compatible with Cycles render engine for baking advanced material properties
+   - Preserves original material configurations where possible
+5. Comprehensive IK & Animation Toolset
+   - Complete IK rigging system for characters:
+     - Full body IK setup with `create_ik_armsandlegs.py`
+     - Individual limb IK controls (arms, legs)
+     - IK influence toggle for animation refinement
+   - Animation workflow enhancements:
+     - Pose library for rapid animation development
+     - Hip animation transfer between character rigs
+     - IK animation application system
+   - Advanced bone tools:
+     - Bone cleanup utilities
+     - Enhanced weight transfer for character modifications
+     - Bone alignment tools for precise skeletal setup
+   - Naming utilities for managing materials, textures, and attributes
+6. Advanced Exo-Skeleton Management
+   - Complete "Un-Exo" functionality to remove exo skeletons from models
+   - Exo bone cleanup system for removing unnecessary bones
+   - Enhanced bone alignment tools for precise skeleton adjustments
+   - Weight transfer optimization for skeleton modifications
+   - Comprehensive workflow for converting between standard and exo rigs
+   - Improved bone hierarchy management for complex character setups
+   - Full support for both creating and removing exo skeletons as needed
 
 ## Installation
 Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for tutorials and usage instructions. 

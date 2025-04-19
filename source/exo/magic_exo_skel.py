@@ -331,16 +331,21 @@ class SUB_UL_BoneList(UIList):
 class SUB_PT_ultimate_exo_skel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_context = "objectmode"
     bl_category = 'Ultimate'
     bl_label = 'Magic Exo Skel Maker'
     bl_options = {'DEFAULT_CLOSED'}
+    
+    @classmethod
+    def poll(cls, context):
+        # Allow the panel in both object mode and edit mode
+        return context.mode in ['OBJECT', 'EDIT_ARMATURE']
     
     def draw(self, context):
         ssp: SubSceneProperties = context.scene.sub_scene_properties
         layout = self.layout
         layout.use_property_split = False
         
+        # Original panel content - Select armatures section
         row = layout.row(align=True)
         row.label(text='Select the armatures')
         
@@ -357,9 +362,32 @@ class SUB_PT_ultimate_exo_skel(Panel):
             row = layout.row(align=True)
             row.operator(SUB_OP_rename_other_bones.bl_idname)
         
+        # Bone list section
         if not ssp.bone_list:
             row = layout.row(align=True)
             row.operator(SUB_OP_build_bone_list.bl_idname)
+            
+            # Smart un-exo model section - Always visible
+            layout.separator()
+            box = layout.box()
+            box.label(text="Smart un-exo model (for movesets)")
+            
+            # Add explanatory text
+            row = box.row(align=True)
+            row.label(text="This process is primarily meant for movesets, not skins")
+            
+            # Cleanup Unused Exo Bones button (at the top)
+            row = box.row(align=True)
+            row.operator("sub.cleanup_unused_exo_bones", text="Cleanup Unused Exo Bones")
+            
+            # Transfer Exo Weights button (moved up)
+            row = box.row(align=True)
+            row.operator("sub.transfer_exo_weights", text="Transfer Exo Weights")
+            
+            # Align Smash Bones to Exo Bones button (moved down)
+            row = box.row(align=True)
+            row.operator("sub.align_exo_bones", text="Align Smash Bones to Exo Bones")
+            
             return
         
         row = layout.row(align=True)
@@ -378,3 +406,24 @@ class SUB_PT_ultimate_exo_skel(Panel):
     
         row = layout.row(align=True)
         row.operator(SUB_OP_make_combined_skeleton.bl_idname, text='Make New Combined Skeleton')
+        
+        # Smart un-exo model section is duplicated here for when a bone list exists
+        layout.separator()
+        box = layout.box()
+        box.label(text="Smart un-exo model (for movesets)")
+        
+        # Add explanatory text
+        row = box.row(align=True)
+        row.label(text="This process is primarily meant for movesets, not skins")
+        
+        # Cleanup Unused Exo Bones button (at the top)
+        row = box.row(align=True)
+        row.operator("sub.cleanup_unused_exo_bones", text="Cleanup Unused Exo Bones")
+        
+        # Transfer Exo Weights button (moved up)
+        row = box.row(align=True)
+        row.operator("sub.transfer_exo_weights", text="Transfer Exo Weights")
+        
+        # Align Smash Bones to Exo Bones button (moved down)
+        row = box.row(align=True)
+        row.operator("sub.align_exo_bones", text="Align Smash Bones to Exo Bones")

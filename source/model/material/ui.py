@@ -1,6 +1,6 @@
 from bpy.types import Panel, Menu
 
-from .operators import SUB_OP_convert_blender_material, SUB_OP_change_render_pass, SUB_OP_create_sub_matl_data_from_shader_label
+from .operators import SUB_OP_convert_blender_material, SUB_OP_change_render_pass, SUB_OP_create_sub_matl_data_from_shader_label, SUB_OP_convert_blender_material_no_textures
 from .sub_matl_data import SUB_PG_sub_matl_data
  
 class MaterialPanel(Panel):
@@ -51,8 +51,13 @@ class SUB_PT_matl_data_master(MaterialPanel):
             row = layout.row()
             row.label(text="You can alternatively choose to convert the existing material to an ultimate material.")
             row = layout.row()
+            row.operator_context = 'INVOKE_DEFAULT'
             row.operator(SUB_OP_convert_blender_material.bl_idname)
             row.scale_y = 2
+            row.scale_x = 2
+            row = layout.row()
+            row.operator(SUB_OP_convert_blender_material_no_textures.bl_idname)
+            row.scale_y = 1.5
             row.scale_x = 2
             return
         box = layout.box()

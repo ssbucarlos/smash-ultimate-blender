@@ -14,3 +14,10 @@ from . import operators
 from . import reimport_materials
 from . import sub_matl_data
 from . import ui    
+
+def register():
+    texture.register()
+    
+def unregister():
+    texture.unregister()
+    

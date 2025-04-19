@@ -7,6 +7,8 @@ import time
 import numpy as np
 import cProfile
 import pstats
+import os
+from pathlib import Path
 
 from ...dependencies import ssbh_data_py
 from bpy_extras.io_utils import ImportHelper
@@ -14,7 +16,6 @@ from bpy.props import IntProperty, StringProperty, BoolProperty
 from bpy.types import Operator, Panel
 from mathutils import Matrix, Quaternion, Vector
 from ..model.import_model import get_blender_transform
-from pathlib import Path
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -22,6 +23,101 @@ if TYPE_CHECKING:
     from bpy.types import ShaderNodeGroup, Material
     from ..model.material.sub_matl_data import SUB_PG_sub_matl_data
     from ..blender_property_extensions import SubSceneProperties
+
+class SUB_UL_animation_import_list(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            layout.label(text=item.name)
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text=item.name)
+
+class SUB_OP_import_selected_anim(bpy.types.Operator):
+    bl_idname = 'sub.import_selected_anim'
+    bl_label = 'Import Selected Animation'
+    bl_options = {'UNDO'}
+
+    include_transform_track: BoolProperty(
+        name='Include Transform',
+        description='Include Transform Track',
+        default=True,
+    )
+    include_material_track: BoolProperty(
+        name='Include Material',
+        description='Include Material Track',
+        default=True,
+    )
+    include_visibility_track: BoolProperty(
+        name='Include Visibility',
+        description='Include Visibility Track',
+        default=True,
+    )
+    first_blender_frame: IntProperty(
+        name='Start Frame',
+        description='What frame to start importing the track on',
+        default=1,
+    )
+    use_debug_timer: BoolProperty(
+        name='Debug timing stats',
+        description='Print advance import timing info to the console',
+        default=False,
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj: bpy.types.Object = context.object
+        if obj is None:
+            return False
+        elif obj.type != 'ARMATURE' and obj.type != 'CAMERA':
+            return False
+        
+        ssp = context.scene.sub_scene_properties
+        return len(ssp.animation_import_files) > 0 and ssp.animation_import_files_index < len(ssp.animation_import_files)
+    
+    def invoke(self, context, event):
+        self.first_blender_frame = context.scene.frame_start
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        ssp = context.scene.sub_scene_properties
+        selected_anim = ssp.animation_import_files[ssp.animation_import_files_index]
+        
+        if not Path(selected_anim.path).exists():
+            self.report({"ERROR"}, f"Animation file not found: {selected_anim.path}")
+            return {'CANCELLED'}
+            
+        ssp.last_anim_import_dir = str(Path(selected_anim.path).parent)
+        obj: bpy.types.Object = context.object
+        
+        with cProfile.Profile() as pr:
+            use_keyframe_insert_auto = bpy.context.scene.tool_settings.use_keyframe_insert_auto
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = False
+            if obj.type == 'ARMATURE':
+                # Theres a bpy.ops in import_model_anim that requires being in pose mode
+                # The mode setting stuff should be removed when the bpy.ops is no longer required
+                old_mode = context.mode
+                bpy.ops.object.mode_set(mode='POSE', toggle=False)
+                import_model_anim(context, selected_anim.path,
+                                        self.include_transform_track, self.include_material_track,
+                                        self.include_visibility_track, self.first_blender_frame)
+                bpy.ops.object.mode_set(mode=old_mode, toggle=False)
+            else:
+                import_camera_anim(self, context, selected_anim.path, self.first_blender_frame)
+            bpy.context.scene.tool_settings.use_keyframe_insert_auto = use_keyframe_insert_auto
+        if self.use_debug_timer:
+            stats = pstats.Stats(pr)
+            stats.sort_stats(pstats.SortKey.TIME)
+            stats.print_stats()
+            
+        return {'FINISHED'}
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "include_transform_track")
+        layout.prop(self, "include_material_track")
+        layout.prop(self, "include_visibility_track")
+        layout.prop(self, "first_blender_frame")
+        layout.prop(self, "use_debug_timer")
 
 class SUB_PT_import_anim(Panel):
     bl_space_type = 'VIEW_3D'
@@ -40,15 +136,38 @@ class SUB_PT_import_anim(Panel):
         layout = self.layout
         layout.use_property_split = False
         obj: bpy.types.Object = context.active_object
+        ssp = context.scene.sub_scene_properties
+        
+        # Show browse button
         row = layout.row()
         if obj is None:
             row.label(text="Click on an Armature or Camera.")
         elif obj.select_get() is False:
             row.label(text="Click on an Armature or Camera.")
         elif obj.type == 'ARMATURE' or obj.type == 'CAMERA':
-            row.operator(SUB_OP_import_anim.bl_idname, icon='IMPORT', text='Import .NUANMB')
+            row.operator(SUB_OP_import_anim.bl_idname, icon='IMPORT', text='Browse .NUANMB')
         else:
             row.label(text=f'The selected {obj.type.lower()} is not an armature or a camera.')
+            
+        # Show animations from imported model
+        if obj and obj.select_get() and (obj.type == 'ARMATURE' or obj.type == 'CAMERA'):
+            # Add button to browse for an animation folder
+            row = layout.row()
+            row.operator(SUB_OP_select_animation_folder.bl_idname, icon='ZOOM_ALL', text='Browse Animation Folder')
+            
+            if ssp.animation_import_folder_path and len(ssp.animation_import_files) > 0:
+                box = layout.box()
+                row = box.row()
+                row.label(text="Related Animations:")
+                if ssp.animation_import_folder_path:
+                    row = box.row()
+                    row.label(text=f"Folder: {ssp.animation_import_folder_path}")
+                
+                row = box.row()
+                row.template_list("SUB_UL_animation_import_list", "", ssp, "animation_import_files", ssp, "animation_import_files_index")
+                
+                row = box.row()
+                row.operator(SUB_OP_import_selected_anim.bl_idname, text="Import Selected Animation")
 
 class SUB_OP_import_anim(Operator):
     bl_idname = 'sub.import_anim'
@@ -105,7 +224,7 @@ class SUB_OP_import_anim(Operator):
         if self.filepath == '' or Path(self.filepath).is_dir():
             self.report({"ERROR"}, f"No file selected!")
             return {'CANCELLED'}
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp = context.scene.sub_scene_properties
         ssp.last_anim_import_dir = str(Path(self.filepath).parent)
         obj: bpy.types.Object = context.object
         
@@ -783,4 +902,101 @@ def update_camera_transforms(camera: bpy.types.Object, transform_group, index, f
     fm = final_matrix = Matrix(axis_correction @ rtm @ rrm @ rsm)
     camera.matrix_local = fm
     keyframe_insert_camera_locrotscale(camera, frame)
+
+class SUB_OP_select_animation_folder(Operator):
+    bl_idname = 'sub.ssbh_animation_folder_selector'
+    bl_label = 'Animation Folder Selector'
+    bl_options = {'UNDO'}
+
+    filter_glob: StringProperty(
+        default='*.nuanmb',
+        options={'HIDDEN'}
+    )
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
+
+    def invoke(self, context, _event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        ssp = context.scene.sub_scene_properties
+        anim_path = Path(self.directory)
+        
+        # Store animation path
+        ssp.animation_import_folder_path = str(anim_path)
+        
+        # Clear previous animation files
+        ssp.animation_import_files.clear()
+        
+        # First, try the direct selected path
+        if anim_path.exists():
+            # Search for animation files (.nuanmb)
+            nuanmb_files = [f for f in os.listdir(anim_path) if f.endswith('.nuanmb')]
+            
+            # Add found animations to the list
+            for anim_file in nuanmb_files:
+                anim_item = ssp.animation_import_files.add()
+                # Strip the .nuanmb extension from the displayed name
+                anim_item.name = os.path.splitext(anim_file)[0]
+                anim_item.path = str(anim_path / anim_file)
+            
+            # If animations were found, report success
+            if nuanmb_files:
+                self.report({'INFO'}, f'Found {len(nuanmb_files)} animations in: {anim_path}')
+            # If no animations were found, check if we're in a fighter folder
+            elif "fighter" in str(anim_path):
+                # Try to find the structure motion/body/[first subfolder]
+                try:
+                    # First check if this is already a fighter folder
+                    if "motion" in os.listdir(anim_path):
+                        fighter_folder = anim_path
+                    else:
+                        # Try to find the fighter folder (this might be a subfolder)
+                        parts = str(anim_path).split("fighter")
+                        if len(parts) > 1:
+                            fighter_folder = Path(parts[0] + "fighter" + parts[1].split(os.sep)[0])
+                    
+                    motion_folder = fighter_folder / "motion"
+                    
+                    if motion_folder.exists():
+                        body_folder = motion_folder / "body"
+                        
+                        if body_folder.exists():
+                            # Get the first subfolder in body
+                            try:
+                                subfolders = [f for f in os.listdir(body_folder) if os.path.isdir(body_folder / f)]
+                                if subfolders:
+                                    deep_anim_path = body_folder / subfolders[0]
+                                    
+                                    if deep_anim_path.exists():
+                                        # Update the stored animation path
+                                        ssp.animation_import_folder_path = str(deep_anim_path)
+                                        
+                                        # Search for animation files (.nuanmb)
+                                        deep_nuanmb_files = [f for f in os.listdir(deep_anim_path) if f.endswith('.nuanmb')]
+                                        
+                                        # Add found animations to the list
+                                        for anim_file in deep_nuanmb_files:
+                                            anim_item = ssp.animation_import_files.add()
+                                            # Strip the .nuanmb extension from the displayed name
+                                            anim_item.name = os.path.splitext(anim_file)[0]
+                                            anim_item.path = str(deep_anim_path / anim_file)
+                                        
+                                        if deep_nuanmb_files:
+                                            self.report({'INFO'}, f'Found {len(deep_nuanmb_files)} animations in deep path: {deep_anim_path}')
+                                        else:
+                                            self.report({'INFO'}, f'No animations found in deep path: {deep_anim_path}')
+                            except Exception as e:
+                                self.report({'INFO'}, f'Failed to search in deep animation path: {str(e)}')
+                except Exception as e:
+                    self.report({'INFO'}, f'Failed to find deep animation structure: {str(e)}')
+                
+                if len(ssp.animation_import_files) == 0:
+                    self.report({'INFO'}, f'No animations found in: {anim_path} or deeper structure')
+            else:
+                self.report({'INFO'}, f'No animations found in: {anim_path}')
+        else:
+            self.report({'ERROR'}, f'Animation directory not found: {anim_path}')
+            
+        return {'FINISHED'}
 
