@@ -9,6 +9,9 @@ from enum import Enum
 from pathlib import Path
 from subprocess import CalledProcessError
 
+from .shader_nodes.custom_sprite_sheet_params_node import ultimate_sprite_sheet_params_node_group
+from .shader_nodes.custom_uv_transform_node import ultimate_uv_transform_node_group
+
 from ....dependencies import ssbh_data_py
 from .matl_params import texture_param_name_to_socket_params, vec4_param_name_to_socket_params
 from .sub_matl_data import *
@@ -215,28 +218,27 @@ def setup_sub_matl_data_node_drivers(sub_matl_data: SUB_PG_sub_matl_data):
         driver_fcurve.driver.expression = f'{var.name}'
 
 
+def create_node_group(nodes, name: str, create_node_tree):
+    # Cache the node group creation.
+    node_tree = bpy.data.node_groups.get(name)
+    if node_tree is None:
+        node_tree = create_node_tree()
+
+    group = nodes.new("ShaderNodeGroup")
+    group.node_tree = node_tree
+    return group
+
 def setup_blender_material_node_tree(material: bpy.types.Material):
     from .master_shader import create_master_shader, get_master_shader_name
     sub_matl_data: SUB_PG_sub_matl_data = material.sub_matl_data
     
-    # Make Master Shader if its not already made
-    create_master_shader()
-    
-    # Clone Master Shader
-    master_shader_name = get_master_shader_name()
-    master_node_group = bpy.data.node_groups.get(master_shader_name)
-    #clone_group = master_node_group.copy()
-
-    # Setup Clone
-    #clone_group.name = sub_matl_data.shader_label
-
     # Prep the node_tree for the new nodes
     material.use_nodes = True
     material.node_tree.nodes.clear()
 
     # Add the new Nodes
     nodes = material.node_tree.nodes
-    
+
     cycles_output: ShaderNodeOutputMaterial = nodes.new('ShaderNodeOutputMaterial')
     cycles_output.name = 'cycles_output'
     cycles_output.label = 'Cycles Output'
@@ -249,13 +251,15 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
     eevee_output.target = 'EEVEE'
     eevee_output.location = (400,200)
 
-    node_group_node = nodes.new('ShaderNodeGroup')
+    master_shader_name = get_master_shader_name()
+    node_group_node = create_node_group(nodes, master_shader_name, create_master_shader)
     node_group_node.name = 'smash_ultimate_shader'
     node_group_node.label = sub_matl_data.shader_label
     node_group_node.width = 600
     node_group_node.location = (-300, 300)
-    #node_group_node.node_tree = clone_group
-    node_group_node.node_tree = master_node_group
+
+    # Allow for wider node
+    node_group_node.bl_width_max = 1000
 
     links = material.node_tree.links
     links.new(node_group_node.outputs[0], cycles_output.inputs[0])
@@ -328,8 +332,7 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
         # Create UV Transform Node
         # Also set the default_values here. I know it makes more sense to have the default_values
         # be in the init func of the node itself, but it just doesn't work there lol
-        from .shader_nodes import custom_uv_transform_node
-        uv_transform_node = nodes.new(custom_uv_transform_node.SUB_CSN_ultimate_uv_transform.bl_idname)
+        uv_transform_node = create_node_group(nodes, 'ultimate_uv_transform', ultimate_uv_transform_node_group)
         uv_transform_node.name = 'uv_transform_node'
         uv_transform_node.label = 'UV Transform' + texture.node_name.split('Texture')[1]
         uv_transform_node.location = (texture_node.location[0] - 1200, texture_node.location[1])
@@ -343,8 +346,7 @@ def setup_blender_material_node_tree(material: bpy.types.Material):
             layer_3_uv_transform_nodes.add(uv_transform_node)
 
         # Create Sprite Sheet Param Node
-        from .shader_nodes import custom_sprite_sheet_params_node
-        sprite_sheet_node = nodes.new(custom_sprite_sheet_params_node.SUB_CSN_ultimate_sprite_sheet_params.bl_idname)
+        sprite_sheet_node = create_node_group(nodes, 'ultimate_sprite_sheet_params', ultimate_sprite_sheet_params_node_group)
         sprite_sheet_node.name = 'sprite_sheet_node'
         sprite_sheet_node.label = 'Sprite Sheet Params'
         sprite_sheet_node.location = (texture_node.location[0] - 900, texture_node.location[1])
