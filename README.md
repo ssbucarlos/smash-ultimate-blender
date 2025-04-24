@@ -32,10 +32,8 @@ Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for 
 
     ![image](https://github.com/ssbucarlos/smash-ultimate-blender/assets/77519735/b9fab746-2ddf-45f8-8cec-4351993219d5)
 
-
-
 ## System Requirements
-The plugin supports 64-bit versions of Blender 4.0 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
+The plugin supports 64-bit versions of Blender 4.2 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
 If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues).
 
 ## Legacy Blender Version Support
