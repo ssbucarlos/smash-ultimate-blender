@@ -180,8 +180,6 @@ classes = [
     source.extras.set_linear_vertex_color.SUB_OP_LinearColorSet,
     blender_property_extensions.SubSceneProperties,
     source.model.material.shader_nodes.custom_sampler_node.SUB_CSN_ultimate_sampler,
-    source.model.material.shader_nodes.custom_uv_transform_node.SUB_CSN_ultimate_uv_transform,
-    source.model.material.shader_nodes.custom_sprite_sheet_params_node.SUB_CSN_ultimate_sprite_sheet_params,
 ]
 
 def register():
