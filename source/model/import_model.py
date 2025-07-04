@@ -31,41 +31,91 @@ class SUB_PT_import_model(Panel):
     bl_label = 'Model Importer'
     bl_options = {'DEFAULT_CLOSED'}
 
-    @classmethod
-    def poll(cls, context):
-        return True
-
     def draw(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp:SubSceneProperties = context.scene.sub_scene_properties
+        
         layout = self.layout
         layout.use_property_split = False
-
-        # Try to load last directory when panel is first drawn
-        if ssp.model_import_folder_path == '' and ssp.last_model_folder and os.path.exists(ssp.last_model_folder):
-            ssp.model_import_folder_path = ssp.last_model_folder
-            bpy.ops.sub.ssbh_model_folder_selector(directory=ssp.last_model_folder)
-            
-        if ssp.model_import_folder_path == '':
+        
+        if '' == ssp.model_import_folder_path:
             row = layout.row(align=True)
             row.label(text='Please select a folder...')
             row = layout.row(align=True)
-            row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for mods directory')
-            row = layout.row(align=True)
-            row.operator(SUB_OP_select_individual_model.bl_idname, icon='ZOOM_ALL', text='Browse for individual model')
+            row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for the model folder')
             return
         
         row = layout.row(align=True)
         row.label(text='Selected Folder: "' + ssp.model_import_folder_path +'"')
         row = layout.row(align=True)
-        row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for a different mods directory')
-        row = layout.row(align=True)
-        row.operator(SUB_OP_select_individual_model.bl_idname, icon='ZOOM_ALL', text='Browse for individual model')
+        row.operator(SUB_OP_select_model_import_folder.bl_idname, icon='ZOOM_ALL', text='Browse for a different model folder')
 
-        row = layout.row()
-        row.template_list("SUB_UL_model_import_list", "", ssp, "model_import_models", ssp, "model_import_models_index")
+        all_requirements_met = True
+        min_requirements_met = True
 
-        row = layout.row()
-        row.operator(SUB_OP_import_selected_model.bl_idname, text="Import Selected Model")
+        if '' == ssp.model_import_numshb_file_name:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='No .numshb file found! Cannot import without it!', icon='ERROR')
+            all_requirements_met = False
+            min_requirements_met = False
+        else:
+            row = layout.row(align=True)
+            row.alert = False
+            row.label(text=f'NUMSHB file: "{ssp.model_import_numshb_file_name}"', icon='FILE')
+
+        if '' == ssp.model_import_nusktb_file_name:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='No .nusktb file found! Cannot import without it!', icon='ERROR')
+            all_requirements_met = False
+            min_requirements_met = False
+        else:
+            row = layout.row(align=True)
+            row.alert = False
+            row.label(text=f'NUSKTB file: "{ssp.model_import_nusktb_file_name}"', icon='FILE')
+
+        if '' == ssp.model_import_numdlb_file_name:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='No .numdlb file found! Can import, but without materials...', icon='ERROR')
+            all_requirements_met = False
+        else:
+            row = layout.row(align=True)
+            row.alert = False
+            row.label(text=f'NUMDLB file: "{ssp.model_import_numdlb_file_name}"', icon='FILE')
+
+        if '' ==  ssp.model_import_numatb_file_name:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='No .numatb file found! Can import, but without materials...', icon='ERROR')
+            all_requirements_met = False
+        else:
+            row = layout.row(align=True)
+            row.alert = False
+            row.label(text=f'NUMATB file: "{ssp.model_import_numatb_file_name}"', icon='FILE')
+
+        if '' == ssp.model_import_nuhlpb_file_name:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='No .nuhlpb file found! Can import, but without helper bones...', icon='ERROR')
+            all_requirements_met = False
+        else:
+            row = layout.row(align=True)
+            row.alert = False
+            row.label(text=f'NUHLPB file: "{ssp.model_import_nuhlpb_file_name}"', icon='FILE')
+
+        if not min_requirements_met:
+            row = layout.row(align=True)
+            row.alert = True
+            row.label(text='Needs .NUMSHB and .NUSKTB at a minimum to import!', icon='ERROR')
+            return
+        elif not all_requirements_met:
+            row = layout.row(align=True)
+            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Limited Model Import')
+        else:
+            row = layout.row(align=True)
+            row.operator(SUB_OP_import_model.bl_idname, icon='IMPORT', text='Import Model')
+        
 
 class SUB_OP_select_model_import_folder(Operator):
     bl_idname = 'sub.ssbh_model_folder_selector'
@@ -83,181 +133,68 @@ class SUB_OP_select_model_import_folder(Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
+        ssp:SubSceneProperties = context.scene.sub_scene_properties
+        ssp.model_import_numdlb_file_name = ''
+        ssp.model_import_nusktb_file_name = ''
+        ssp.model_import_numshb_file_name = ''
+        ssp.model_import_numatb_file_name = ''
+        ssp.model_import_nuhlpb_file_name = ''
         ssp.model_import_folder_path = self.directory
-        ssp.last_model_folder = self.directory  # Save the last used directory
-        ssp.model_import_models.clear()
-
-        for root, dirs, files in os.walk(ssp.model_import_folder_path):
-            for dir_name in dirs:
-                body_folder_path = os.path.join(root, dir_name, "body")
-                if os.path.exists(body_folder_path):
-                    for sub_dir_name in os.listdir(body_folder_path):
-                        model_folder_path = os.path.join(body_folder_path, sub_dir_name)
-                        if os.path.isdir(model_folder_path):
-                            model_files = [file for file in os.listdir(model_folder_path) if file.endswith(('.numdlb', '.nusktb', '.numshb', '.numatb', '.nuhlpb'))]
-                            if model_files:
-                                character_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(model_folder_path))))))
-                                model_item = ssp.model_import_models.add()
-                                model_item.name = character_name  # Use the character's folder name
-                                model_item.path = model_folder_path
-                                for file in model_files:
-                                    if file.endswith('.numdlb'):
-                                        ssp.model_import_numdlb_file_name = file
-                                    elif file.endswith('.nusktb'):
-                                        ssp.model_import_nusktb_file_name = file
-                                    elif file.endswith('.numshb'):
-                                        ssp.model_import_numshb_file_name = file
-                                    elif file.endswith('.numatb'):
-                                        ssp.model_import_numatb_file_name = file
-                                    elif file.endswith('.nuhlpb'):
-                                        ssp.model_import_nuhlpb_file_name = file
-                                break  # Only add the first model folder found in each character's directory
-                    break  # Move to the next character's directory
-
+        #all_files = os.listdir(ssp.model_import_folder_path)
+        #model_files = [file for file in all_files if 'model' in file]
+        for file_name in os.listdir(ssp.model_import_folder_path):
+            _root, extension = os.path.splitext(file_name)
+            if '.numshb' == extension:
+                ssp.model_import_numshb_file_name = file_name
+            elif '.nusktb' == extension:
+                ssp.model_import_nusktb_file_name = file_name
+            elif '.numdlb' == extension:
+                ssp.model_import_numdlb_file_name = file_name
+            elif '.numatb' == extension:
+                ssp.model_import_numatb_file_name = file_name
+            elif '.nuhlpb' == extension:
+                ssp.model_import_nuhlpb_file_name = file_name
         return {'FINISHED'}
 
 class SUB_OP_import_model(bpy.types.Operator):
     bl_idname = 'sub.model_importer'
     bl_label = 'Model Importer'
     bl_options = {'UNDO'}
-
-    model_path: StringProperty()
-
+    
     def execute(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        ssp.model_import_folder_path = self.model_path
         start = time.time()
 
-        import_model(self, context)
+        import_model(self,context)
 
         end = time.time()
         print(f'Imported model in {end - start} seconds')
         return {'FINISHED'}
 
-class SUB_UL_model_import_list(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            layout.label(text=item.name)
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="")
-
-    def draw_filter(self, context, layout):
-        pass
-
-    def filter_items(self, context, data, propname):
-        # Return empty lists to use default filtering
-        return [], []
-
-class SUB_OP_import_selected_model(bpy.types.Operator):
-    bl_idname = 'sub.import_selected_model'
-    bl_label = 'Import Selected Model'
-    bl_options = {'UNDO'}
-
-    def execute(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        selected_model = ssp.model_import_models[ssp.model_import_models_index]
-        ssp.model_import_folder_path = selected_model.path
-        start = time.time()
-
-        import_model(self, context)
-
-        end = time.time()
-        print(f'Imported model in {end - start} seconds')
-        return {'FINISHED'}
-
-class SUB_OP_select_individual_model(Operator):
-    bl_idname = 'sub.ssbh_individual_model_selector'
-    bl_label = 'Individual Model Selector'
-    bl_options = {'UNDO'}
-
-    filter_glob: StringProperty(
-        default='*.numdlb;*.nusktb;*.numshb;*.numatb;*.nuhlpb',
-        options={'HIDDEN'}
-    )
-    directory: bpy.props.StringProperty(subtype="DIR_PATH")
-
-    def invoke(self, context, _event):
-        context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
-
-    def execute(self, context):
-        ssp: SubSceneProperties = context.scene.sub_scene_properties
-        ssp.model_import_folder_path = self.directory
-        ssp.last_model_folder = self.directory  # Save the last used directory
-        ssp.model_import_models.clear()
-
-        # Direct folder search for model files
-        files = [f for f in os.listdir(self.directory) if f.endswith(('.numdlb', '.nusktb', '.numshb', '.numatb', '.nuhlpb'))]
-        if files:
-            model_item = ssp.model_import_models.add()
-            # Use just the immediate folder name instead of the full path
-            model_item.name = os.path.basename(os.path.normpath(self.directory))
-            model_item.path = self.directory
-            for file in files:
-                if file.endswith('.numdlb'):
-                    ssp.model_import_numdlb_file_name = file
-                elif file.endswith('.nusktb'):
-                    ssp.model_import_nusktb_file_name = file
-                elif file.endswith('.numshb'):
-                    ssp.model_import_numshb_file_name = file
-                elif file.endswith('.numatb'):
-                    ssp.model_import_numatb_file_name = file
-                elif file.endswith('.nuhlpb'):
-                    ssp.model_import_nuhlpb_file_name = file
-
-        return {'FINISHED'}
 
 def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
-    ssp: SubSceneProperties = context.scene.sub_scene_properties
+    ssp:SubSceneProperties = context.scene.sub_scene_properties
     dir = Path(ssp.model_import_folder_path)
-    numdlb_name = dir / ssp.model_import_numdlb_file_name
-    numshb_name = dir / ssp.model_import_numshb_file_name
-    nusktb_name = dir / ssp.model_import_nusktb_file_name
-    numatb_name = dir / ssp.model_import_numatb_file_name
-    nuhlpb_name = dir / ssp.model_import_nuhlpb_file_name if ssp.model_import_nuhlpb_file_name != '' else ''
-
-    print(f'NUMDLB file: {numdlb_name}')
-    print(f'NUMSHB file: {numshb_name}')
-    print(f'NUSKTB file: {nusktb_name}')
-    print(f'NUMATB file: {numatb_name}')
-    print(f'NUHLPB file: {nuhlpb_name}')
-
-    # Check if files exist
-    if not numdlb_name.exists():
-        operator.report({'ERROR'}, f'NUMDLB file not found: {numdlb_name}')
-        return {'CANCELLED'}
-    if not numshb_name.exists():
-        operator.report({'ERROR'}, f'NUMSHB file not found: {numshb_name}')
-        return {'CANCELLED'}
-    if not nusktb_name.exists():
-        operator.report({'ERROR'}, f'NUSKTB file not found: {nusktb_name}')
-        return {'CANCELLED'}
-    if not numatb_name.exists():
-        operator.report({'ERROR'}, f'NUMATB file not found: {numatb_name}')
-        return {'CANCELLED'}
-    if nuhlpb_name and not nuhlpb_name.exists():
-        operator.report({'ERROR'}, f'NUHLPB file not found: {nuhlpb_name}')
-        return {'CANCELLED'}
+    numdlb_name = dir.joinpath(ssp.model_import_numdlb_file_name)
+    numshb_name = dir.joinpath(ssp.model_import_numshb_file_name)
+    nusktb_name = dir.joinpath(ssp.model_import_nusktb_file_name)
+    numatb_name = dir.joinpath(ssp.model_import_numatb_file_name)
+    nuhlpb_name = dir.joinpath(ssp.model_import_nuhlpb_file_name) if ssp.model_import_nuhlpb_file_name != '' else ''
 
     start = time.time()
     ssbh_model = ssbh_data_py.modl_data.read_modl(str(numdlb_name)) if numdlb_name != '' else None
 
     # Numpy provides much faster performance than Python lists.
-    # TODO: This API for ssbh_data_py will likely have changes and improvements in the future.
+    # TODO(SMG): This API for ssbh_data_py will likely have changes and improvements in the future.
     ssbh_mesh = ssbh_data_py.mesh_data.read_mesh(str(numshb_name), use_numpy=True) if numshb_name != '' else None
-    ssbh_skel = ssbh_data_py.skel_data.read_skel(str(nusktb_name)) if nusktb_name != '' else None
+    ssbh_skel = ssbh_data_py.skel_data.read_skel(str(nusktb_name)) if numshb_name != '' else None
     ssbh_matl = ssbh_data_py.matl_data.read_matl(str(numatb_name)) if numatb_name != '' else None
     end = time.time()
     print(f'Read files in {end - start} seconds')
 
-    armature = None
-    if ssbh_skel is not None:
-        try:
-            armature = create_armature(operator, ssbh_skel, context)
-        except Exception as e:
-            operator.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+    try:
+        armature = create_armature(operator, ssbh_skel, context)
+    except Exception as e:
+        operator.report({'ERROR'}, f'Failed to import {nusktb_name}; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     material_label_to_material = {}
     if ssbh_matl is not None:
@@ -266,13 +203,12 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
         except Exception as e:
             operator.report({'ERROR'}, f'Failed to import materials; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
-    if armature is not None:
-        try:
-            create_mesh(ssbh_model, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material)
-        except Exception as e:
-            operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+    try:
+        create_mesh(ssbh_model, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material)
+    except Exception as e:
+        operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
-    if nuhlpb_name != '' and armature is not None:
+    if nuhlpb_name != '':
         try:
             read_nuhlpb_data(nuhlpb_name, armature)
         except Exception as e:
@@ -280,150 +216,9 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
         else:
             setup_helper_bone_constraints(armature)
         
+        
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-
-    # Store the model path for animation importing
-    ssp.last_imported_model_path = str(dir)
-    
-    # Get related animation path
-    model_path = str(dir)
-    motion_path = model_path.replace("model", "motion")
-    anim_path = Path(motion_path)
-    
-    # Clear previous animation files
-    ssp.animation_import_files.clear()
-    
-    # First, try the direct motion path
-    if anim_path.exists():
-        # Store animation path
-        ssp.animation_import_folder_path = str(anim_path)
-        
-        # Search for animation files (.nuanmb)
-        nuanmb_files = [f for f in os.listdir(anim_path) if f.endswith('.nuanmb')]
-        
-        # Add found animations to the list
-        for anim_file in nuanmb_files:
-            anim_item = ssp.animation_import_files.add()
-            # Strip the .nuanmb extension from the displayed name
-            anim_item.name = os.path.splitext(anim_file)[0]
-            anim_item.path = str(anim_path / anim_file)
-        
-        # If animations were found, report success  
-        if nuanmb_files:
-            operator.report({'INFO'}, f'Found {len(nuanmb_files)} animations in: {anim_path}')
-        # If no animations were found in the direct motion path, look in subfolders    
-        else:
-            # Try to find the structure motion/body/[first subfolder]
-            try:
-                # Check if this is a fighter folder (contains "motion" subfolder)
-                fighter_folder = Path(model_path).parent.parent.parent
-                motion_folder = fighter_folder / "motion"
-                
-                if motion_folder.exists():
-                    body_folder = motion_folder / "body"
-                    
-                    if body_folder.exists():
-                        # Get the first subfolder in body
-                        try:
-                            subfolders = [f for f in os.listdir(body_folder) if os.path.isdir(body_folder / f)]
-                            if subfolders:
-                                deep_anim_path = body_folder / subfolders[0]
-                                
-                                if deep_anim_path.exists():
-                                    # Update the stored animation path
-                                    ssp.animation_import_folder_path = str(deep_anim_path)
-                                    
-                                    # Search for animation files (.nuanmb)
-                                    deep_nuanmb_files = [f for f in os.listdir(deep_anim_path) if f.endswith('.nuanmb')]
-                                    
-                                    # Add found animations to the list
-                                    for anim_file in deep_nuanmb_files:
-                                        anim_item = ssp.animation_import_files.add()
-                                        # Strip the .nuanmb extension from the displayed name
-                                        anim_item.name = os.path.splitext(anim_file)[0]
-                                        anim_item.path = str(deep_anim_path / anim_file)
-                                    
-                                    if deep_nuanmb_files:
-                                        operator.report({'INFO'}, f'Found {len(deep_nuanmb_files)} animations in deep path: {deep_anim_path}')
-                                    else:
-                                        operator.report({'INFO'}, f'No animations found in deep path: {deep_anim_path}')
-                        except Exception as e:
-                            operator.report({'INFO'}, f'Failed to search in deep animation path: {str(e)}')
-            except Exception as e:
-                operator.report({'INFO'}, f'Failed to find deep animation structure: {str(e)}')
-            
-            if len(ssp.animation_import_files) == 0:
-                operator.report({'INFO'}, f'No animations found in any location')
-    else:
-        # If no direct motion path exists, try the deep path immediately
-        try:
-            # Check if this is a fighter folder path
-            fighter_folder = Path(model_path).parent.parent.parent
-            motion_folder = fighter_folder / "motion"
-            
-            if motion_folder.exists():
-                body_folder = motion_folder / "body"
-                
-                if body_folder.exists():
-                    # Get the first subfolder in body
-                    try:
-                        subfolders = [f for f in os.listdir(body_folder) if os.path.isdir(body_folder / f)]
-                        if subfolders:
-                            deep_anim_path = body_folder / subfolders[0]
-                            
-                            if deep_anim_path.exists():
-                                # Store animation path
-                                ssp.animation_import_folder_path = str(deep_anim_path)
-                                
-                                # Search for animation files (.nuanmb)
-                                deep_nuanmb_files = [f for f in os.listdir(deep_anim_path) if f.endswith('.nuanmb')]
-                                
-                                # Add found animations to the list
-                                for anim_file in deep_nuanmb_files:
-                                    anim_item = ssp.animation_import_files.add()
-                                    # Strip the .nuanmb extension from the displayed name
-                                    anim_item.name = os.path.splitext(anim_file)[0]
-                                    anim_item.path = str(deep_anim_path / anim_file)
-                                
-                                if deep_nuanmb_files:
-                                    operator.report({'INFO'}, f'Found {len(deep_nuanmb_files)} animations in deep path: {deep_anim_path}')
-                                else:
-                                    operator.report({'INFO'}, f'No animations found in deep path: {deep_anim_path}')
-                    except Exception as e:
-                        operator.report({'INFO'}, f'Failed to search in deep animation path: {str(e)}')
-        except Exception as e:
-            operator.report({'INFO'}, f'Failed to find deep animation structure: {str(e)}')
-        
-        if len(ssp.animation_import_files) == 0:
-            operator.report({'INFO'}, f'Animation directory not found: {anim_path}')
-
-    # Auto-store the idle animation (a00wait1) if it exists
-    if len(ssp.animation_import_files) > 0:
-        # Look for a00wait1.nuanmb in the animation list
-        idle_anim_path = None
-        for anim_item in ssp.animation_import_files:
-            if anim_item.name == "a00wait1":
-                idle_anim_path = anim_item.path
-                break
-        
-        # If found, automatically store it using the idle pose library
-        if idle_anim_path:
-            # Make sure the armature is selected
-            if armature:
-                # Select the armature
-                for obj in bpy.context.selected_objects:
-                    obj.select_set(False)
-                armature.select_set(True)
-                context.view_layer.objects.active = armature
-                
-                # Store the idle pose
-                try:
-                    bpy.ops.sub.store_idle_pose(filepath=idle_anim_path)
-                    operator.report({'INFO'}, f"Auto-stored idle pose from a00wait1.nuanmb")
-                except Exception as e:
-                    operator.report({'WARNING'}, f"Failed to auto-store idle pose: {str(e)}")
-
-    return {'FINISHED'}
+    return
 
 def get_shader_db_file_path():
     # This file was generated with duplicates removed to optimize space.
@@ -529,7 +324,7 @@ def fix_bone_length(blender_bone: EditBone, edit_bones: bpy.types.ArmatureEditBo
             blender_bone.length = (blender_bone.head - neck_bone.head).length
 
 def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
-    # Pose bones only exist in pose mode, so enter pose mode to properly set their colors.
+    # Pose bones only exist in pose mode, so enter pose mode to properly set thier colors.
     bpy.ops.object.mode_set(mode='POSE')
     bone_collections = arma_obj.data.collections
     standard_collection = bone_collections.new("Standard Bones")
@@ -541,7 +336,6 @@ def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
 
     system_bone_names = ['Trans', 'Rot', 'Throw']
     system_bone_suffixes = ['_null', '_eff', '_offset']
-    
     for bone in arma_obj.pose.bones:
         bone: PoseBone
         if bone.name.startswith('H_Exo_'):
@@ -557,19 +351,22 @@ def assign_bone_layers(arma_obj: bpy.types.Object) -> None:
             bone.color.palette = 'THEME04'
             bone.bone.color.palette = 'THEME04'
             if '_null' in bone.name:
+                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to null bones
                 null_collection.assign(bone)
                 bone.color.palette = 'THEME10'
                 bone.bone.color.palette = 'THEME10'
         else:
+            #bone.bone_group = default_group
             standard_collection.assign(bone)
-            # Fixed the variable names in the any() expressions
-            if any(name == bone.name for name in system_bone_names) or \
-               any(suffix in bone.name for suffix in system_bone_suffixes):
+            if any(system_bone_name == bone.name for system_bone_name in system_bone_names) \
+            or any(system_bone_suffix in bone.name for system_bone_suffix in system_bone_suffixes):
+                #bone.bone.use_deform = False # A few vanilla bones are actually weighted to '_null' or '_eff' or '_offset' bones
                 system_collection.assign(bone)
                 bone.color.palette = 'THEME10'
                 bone.bone.color.palette = 'THEME10'
 
     bpy.ops.object.mode_set(mode='OBJECT')
+
 
 def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelData, context: bpy.types.Context) -> bpy.types.Object: 
     '''
@@ -626,7 +423,7 @@ def create_armature(operator: Operator, ssbh_skel: ssbh_data_py.skel_data.SkelDa
         fix_bone_length(edit_bone, arma_data.edit_bones)
         # Fallback in case the bone was made to be too short
         if edit_bone.length < .001:
-            operator.report({'INFO'}, f"The bone \"{edit_bone.name}\" has a length less than .001, so it was set to .001.") 
+            operator.report({'INFO'}, f"The bone \"{edit_bone.name}\" has a length less than .001, so it was set to .001.")
             edit_bone.length = .001
 
 
@@ -809,14 +606,8 @@ def import_material_images(ssbh_matl, dir):
             texture_name_set.add(attribute.data)
 
     for texture_name in texture_name_set:
-        try:
-            image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
-            texture_name_to_image_dict[texture_name] = image
-        except Exception as e:
-            if "UnexpectedMipmapCount" in str(e):
-                operator.report({'WARNING'}, f'Failed to convert texture {texture_name}. Please convert manually to PNG.')
-            else:
-                operator.report({'ERROR'}, f'Failed to convert texture {texture_name}: {str(e)}')
+        image = image_utils.load_image(texture_name + '.png', dir, place_holder=True, check_existing=False)  
+        texture_name_to_image_dict[texture_name] = image
 
     return texture_name_to_image_dict
 
@@ -842,250 +633,6 @@ def get_vertex_attributes(node_group_node, shader_name):
         # The database has a single entry for each program, so don't include the render pass tag.
         return [row[0] for row in con.execute(sql, (shader_name[:len('SFX_PBS_0000000000000080')],)).fetchall()]
 
-"""
-def setup_blender_mat(blender_mat:bpy.types.Material, material_label, ssbh_matl: ssbh_data_py.matl_data.MatlData, texture_name_to_image_dict):
-    # TODO: Handle none?
-    entry = None
-    for ssbh_mat_entry in ssbh_matl.entries:
-        if ssbh_mat_entry.material_label == material_label:
-            entry = ssbh_mat_entry
-    
-    # Change Mat Settings
-    BlendFactor = ssbh_data_py.matl_data.BlendFactor
-    CullMode = ssbh_data_py.matl_data.CullMode
-    discard_shaders = get_discard_shaders()
-    if entry.shader_label[:len('SFX_PBS_0000000000000080')] in discard_shaders:
-        blender_mat.blend_method = 'CLIP'
-    else:
-        if len(entry.blend_states) > 0:
-            if entry.blend_states[0].data.alpha_sample_to_coverage:
-                blender_mat.blend_method = 'HASHED'
-            elif entry.blend_states[0].data.destination_color.value == BlendFactor.OneMinusSourceAlpha.value:
-                '''
-                Alpha Blending would be the correct setting if EEVEE could do per-fragment alpha sorting.
-                since it cant, alpha blending here would run into several mesh self-sorting issues so instead
-                use another blending mode
-                '''
-                #blender_mat.blend_method = 'BLEND'
-                blender_mat.blend_method = 'HASHED'
-            else:
-                blender_mat.blend_method = 'OPAQUE'
-
-    if len(entry.rasterizer_states) > 0:
-        if entry.rasterizer_states[0].data.cull_mode.value == CullMode.Back.value:
-            blender_mat.use_backface_culling = True
-    
-    # Clone Master Shader
-    master_shader_name = master_shader.get_master_shader_name()
-    master_node_group = bpy.data.node_groups.get(master_shader_name)
-    clone_group = master_node_group.copy()
-
-    # Setup Clone
-    clone_group.name = entry.shader_label
-
-    # Add our new Nodes
-    blender_mat.use_nodes = True
-    nodes = blender_mat.node_tree.nodes
-    links = blender_mat.node_tree.links
-
-    # Cleanse Node Tree
-    nodes.clear()
-    
-    material_output_node = nodes.new('ShaderNodeOutputMaterial')
-    material_output_node.location = (900,0)
-    node_group_node = nodes.new('ShaderNodeGroup')
-    node_group_node.name = 'smash_ultimate_shader'
-    node_group_node.width = 600
-    node_group_node.location = (-300, 300)
-    node_group_node.node_tree = clone_group
-    for input in node_group_node.inputs:
-        input.hide = True
-    shader_label = node_group_node.inputs['Shader Label']
-    shader_label.hide = False
-    shader_name = entry.shader_label
-    shader_label.default_value = entry.shader_label
-    material_label = node_group_node.inputs['Material Name']
-    material_label.hide = False
-    material_label.default_value = entry.material_label
-    
-    # TODO: Refactor this to be cleaner?
-    blend_state = entry.blend_states[0].data
-    enable_inputs(node_group_node, entry.blend_states[0].param_id.name)
-
-    blend_state_inputs = []
-    for input in node_group_node.inputs:
-        if input.name.split(' ')[0] == 'BlendState0':
-            blend_state_inputs.append(input)
-            
-    for input in blend_state_inputs:
-        field_name = input.name.split(' ')[1]
-        if field_name == 'Field1':
-            input.default_value = blend_state.source_color.name
-        if field_name == 'Field3':
-            input.default_value = blend_state.destination_color.name
-        if field_name == 'Field7':
-            input.default_value = blend_state.alpha_sample_to_coverage
-
-    rasterizer_state = entry.rasterizer_states[0].data
-    enable_inputs(node_group_node, entry.rasterizer_states[0].param_id.name)
-
-    rasterizer_state_inputs = [input for input in node_group_node.inputs if input.name.split(' ')[0] == 'RasterizerState0']
-    for input in rasterizer_state_inputs:
-        field_name = input.name.split(' ')[1]
-        if field_name == 'Field1':
-            input.default_value = rasterizer_state.fill_mode.name
-        if field_name == 'Field2':
-            input.default_value = rasterizer_state.cull_mode.name
-        if field_name == 'Field3':
-            input.default_value = rasterizer_state.depth_bias
-    
-    for param in entry.booleans:
-        input = node_group_node.inputs.get(param.param_id.name)
-        input.hide = False
-        input.default_value = param.data
-
-    for param in entry.floats:
-        input = node_group_node.inputs.get(param.param_id.name)
-        input.hide = False
-        input.default_value = param.data
-    
-    for param in entry.vectors:
-        param_name = param.param_id.name
-
-        if param_name in material_inputs.vec4_param_to_inputs:
-            # Find and enable inputs.
-            inputs = [node_group_node.inputs.get(name) for _, name, _ in material_inputs.vec4_param_to_inputs[param_name]]
-            for input in inputs:
-                input.hide = False
-
-            # Assume inputs are RGBA, RGB/A, or X/Y/Z/W.
-            x, y, z, w = param.data
-            if len(inputs) == 1:
-                inputs[0].default_value = (x,y,z,w)
-            elif len(inputs) == 2:
-                inputs[0].default_value = (x,y,z,1)
-                inputs[1].default_value = w
-            elif len(inputs) == 4:
-                inputs[0].default_value = x
-                inputs[1].default_value = y
-                inputs[2].default_value = z
-                inputs[3].default_value = w
-
-            if param_name == 'CustomVector47':
-                node_group_node.inputs['use_custom_vector_47'].default_value = 1.0
-
-    links.new(material_output_node.inputs[0], node_group_node.outputs[0])
-
-    # Add image texture nodes
-    node_count = 0
-
-    for texture_param in entry.textures:
-        enable_inputs(node_group_node, texture_param.param_id.name)
-        
-        texture_node = nodes.new('ShaderNodeTexImage')
-        texture_node.location = (-800, -500 * node_count + 1000)
-        texture_file_name = texture_param.data
-        texture_node.name = texture_param.param_id.name
-        texture_node.label = texture_param.param_id.name
-        texture_node.image = texture_name_to_image_dict[texture_file_name]
-        matched_rgb_input = None
-        matched_alpha_input = None
-        for input in node_group_node.inputs:
-            if texture_param.param_id.name == input.name.split(' ')[0]:
-                if 'RGB' == input.name.split(' ')[1]:
-                    matched_rgb_input = input
-                else:
-                    matched_alpha_input = input
-        # For now, manually set the colorspace types....
-        linear_textures = ['Texture6', 'Texture4']
-        if texture_param.param_id.name in linear_textures:
-            texture_node.image.colorspace_settings.name = 'Linear'
-            texture_node.image.alpha_mode = 'CHANNEL_PACKED'
-        
-        uv_map_node = nodes.new('ShaderNodeUVMap')
-        uv_map_node.name = 'uv_map_node'
-        uv_map_node.location = (texture_node.location[0] - 1200, texture_node.location[1])
-        uv_map_node.label = texture_param.param_id.name + ' UV Map'
-
-        if texture_param.param_id.name == 'Texture9':
-            uv_map_node.uv_map = 'bake1'
-        elif texture_param.param_id.name == 'Texture1':
-            uv_map_node.uv_map = 'uvSet'
-        else:
-            uv_map_node.uv_map = 'map1'
-
-        # Create UV Transform Node
-        # Also set the default_values here. I know it makes more sense to have the default_values
-        # be in the init func of the node itself, but it just doesn't work there lol
-        from ..shader_nodes import custom_uv_transform_node
-        uv_transform_node = nodes.new(custom_uv_transform_node.SUB_CSN_ultimate_uv_transform.bl_idname)
-        uv_transform_node.name = 'uv_transform_node'
-        uv_transform_node.label = 'UV Transform' + texture_param.param_id.name.split('Texture')[1]
-        uv_transform_node.location = (texture_node.location[0] - 900, texture_node.location[1])
-        uv_transform_node.inputs[0].default_value = 1.0 # Scale X
-        uv_transform_node.inputs[1].default_value = 1.0 # Scale Y
-
-        # Create Sampler Node
-        from ..shader_nodes import custom_sampler_node
-        sampler_node = nodes.new(custom_sampler_node.SUB_CSN_ultimate_sampler.bl_idname)
-        sampler_node.name = 'sampler_node'
-        sampler_node.label = 'Sampler' + texture_param.param_id.name.split('Texture')[1]
-        sampler_node.location = (texture_node.location[0] - 600, texture_node.location[1])
-        sampler_node.width = 500
-
-        # TODO: Handle the None case?
-        sampler_entry = None
-        for sampler_param in entry.samplers:
-            if texture_param.param_id.name.split('Texture')[1] == sampler_param.param_id.name.split('Sampler')[1]:
-                sampler_entry = sampler_param
-                break
-
-        enable_inputs(node_group_node, sampler_entry.param_id.name)
-        sampler_data = sampler_entry.data
-        sampler_node.wrap_s = sampler_data.wraps.name
-        sampler_node.wrap_t = sampler_data.wrapt.name
-        sampler_node.wrap_r = sampler_data.wrapr.name
-        sampler_node.min_filter = sampler_data.min_filter.name
-        sampler_node.mag_filter = sampler_data.mag_filter.name
-        sampler_node.anisotropic_filtering = sampler_data.max_anisotropy is not None
-        sampler_node.max_anisotropy = sampler_data.max_anisotropy.name if sampler_data.max_anisotropy else 'One'
-        sampler_node.border_color = tuple(sampler_data.border_color)
-        sampler_node.lod_bias = sampler_data.lod_bias       
-
-        links.new(uv_transform_node.inputs[4], uv_map_node.outputs[0])
-        links.new(sampler_node.inputs['UV Input'], uv_transform_node.outputs[0])
-        links.new(texture_node.inputs[0], sampler_node.outputs[0])
-        links.new(matched_rgb_input, texture_node.outputs['Color'])
-        links.new(matched_alpha_input, texture_node.outputs['Alpha'])
-        node_count = node_count + 1
-
-    # Set up color sets.
-    # Use the default values for non required attributes to be consistent between renderers.
-    # Ignore the rendering accuracy of missing required attributes for now.
-    required_attributes = get_vertex_attributes(node_group_node, shader_name)
-
-    def create_and_enable_color_set(name, row):
-        enable_inputs(node_group_node, name)
-
-        color_set_node = nodes.new('ShaderNodeVertexColor')
-        color_set_node.name = name
-        color_set_node.label = name
-        color_set_node.layer_name = name
-        # Vertically stack color sets with even spacing.
-        color_set_node.location = (-500, 150 - row * 150)
-
-        links.new(node_group_node.inputs[f'{name} RGB'], color_set_node.outputs['Color'])
-        links.new(node_group_node.inputs[f'{name} Alpha'], color_set_node.outputs['Alpha'])
-
-    if 'colorSet1' in required_attributes:
-        create_and_enable_color_set('colorSet1', 0)
-
-    if 'colorSet5' in required_attributes:
-        create_and_enable_color_set('colorSet5', 1)
-
-"""
-
-
 def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=None) -> bpy.types.Object:
     for mesh in meshes:
         if mesh.name.startswith(pruned_name):
@@ -1093,9 +640,6 @@ def get_from_mesh_list_with_pruned_name(meshes:list, pruned_name:str, fallback=N
     return fallback
 
 def read_nuhlpb_data(nuhlpb_path: Path, armature: bpy.types.Armature):
-    if armature is None:
-        raise ValueError("Armature is None, cannot read NUHLPB data.")
-    
     ssbh_hlpb = ssbh_data_py.hlpb_data.read_hlpb(str(nuhlpb_path))
     shbd: SubHelperBoneData = armature.data.sub_helper_bone_data
     shbd.major_version = ssbh_hlpb.major_version

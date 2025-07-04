@@ -89,39 +89,22 @@ def hide_unlinked_outputs(node):
         if output.is_linked is False:
             output.hide = True
 
-def create_master_shader():
+def create_master_shader() -> bpy.types.NodeTree:
     master_shader_name = get_master_shader_name()
-    # Check if already exists and just skip if it does
-    if bpy.data.node_groups.get(master_shader_name, None) is not None:
-        return
-
-    # Create a dummy material just for use in creation
-    mat = bpy.data.materials.new(master_shader_name)
-    mat.use_nodes = True
-    mat_node_tree = mat.node_tree
-    node_group_node = mat_node_tree.nodes.new('ShaderNodeGroup')
-
-    # Make the Node Group, which is its own node tree and lives with other node groups
-    node_group_node_tree = bpy.data.node_groups.new(master_shader_name, 'ShaderNodeTree')
-
-    # Connect that new node_group to the node_group_node
-    # (this should get rid of the 'missing data block', blender fills it out automatically)
-    node_group_node.node_tree = node_group_node_tree
-
-    node_group_node.name = 'Master'
+    node_tree = bpy.data.node_groups.new(master_shader_name, 'ShaderNodeTree')
 
     # Make the one output
-    node_group_node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='Cycles Output')
-    node_group_node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='EEVEE Output')
+    node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='Cycles Output')
+    node_tree.interface.new_socket(in_out="OUTPUT", socket_type='NodeSocketShader', name='EEVEE Output')
 
     # Now we are ready to start adding inputs
     def add_color_node(name):
-        return node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketColor', name=name)
+        return node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketColor', name=name)
 
     def add_float_node(name):
-        return node_group_node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketFloat', name=name)
+        return node_tree.interface.new_socket(in_out="INPUT", socket_type='NodeSocketFloat', name=name)
     
-    create_texture_input_sockets(node_group_node_tree)
+    create_texture_input_sockets(node_tree)
 
     # TODO: It may be necessary to disable these nodes rather than use defaults in the future.
     # Set defaults for color sets that have no effect after scale is applied.
@@ -135,21 +118,18 @@ def create_master_shader():
     input = add_float_node('colorSet5 Alpha')
     input.default_value = 1.0 / 3.0
 
-    create_vec4_inputs(node_group_node_tree)
-    add_floats(node_group_node_tree)
+    create_vec4_inputs(node_tree)
+    add_floats(node_tree)
     #create_inputs(node_group_node_tree, material_inputs.bool_param_to_inputs)
-    create_bool_inputs_4_0_hack(node_group_node_tree, material_inputs.bool_param_to_inputs)
+    create_bool_inputs_4_0_hack(node_tree, material_inputs.bool_param_to_inputs)
 
     # Wont be shown to users, should always be hidden
     input = add_float_node('use_custom_vector_47')
     input.default_value = 0.0
 
-    # Allow for wider node
-    node_group_node.bl_width_max = 1000
-
     # Now its time to place nodes
-    inner_nodes = node_group_node.node_tree.nodes
-    inner_links = node_group_node.node_tree.links
+    inner_nodes = node_tree.nodes
+    inner_links = node_tree.links
 
     # Principled Shader Node
     cycles_shader = inner_nodes.new('ShaderNodeBsdfPrincipled')
@@ -1081,3 +1061,5 @@ def create_master_shader():
     inner_links.new(nor_normal_map.outputs[0], eevee_specular_shader.inputs['Normal'])
     # eevee_specular_shader -> shader_to_rgb
     inner_links.new(eevee_specular_shader.outputs[0], shader_to_rgb.inputs[0])
+
+    return node_tree
