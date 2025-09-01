@@ -140,20 +140,36 @@ class SUB_OP_select_model_import_folder(Operator):
         ssp.model_import_numatb_file_name = ''
         ssp.model_import_nuhlpb_file_name = ''
         ssp.model_import_folder_path = self.directory
-        #all_files = os.listdir(ssp.model_import_folder_path)
-        #model_files = [file for file in all_files if 'model' in file]
-        for file_name in os.listdir(ssp.model_import_folder_path):
+        file_list = os.listdir(ssp.model_import_folder_path)
+
+        if 'model.numdlb' in file_list:
+            try:
+                ssp.model_import_numdlb_file_name = 'model.numdlb'
+                dir = Path(ssp.model_import_folder_path)
+                numdlb_name = dir.joinpath(ssp.model_import_numdlb_file_name)
+                ssbh_model = ssbh_data_py.modl_data.read_modl(str(numdlb_name))
+                if ssbh_model.skeleton_file_name in file_list:
+                    ssp.model_import_nusktb_file_name = ssbh_model.skeleton_file_name
+                if ssbh_model.mesh_file_name in file_list:
+                    ssp.model_import_numshb_file_name = ssbh_model.mesh_file_name
+                if len(ssbh_model.material_file_names) > 0 and ssbh_model.material_file_names[0] in file_list:
+                    ssp.model_import_numatb_file_name = ssbh_model.material_file_names[0]
+            except Exception as e:
+                self.report({'ERROR'}, f'Failed to import model.numdlb; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
+
+        for file_name in file_list:
             _root, extension = os.path.splitext(file_name)
-            if '.numshb' == extension:
-                ssp.model_import_numshb_file_name = file_name
-            elif '.nusktb' == extension:
-                ssp.model_import_nusktb_file_name = file_name
-            elif '.numdlb' == extension:
+            if '.numdlb' == extension and ssp.model_import_numdlb_file_name == '':
                 ssp.model_import_numdlb_file_name = file_name
-            elif '.numatb' == extension:
+            elif '.nusktb' == extension and ssp.model_import_nusktb_file_name == '':
+                ssp.model_import_nusktb_file_name = file_name
+            elif '.numshb' == extension and ssp.model_import_numshb_file_name == '':
+                ssp.model_import_numshb_file_name = file_name
+            elif '.numatb' == extension and ssp.model_import_numatb_file_name == '':
                 ssp.model_import_numatb_file_name = file_name
             elif '.nuhlpb' == extension:
                 ssp.model_import_nuhlpb_file_name = file_name
+
         return {'FINISHED'}
 
 class SUB_OP_import_model(bpy.types.Operator):
