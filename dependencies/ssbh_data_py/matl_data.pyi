@@ -88,7 +88,7 @@ class Vector4Param:
     def __init__(
         self,
         param_id: ParamId,
-        data: list[Any],
+        data: list[float],
     ) -> None: ...
 
 

@@ -37,7 +37,7 @@ def get_booleans(booleans: list[SUB_PG_matl_bool]) -> list[ssbh_data_py.matl_dat
 def get_vector(sub_matl_vector: SUB_PG_matl_vector) -> ssbh_data_py.matl_data.Vector4Param:
     return ssbh_data_py.matl_data.Vector4Param(
         param_id=ssbh_data_py.matl_data.ParamId.from_str(sub_matl_vector.param_id_name),
-        data=sub_matl_vector.value[0:4]
+        data=list(sub_matl_vector.value[0:4])
     )
 def get_vectors(vectors: list[SUB_PG_matl_vector]) -> list[ssbh_data_py.matl_data.Vector4Param]:
     return [get_vector(sub_matl_vector) for sub_matl_vector in vectors]
@@ -66,7 +66,7 @@ def get_sampler(sub_matl_sampler: SUB_PG_matl_sampler) -> ssbh_data_py.matl_data
         data.max_anisotropy = ssbh_data_py.matl_data.MaxAnisotropy.from_str(sub_matl_sampler.max_anisotropy)
     else:
         data.max_anisotropy = None
-    data.border_color = sub_matl_sampler.border_color[0:4]
+    data.border_color = list(sub_matl_sampler.border_color[0:4])
     data.lod_bias = sub_matl_sampler.lod_bias
 
     return ssbh_data_py.matl_data.SamplerParam(
