@@ -6,7 +6,7 @@ from ....dependencies import ssbh_data_py
 
 from bpy.types import (
     Nodes, NodeLinks, NodeFrame, NodeGroupInput, ShaderNodeMath, ShaderNodeMixRGB,
-    ShaderNodeSeparateRGB, ShaderNodeCombineRGB, ShaderNodeGamma, ShaderNodeVertexColor,
+    ShaderNodeSeparateColor, ShaderNodeCombineColor, ShaderNodeGamma, ShaderNodeVertexColor,
     ShaderNodeTree, NodeSocketColor, NodeSocketFloat, NodeTree, ShaderNodeInvert)
 
 def get_master_shader_name():
@@ -198,7 +198,7 @@ def create_master_shader() -> bpy.types.NodeTree:
     cv11_group_input.name = 'cv11_group_input'
     cv11_group_input.label = 'CV 11 (Fake SSS Color)'
 
-    separate_prm_r: ShaderNodeSeparateRGB = inner_nodes.new('ShaderNodeSeparateRGB')
+    separate_prm_r: ShaderNodeSeparateColor = inner_nodes.new('ShaderNodeSeparateColor')
     separate_prm_r.name = 'separate_prm_r'
     separate_prm_r.label = 'Separate PRM R'
 
@@ -207,7 +207,7 @@ def create_master_shader() -> bpy.types.NodeTree:
     fake_sss_factor.label = 'Fake SSS Factor'
     fake_sss_factor.operation = 'MULTIPLY'
 
-    cv11_combine: ShaderNodeCombineRGB = inner_nodes.new('ShaderNodeCombineRGB')
+    cv11_combine: ShaderNodeCombineColor = inner_nodes.new('ShaderNodeCombineColor')
     cv11_combine.name = 'cv11_combine'
     cv11_combine.label = 'CV 11 RGB from X,Y,Z'
 
@@ -231,7 +231,7 @@ def create_master_shader() -> bpy.types.NodeTree:
     cv13_group_input.name = 'cv13_group_input'
     cv13_group_input.label = 'CV 13 (Diffuse Color Scale) Input'
 
-    cv13_combine = inner_nodes.new('ShaderNodeCombineRGB')
+    cv13_combine = inner_nodes.new('ShaderNodeCombineColor')
     cv13_combine.name = 'cv13_combine'
     cv13_combine.label = 'CV 13 Combine'
 
@@ -285,7 +285,7 @@ def create_master_shader() -> bpy.types.NodeTree:
     prm_metal_minimum.label = 'PRM Metal Override'
     prm_metal_minimum.operation = 'MINIMUM'
 
-    prm_separate_prm_rgb = inner_nodes.new('ShaderNodeSeparateRGB')
+    prm_separate_prm_rgb = inner_nodes.new('ShaderNodeSeparateColor')
     prm_separate_prm_rgb.name = 'prm_separate_prm_rgb'
     prm_separate_prm_rgb.label = 'Separate PRM RGB'
 
@@ -315,14 +315,14 @@ def create_master_shader() -> bpy.types.NodeTree:
     nor_group_input.name = 'nor_group_input'
     nor_group_input.label = 'NOR Group Input'
 
-    nor_separate_rgb = inner_nodes.new('ShaderNodeSeparateRGB')
+    nor_separate_rgb = inner_nodes.new('ShaderNodeSeparateColor')
     nor_separate_rgb.name = 'nor_separate_rgb'
     nor_separate_rgb.label = 'Separate NOR RGB'
 
-    nor_combine_rgb = inner_nodes.new('ShaderNodeCombineRGB')
+    nor_combine_rgb = inner_nodes.new('ShaderNodeCombineColor')
     nor_combine_rgb.name = 'nor_combine_rgb'
     nor_combine_rgb.label = 'Combine R + G'
-    nor_combine_rgb.inputs['B'].default_value = 1.0
+    nor_combine_rgb.inputs['Blue'].default_value = 1.0
 
     nor_normal_map = inner_nodes.new('ShaderNodeNormalMap')
     nor_normal_map.name = 'nor_normal_map'
@@ -1052,9 +1052,9 @@ def create_master_shader() -> bpy.types.NodeTree:
     # alpha_to_transparency -> eevee_specular_shader['Transparency']
     inner_links.new(alpha_to_transparency.outputs[0], eevee_specular_shader.inputs['Transparency'])
     # prm_separate_prm_rgb['G'] -> eevee_specular_shader['Roughness']
-    inner_links.new(prm_separate_prm_rgb.outputs['G'], eevee_specular_shader.inputs['Roughness'])
+    inner_links.new(prm_separate_prm_rgb.outputs['Green'], eevee_specular_shader.inputs['Roughness'])
     # separate_prm_rgb['B'] -> ao_clamp
-    inner_links.new(prm_separate_prm_rgb.outputs['B'], ao_clamp.inputs[0])
+    inner_links.new(prm_separate_prm_rgb.outputs['Blue'], ao_clamp.inputs[0])
     # ao_clamp -> eevee_specular_shader['Ambient Occlusion']
     # inner_links.new(ao_clamp.outputs[0], eevee_specular_shader.inputs['Ambient Occlusion']) #blender 4.2 removed this input
     # nor_normal_map -> eevee_specular_shader['Normal']
