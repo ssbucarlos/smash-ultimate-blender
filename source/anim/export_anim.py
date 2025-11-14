@@ -248,9 +248,9 @@ def does_armature_data_have_fcurves(arma: bpy.types.Object) -> bool:
         return False
     if arma.data.animation_data.action is None:
         return False
-    if arma.data.animation_data.action.fcurves is None:
-        return False
-    return True
+    
+    fcurves = get_fcurves(arma.data.animation_data.action)
+    return fcurves is not None and len(fcurves) > 0
 
 def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.types.Object, filepath, include_transform_track, include_material_track, include_visibility_track, first_blender_frame, last_blender_frame):
     # SSBH Anim Setup
@@ -282,7 +282,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
         animated_pose_bones: set[bpy.types.PoseBone] = set()
         
         object_level_transform_reported = False
-        for fcurve in arma.animation_data.action.fcurves:
+        for fcurve in get_fcurves(arma.animation_data.action):
             regex = r'pose\.bones\[\"(.*)\"\]\.(.*)'
             matches = re.match(regex, fcurve.data_path)
             if matches is None: # A fcurve in the action that isn't a bone transform, such as the user keyframing the Armature Object itself.
@@ -432,7 +432,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
         vis_track_index_to_name: dict[int, str] = {}
         vis_track_index_to_values: dict[int, list[bool]] = {}
         fcurve: bpy.types.FCurve
-        for fcurve in arma.data.animation_data.action.fcurves:
+        for fcurve in get_fcurves(arma.data.animation_data.action):
             regex = r'.*\[(\d*)\]\.value'
             matches = re.match(regex, fcurve.data_path)
             if matches is None: # Not a visibility fcurve, its probably a material track fcurve
@@ -468,7 +468,7 @@ def export_model_anim_fast(context, operator: bpy.types.Operator, arma: bpy.type
         # In addition, fcurves may only exist for a few indices of a CustomVector or TextureTransform, since the user may not have animated them all
         # Example: mat_name_prop_name_to_values['EyeL']['CustomVector31'] -> [[1.0,1.0,1.0,1.0], ...]
         mat_name_prop_name_to_values: dict[str, dict[str, list[CustomVector|CustomFloat|CustomBool|PatternIndex|TextureTransform]]] = {}
-        for fcurve in arma.data.animation_data.action.fcurves:
+        for fcurve in get_fcurves(arma.data.animation_data.action):
             regex = r"sub_anim_properties\.mat_tracks\[(\d+)\]\.properties\[(\d+)\](\.\w+)"
             matches = re.match(regex, fcurve.data_path)
             if matches is None: # The vis and mat track fcurves are in the same action, so its normal to not match every fcurve
@@ -607,3 +607,22 @@ def export_camera_anim(context, operator, camera: bpy.types.Object, filepath, fi
     ssbh_anim_data.groups.append(camera_group)
 
     ssbh_anim_data.save(filepath)
+
+def get_fcurves(action):
+    if bpy.app.version >= (5, 0, 0):
+        # Blender 5.0 removes the legacy Action API.
+        if len(action.layers) == 0:
+            layer = action.layers[0]
+
+            if len(layer.strips) == 0:
+                strip = layer.strips[0]
+
+            if len(action.slots) == 0:
+                slot = action.slots[0]
+                
+                channelbag = strip.channelbag(slot, ensure=True)
+                return channelbag.fcurves
+
+        return []
+    else:
+        return action.fcurves
