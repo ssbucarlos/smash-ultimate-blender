@@ -148,11 +148,11 @@ def get_hierarchy_order(bone_list: list[bpy.types.PoseBone]) -> list[bpy.types.P
     return root_bones + [c for root_bone in root_bones for c in root_bone.children_recursive if c in bone_list]
 
 class BoneTranslationFCurves():
-    def __init__(self, fcurves, bone_name, values_length):
+    def __init__(self, action, bone_name, values_length):
         self.data_path = f'pose.bones["{bone_name}"].location'
-        self.x: bpy.types.FCurve = fcurves.new(self.data_path , index=0, action_group=f'{bone_name}')
-        self.y: bpy.types.FCurve = fcurves.new(self.data_path , index=1, action_group=f'{bone_name}')
-        self.z: bpy.types.FCurve = fcurves.new(self.data_path , index=2, action_group=f'{bone_name}')
+        self.x: bpy.types.FCurve = create_fcurve(action, 'OBJECT', self.data_path, 0, f'{bone_name}')
+        self.y: bpy.types.FCurve = create_fcurve(action, 'OBJECT', self.data_path, 1, f'{bone_name}')
+        self.z: bpy.types.FCurve = create_fcurve(action, 'OBJECT', self.data_path, 2, f'{bone_name}')
         self.x_stashed_values = [[0.0, 0.0]] * values_length
         self.y_stashed_values = [[0.0, 0.0]] * values_length
         self.z_stashed_values = [[0.0, 0.0]] * values_length
@@ -180,11 +180,11 @@ class BoneTranslationFCurves():
         self.z.keyframe_points.foreach_set('co', [x for tup in self.z_stashed_values for x in tup])
 
 class BoneRotationFCurves():
-    def __init__(self, fcurves, base_data_path, bone_name, values_length):
-        self.w: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=0, action_group=f'{bone_name}')
-        self.x: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=1, action_group=f'{bone_name}')
-        self.y: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=2, action_group=f'{bone_name}')
-        self.z: bpy.types.FCurve = fcurves.new(f'{base_data_path}.rotation_quaternion', index=3, action_group=f'{bone_name}')
+    def __init__(self, action, base_data_path, bone_name, values_length):
+        self.w: bpy.types.FCurve = create_fcurve(action, 'OBJECT', f'{base_data_path}.rotation_quaternion', 0, f'{bone_name}')
+        self.x: bpy.types.FCurve = create_fcurve(action, 'OBJECT', f'{base_data_path}.rotation_quaternion', 1, f'{bone_name}')
+        self.y: bpy.types.FCurve = create_fcurve(action, 'OBJECT', f'{base_data_path}.rotation_quaternion', 2, f'{bone_name}')
+        self.z: bpy.types.FCurve = create_fcurve(action, 'OBJECT', f'{base_data_path}.rotation_quaternion', 3, f'{bone_name}')
         self.w_stashed_values = [[0.0, 0.0]] * values_length
         self.x_stashed_values = [[0.0, 0.0]] * values_length
         self.y_stashed_values = [[0.0, 0.0]] * values_length
@@ -219,10 +219,10 @@ class BoneRotationFCurves():
         self.z.keyframe_points.foreach_set('co', [x for tup in self.z_stashed_values for x in tup])
 
 class BoneScaleFCurves():
-    def __init__(self, fcurves, base_data_path, bone_name, values_length):
-        self.x: bpy.types.FCurve = fcurves.new(f'{base_data_path}.scale', index=0, action_group=f'{bone_name}')
-        self.y: bpy.types.FCurve = fcurves.new(f'{base_data_path}.scale', index=1, action_group=f'{bone_name}')
-        self.z: bpy.types.FCurve = fcurves.new(f'{base_data_path}.scale', index=2, action_group=f'{bone_name}')
+    def __init__(self, action, base_data_path, bone_name, values_length):
+        self.x: bpy.types.FCurve = create_fcurve(action, 'OBJECT', f'{base_data_path}.scale', 0, f'{bone_name}')
+        self.y: bpy.types.FCurve = create_fcurve(action, 'OBJECT', f'{base_data_path}.scale', 1, f'{bone_name}')
+        self.z: bpy.types.FCurve = create_fcurve(action, 'OBJECT', f'{base_data_path}.scale', 2, f'{bone_name}')
         self.x_stashed_values = [[0.0, 0.0]] * values_length
         self.y_stashed_values = [[0.0, 0.0]] * values_length
         self.z_stashed_values = [[0.0, 0.0]] * values_length
@@ -250,12 +250,12 @@ class BoneScaleFCurves():
         self.z.keyframe_points.foreach_set('co', [x for tup in self.z_stashed_values for x in tup])
 
 class BoneFCurves():
-    def __init__(self, bone_name, fcurves, values_length):
+    def __init__(self, bone_name, action, values_length):
         self.bone_name: str = bone_name
         self.base_data_path: str = f'pose.bones["{bone_name}"]'
-        self.translation = BoneTranslationFCurves(fcurves, bone_name, values_length)
-        self.rotation = BoneRotationFCurves(fcurves, self.base_data_path, bone_name, values_length)
-        self.scale = BoneScaleFCurves(fcurves, self.base_data_path, bone_name, values_length)
+        self.translation = BoneTranslationFCurves(action, bone_name, values_length)
+        self.rotation = BoneRotationFCurves(action, self.base_data_path, bone_name, values_length)
+        self.scale = BoneScaleFCurves(action, self.base_data_path, bone_name, values_length)
     def get_matrix_basis(self, index):
         tm = self.translation.get_translation_matrix(index)
         rm = self.rotation.get_rotation_matrix(index)
@@ -300,7 +300,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
         bones: list[bpy.types.PoseBone] = arma.pose.bones
         bone_to_node = {bones[n.name]:n for n in transform_group.nodes if n.name in bones}
         reordered: list[bpy.types.PoseBone] = get_hierarchy_order(list(bones)) # Do this to gaurantee we never process a child before its parent
-        bone_to_fcurves = {b:BoneFCurves(b.name, bone_action.fcurves, len(n.tracks[0].values)) for b,n in bone_to_node.items()} # only create fcurves for animated bones
+        bone_to_fcurves = {b:BoneFCurves(b.name, bone_action, len(n.tracks[0].values)) for b,n in bone_to_node.items()} # only create fcurves for animated bones
 
         for index, frame in enumerate(range(scene.frame_start, scene.frame_end + 1)): # +1 because range() excludes the final value
             for bone in reordered:
@@ -349,7 +349,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
             # Setup FCurve
             sub_vis_track_entry_index = sap.vis_track_entries.find(sub_vis_track_entry.name)
             data_path = f'sub_anim_properties.vis_track_entries[{sub_vis_track_entry_index}].value'
-            fcurve = sap_action.fcurves.new(data_path, action_group='Visibility')
+            fcurve = create_fcurve(sap_action, 'ARMATURE', data_path, action_group='Visibility')
             # Now create and set the keyframe points
             last_value = None
             for index, value in enumerate(node.tracks[0].values):
@@ -397,7 +397,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                     data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_vector'
                     for index in (0,1,2,3):
                         vector_index_values = [vector[index] for vector in track.values]
-                        fcurve = sap_action.fcurves.new(data_path, index=index, action_group=f'Material ({mat_track.name})')
+                        fcurve = create_fcurve(sap_action, 'ARMATURE', data_path, index=index, action_group=f'Material ({mat_track.name})')
                         fcurve.keyframe_points.add(count=len(vector_index_values))
                         frame_and_value_flattened = []
                         for index, value in enumerate(vector_index_values):
@@ -405,7 +405,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                         fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
                 elif prop.sub_type == 'FLOAT':
                     data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_float'
-                    fcurve = sap_action.fcurves.new(data_path, action_group=f'Material ({mat_track.name})')
+                    fcurve = create_fcurve(sap_action, 'ARMATURE', data_path, action_group=f'Material ({mat_track.name})')
                     fcurve.keyframe_points.add(count=len(track.values))
                     frame_and_value_flattened = []
                     for index, value in enumerate(track.values):
@@ -413,7 +413,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                     fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
                 elif prop.sub_type == 'BOOL':
                     data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].custom_bool'
-                    fcurve = sap_action.fcurves.new(data_path, action_group=f'Material ({mat_track.name})')
+                    fcurve = create_fcurve(sap_action, 'ARMATURE', data_path, action_group=f'Material ({mat_track.name})')
                     fcurve.keyframe_points.add(count=len(track.values))
                     frame_and_value_flattened = []
                     for index, value in enumerate(track.values):
@@ -421,7 +421,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                     fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
                 elif prop.sub_type == 'PATTERN':
                     data_path=f'sub_anim_properties.mat_tracks[{mat_track_index}].properties[{prop_index}].pattern_index'
-                    fcurve = sap_action.fcurves.new(data_path, action_group=f'Material ({mat_track.name})')
+                    fcurve = create_fcurve(sap_action, 'ARMATURE', data_path, action_group=f'Material ({mat_track.name})')
                     fcurve.keyframe_points.add(count=len(track.values))
                     frame_and_value_flattened = []
                     for index, value in enumerate(track.values):
@@ -440,7 +440,7 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                             vector_index_values = [uv_transform.translate_u for uv_transform in track.values]
                         elif index == 4:
                             vector_index_values = [uv_transform.translate_v for uv_transform in track.values]
-                        fcurve = sap_action.fcurves.new(data_path, index=index, action_group=f'Material ({mat_track.name})')
+                        fcurve = create_fcurve(sap_action, 'ARMATURE', data_path, index=index, action_group=f'Material ({mat_track.name})')
                         fcurve.keyframe_points.add(count=len(vector_index_values))
                         frame_and_value_flattened = []
                         for index, value in enumerate(vector_index_values):
@@ -456,6 +456,14 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
     arma.animation_data.action = bone_action
     arma.data.animation_data.action = sap_action
 
+    if bpy.app.version >= (4, 4, 0):
+        # Assign the animation for Blender 5.0 or later.
+        # This requires the slots id type to match the target object type.
+        if len(bone_action.slots) > 0:
+            arma.animation_data.action_slot = bone_action.slots[0]
+
+        if len(sap_action.slots) > 0:
+            arma.data.animation_data.action_slot = sap_action.slots[0]
 
 
 def get_raw_matrix(bone_to_node, bone, index, node) -> Matrix:
@@ -754,3 +762,26 @@ def update_camera_transforms(camera: bpy.types.Object, transform_group, index, f
     camera.matrix_local = axis_correction @ translation @ rotation @ scale
     keyframe_insert_camera_locrotscale(camera, frame)
 
+
+def create_fcurve(action, id_type: str, data_path: str, index: int = 0, action_group: str = '') -> bpy.types.FCurve:
+    if bpy.app.version >= (5, 0, 0):
+        # Blender 5.0 removes the legacy Action API.
+        if len(action.layers) == 0:
+            layer = action.layers.new("Layer")
+        else:
+            layer = action.layers[0]
+
+        if len(layer.strips) == 0:
+            strip = layer.strips.new(type="KEYFRAME")
+        else:
+            strip = layer.strips[0]
+
+        if len(action.slots) == 0:
+            slot = action.slots.new(id_type, name="Legacy Slot")
+        else:
+            slot = action.slots[0]
+
+        channelbag = strip.channelbag(slot, ensure=True)
+        return channelbag.fcurves.new(data_path, index=index, group_name=action_group)
+    else:
+        return action.fcurves.new(data_path, index=index, action_group=action_group)
