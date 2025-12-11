@@ -220,7 +220,7 @@ def import_model(operator: bpy.types.Operator, context: bpy.types.Context):
             operator.report({'ERROR'}, f'Failed to import materials; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
     try:
-        create_mesh(ssbh_model, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material)
+        create_mesh(operator, ssbh_model, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material)
     except Exception as e:
         operator.report({'ERROR'}, f'Failed to import .NUMDLB, .NUMATB, or .NUMSHB; Error="{e}" ; Traceback=\n{traceback.format_exc()}')
 
@@ -500,7 +500,7 @@ def attach_armature_create_vertex_groups(mesh_obj, skel, armature, ssbh_mesh_obj
         modifier.object = armature
 
 
-def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
+def create_blender_mesh(operator: bpy.types.Operator, ssbh_mesh_object, skel, name_index_mat_dict):
     blender_mesh = bpy.data.meshes.new(ssbh_mesh_object.name)
 
     # TODO: Handle attribute data arrays not having the appropriate number of rows and columns.
@@ -558,14 +558,13 @@ def create_blender_mesh(ssbh_mesh_object, skel, name_index_mat_dict):
     try:
         material = name_index_mat_dict[(ssbh_mesh_object.name, ssbh_mesh_object.subindex)]
         blender_mesh.materials.append(material)
-    except Exception as e:
-        print(f'Failed to assign material for {ssbh_mesh_object.name}{ssbh_mesh_object.subindex}: {e}')
-
+    except Exception:
+        operator.report({'WARNING'}, f'Failed to assign material for {ssbh_mesh_object.name}{ssbh_mesh_object.subindex}')
 
     return blender_mesh
 
 
-def create_mesh(ssbh_model: ssbh_data_py.modl_data.ModlData, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material):
+def create_mesh(operator: bpy.types.Operator, ssbh_model: ssbh_data_py.modl_data.ModlData, ssbh_mesh, ssbh_skel, armature, context, material_label_to_material):
     '''
     So the goal here is to create a set of materials to share among the meshes for this model.
     But, other previously created models can have materials of the same name.
@@ -573,25 +572,7 @@ def create_mesh(ssbh_model: ssbh_data_py.modl_data.ModlData, ssbh_mesh, ssbh_ske
     example, bpy.data.materials.new('A') might create 'A' or 'A.001', so store reference to the mat created rather than the name
     '''
     created_meshes = []
-    '''
-    unique_numdlb_material_labels = {e.material_label for e in ssbh_model.entries}
-    
-    texture_name_to_image_dict = {}
-    texture_name_to_image_dict = import_material_images(ssbh_matl, context.scene.sub_scene_properties.model_import_folder_path)
 
-    label_to_material_dict = {}
-    for label in unique_numdlb_material_labels:
-        blender_mat = bpy.data.materials.new(label)
-
-        # Mesh import should still succeed even if materials can't be created.
-        # TODO: Report some sort of error to the user?
-        try:
-            setup_blender_mat(blender_mat, label, ssbh_matl, texture_name_to_image_dict)
-            label_to_material_dict[label] = blender_mat
-        except Exception as e:
-            # TODO: Report an exception instead.
-            print(f'Failed to create material for {label}:  Error="{e}" ; Traceback=\n{traceback.format_exc()}')
-    '''
     name_index_mat_dict = { 
         (e.mesh_object_name,e.mesh_object_subindex):material_label_to_material[e.material_label] 
         for e in ssbh_model.entries if e.material_label in material_label_to_material
@@ -600,7 +581,7 @@ def create_mesh(ssbh_model: ssbh_data_py.modl_data.ModlData, ssbh_mesh, ssbh_ske
     start = time.time()
 
     for i, ssbh_mesh_object in enumerate(ssbh_mesh.objects):
-        blender_mesh = create_blender_mesh(ssbh_mesh_object, ssbh_skel, name_index_mat_dict)
+        blender_mesh = create_blender_mesh(operator, ssbh_mesh_object, ssbh_skel, name_index_mat_dict)
         mesh_obj = bpy.data.objects.new(blender_mesh.name, blender_mesh)
 
         attach_armature_create_vertex_groups(mesh_obj, ssbh_skel, armature, ssbh_mesh_object)

@@ -1057,9 +1057,10 @@ def process_mesh(operator: Operator, context: Context, mesh_object_copy: Object,
             dest_bm.to_mesh(dest_obj.data)
         dest_bm.clear()
         dest_obj.data.update()
-        mat = dest_obj.material_slots[material_index].material
         dest_obj.data.materials.clear()
-        dest_obj.data.materials.append(mat)
+        if material_index < len(dest_obj.material_slots):
+            mat = dest_obj.material_slots[material_index].material
+            dest_obj.data.materials.append(mat)
         split_meshes.add(dest_obj)
     
     for split_mesh in split_meshes:
