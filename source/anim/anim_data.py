@@ -20,7 +20,8 @@ mat_sub_types = (
     ('FLOAT', 'Custom Float', 'Custom Float'),
     ('BOOL', 'Custom Bool', 'Custom Bool'),
     ('PATTERN', 'Pattern Index', 'Pattern Index'),
-    ('TEXTURE', 'Texture Transform', 'Texture Transform')
+    ('TEXTURE', 'Texture Transform', 'Texture Transform'),
+    ('DIFFUSE_UV', 'Diffuse UV Transform', 'Diffuse UV Transform')
 )
 
 class SUB_PT_sub_smush_anim_data_main(Panel):

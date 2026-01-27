@@ -384,6 +384,8 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                     prop.sub_type = 'PATTERN'
                 elif 'Texture' in track.name:
                     prop.sub_type = 'TEXTURE'
+                elif track.name == 'DiffuseUVTransform':
+                    prop.sub_type = 'DIFFUSE_UV'
                 else:
                     raise TypeError(f'Unsupported track name {track.name}')
         # Now import the values
@@ -446,6 +448,9 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
                         for index, value in enumerate(vector_index_values):
                             frame_and_value_flattened.extend([scene.frame_start + index, value])
                         fcurve.keyframe_points.foreach_set('co', frame_and_value_flattened)
+                elif prop.sub_type == 'DIFFUSE_UV':
+                    # TODO: implement support for diffuse UV transforms
+                    pass
     
     if visibility_group:
         setup_visibility_drivers(arma)
