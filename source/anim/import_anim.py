@@ -461,14 +461,13 @@ def import_model_anim(context: bpy.types.Context, filepath: str,
     arma.animation_data.action = bone_action
     arma.data.animation_data.action = sap_action
 
-    if bpy.app.version >= (4, 4, 0):
-        # Assign the animation for Blender 5.0 or later.
-        # This requires the slots id type to match the target object type.
-        if len(bone_action.slots) > 0:
-            arma.animation_data.action_slot = bone_action.slots[0]
+    # Assign the animation for Blender 5.0 or later.
+    # This requires the slots id type to match the target object type.
+    if len(bone_action.slots) > 0:
+        arma.animation_data.action_slot = bone_action.slots[0]
 
-        if len(sap_action.slots) > 0:
-            arma.data.animation_data.action_slot = sap_action.slots[0]
+    if len(sap_action.slots) > 0:
+        arma.data.animation_data.action_slot = sap_action.slots[0]
 
 
 def get_raw_matrix(bone_to_node, bone, index, node) -> Matrix:
@@ -769,24 +768,21 @@ def update_camera_transforms(camera: bpy.types.Object, transform_group, index, f
 
 
 def create_fcurve(action, id_type: str, data_path: str, index: int = 0, action_group: str = '') -> bpy.types.FCurve:
-    if bpy.app.version >= (5, 0, 0):
-        # Blender 5.0 removes the legacy Action API.
-        if len(action.layers) == 0:
-            layer = action.layers.new("Layer")
-        else:
-            layer = action.layers[0]
-
-        if len(layer.strips) == 0:
-            strip = layer.strips.new(type="KEYFRAME")
-        else:
-            strip = layer.strips[0]
-
-        if len(action.slots) == 0:
-            slot = action.slots.new(id_type, name="Legacy Slot")
-        else:
-            slot = action.slots[0]
-
-        channelbag = strip.channelbag(slot, ensure=True)
-        return channelbag.fcurves.new(data_path, index=index, group_name=action_group)
+    # Blender 5.0 removes the legacy Action API.
+    if len(action.layers) == 0:
+        layer = action.layers.new("Layer")
     else:
-        return action.fcurves.new(data_path, index=index, action_group=action_group)
+        layer = action.layers[0]
+
+    if len(layer.strips) == 0:
+        strip = layer.strips.new(type="KEYFRAME")
+    else:
+        strip = layer.strips[0]
+
+    if len(action.slots) == 0:
+        slot = action.slots.new(id_type, name="Legacy Slot")
+    else:
+        slot = action.slots[0]
+
+    channelbag = strip.channelbag(slot, ensure=True)
+    return channelbag.fcurves.new(data_path, index=index, group_name=action_group)

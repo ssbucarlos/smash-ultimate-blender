@@ -609,20 +609,16 @@ def export_camera_anim(context, operator, camera: bpy.types.Object, filepath, fi
     ssbh_anim_data.save(filepath)
 
 def get_fcurves(action):
-    if bpy.app.version >= (5, 0, 0):
-        # Blender 5.0 removes the legacy Action API.
-        if len(action.layers) > 0:
-            layer = action.layers[0]
+    if len(action.layers) > 0:
+        layer = action.layers[0]
 
-            if len(layer.strips) > 0:
-                strip = layer.strips[0]
+        if len(layer.strips) > 0:
+            strip = layer.strips[0]
 
-            if len(action.slots) > 0:
-                slot = action.slots[0]
-                
-                channelbag = strip.channelbag(slot, ensure=True)
-                return channelbag.fcurves
+        if len(action.slots) > 0:
+            slot = action.slots[0]
+            
+            channelbag = strip.channelbag(slot, ensure=True)
+            return channelbag.fcurves
 
-        return []
-    else:
-        return action.fcurves
+    return []
