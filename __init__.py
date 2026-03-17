@@ -4,7 +4,7 @@ bl_info = {
     'category': 'All',
     'location': 'View 3D > Tool Shelf > Ultimate',
     'description': 'A collection of tools for importing models and animations to smash ultimate.',
-    'version': (3, 0, 4),
+    'version': (4, 0, 0),
     'blender': (5, 1, 0),
     'warning': 'TO REMOVE: First "Disable" the plugin, then restart blender, then you can hit "Remove" to uninstall',
     'doc_url': 'https://github.com/ssbucarlos/smash-ultimate-blender/wiki',
