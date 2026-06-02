@@ -103,7 +103,7 @@ def create_sub_matl_data_from_shader_label(material: bpy.types.Material, shader_
             sub_matl_data.add_vector(
                 ssbh_data_py.matl_data.Vector4Param(
                     param_id=ssbh_data_py.matl_data.ParamId.from_value(missing_param_id),
-                    data=vector_param_id_value_to_default_value[missing_param_id],
+                    data=list(vector_param_id_value_to_default_value[missing_param_id]),
                 )
             )
         elif missing_param_id in texture_param_id_values:
