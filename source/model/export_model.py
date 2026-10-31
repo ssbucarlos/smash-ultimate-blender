@@ -1366,8 +1366,11 @@ def find_edges_to_split(bm) -> set[bmesh.types.BMEdge]:
     normal_layer = bm.loops.layers.float_color.get('_smush_blender_custom_normals')
 
     for edge in bm.edges:
+        if edge.seam:
+            # UV boundary edges were marked earlier.
+            edges_to_split.add(edge)
+        elif len(edge.link_faces) == 2:
         # Each edge should be adjacent to two faces for clean geometry.
-        if len(edge.link_faces) == 2:
             f0, f1 = edge.link_faces
             # Find matching loops for this edge in both faces
             loop0 = next((l for l in f0.loops if l.edge == edge), None)
@@ -1386,12 +1389,6 @@ def should_split_edge(loop0, loop1, bm, normal_layer) -> bool:
     if not math.isclose(loop0[normal_layer].dot(loop1[normal_layer]), 1.0, abs_tol=0.001, rel_tol=0.001):
         return True
 
-    # TODO: Why does this split too many edges?
-    # Check if at least one UV value does not match.
-    for uv_layer in bm.loops.layers.uv.values():
-        if loop0[uv_layer].uv != loop1[uv_layer].uv:
-            return True
-
     # Check if at least one vertex color value does not match.
     for layer_name, color_layer in chain(bm.loops.layers.color.items(), bm.loops.layers.float_color.items()):
         # Custom normals need a less strict check performed above.
@@ -1409,6 +1406,10 @@ def should_split_edge(loop0, loop1, bm, normal_layer) -> bool:
 def split_duplicate_loop_attributes(mesh: bpy.types.Object):
     bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.mode_set(mode = 'EDIT')
+
+    # Mark UV seams on the temporary mesh to split later.
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.seams_from_islands(mark_seams=True, mark_sharp=False)
 
     me: bpy.types.Mesh = mesh.data
     bm = bmesh.from_edit_mesh(me)
