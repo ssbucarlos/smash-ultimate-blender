@@ -15,6 +15,7 @@ from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator, Panel, EditBone, Object, Context, EditBone, Mesh, MeshVertex, ShapeKey
 from mathutils import Vector, Matrix
+from itertools import chain
 
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
@@ -1355,41 +1356,54 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
     return ssbh_mesh_object
 
 
-def add_duplicate_uv_edges(edges_to_split, bm, uv_layer):
-    # Blender stores uvs per loop rather than per vertex.
-    # Find edges connected to vertices with more than one uv coord.
+def find_edges_to_split(bm) -> set[bmesh.types.BMEdge]:
+    # Blender stores some attributes per loop rather than per vertex.
+    # Find edges connected to vertices with more than one attribute value.
     # This allows converting to per vertex later by splitting edges.
-    index_to_uv = {}
-    for face in bm.faces:
-        for loop in face.loops:
-            vertex_index = loop.vert.index
-            uv = loop[uv_layer].uv
-            # Use strict equality since UVs are unlikely to change unintentionally.
-            if vertex_index not in index_to_uv:
-                index_to_uv[vertex_index] = uv
-            elif uv != index_to_uv[vertex_index]:
-                edges_to_split.extend(loop.vert.link_edges)
+    edges_to_split = set()
 
-
-def add_duplicate_normal_edges(edges_to_split, bm):
     # The original normals are preserved in a color attribute.
     normal_layer = bm.loops.layers.float_color.get('_smush_blender_custom_normals')
 
-    # Find edges connected to vertices with more than one normal.
-    # This allows converting to per vertex later by splitting edges.
-    index_to_normal = {}
-    for face in bm.faces:
-        for loop in face.loops:
-            vertex_index = loop.vert.index
-            normal = loop[normal_layer]
-            # Small fluctuations in normal vectors are expected during processing.
-            # Check if the angle between normals is sufficiently large.
-            # Assume normal vectors are normalized to have length 1.0.
-            if vertex_index not in index_to_normal:
-                index_to_normal[vertex_index] = normal
-            elif not math.isclose(normal.dot(index_to_normal[vertex_index]), 1.0, abs_tol=0.001, rel_tol=0.001):
-                # Get any edges containing this vertex.
-                edges_to_split.extend(loop.vert.link_edges)
+    for edge in bm.edges:
+        # Each edge should be adjacent to two faces for clean geometry.
+        if len(edge.link_faces) == 2:
+            f0, f1 = edge.link_faces
+            # Find matching loops for this edge in both faces
+            loop0 = next((l for l in f0.loops if l.edge == edge), None)
+            loop1 = next((l for l in f1.loops if l.edge == edge), None)
+
+            if loop0 and loop1 and should_split_edge(loop0, loop1, bm, normal_layer):
+                edges_to_split.add(edge)
+
+    return edges_to_split
+
+
+def should_split_edge(loop0, loop1, bm, normal_layer) -> bool:
+    # Small fluctuations in normal vectors are expected during processing.
+    # Check if the angle between normals is sufficiently large.
+    # Assume normal vectors are normalized to have length 1.0.
+    if not math.isclose(loop0[normal_layer].dot(loop1[normal_layer]), 1.0, abs_tol=0.001, rel_tol=0.001):
+        return True
+
+    # TODO: Why does this split too many edges?
+    # Check if at least one UV value does not match.
+    for uv_layer in bm.loops.layers.uv.values():
+        if loop0[uv_layer].uv != loop1[uv_layer].uv:
+            return True
+
+    # Check if at least one vertex color value does not match.
+    for layer_name, color_layer in chain(bm.loops.layers.color.items(), bm.loops.layers.float_color.items()):
+        # Custom normals need a less strict check performed above.
+        if layer_name == '_smush_blender_custom_normals':
+            continue
+
+        # Use strict equality since colors are unlikely to change unintentionally.
+        # TODO: Should color comparison use a tolerance instead?
+        if loop0[color_layer] != loop1[color_layer]:
+            return True
+
+    return False
 
 
 def split_duplicate_loop_attributes(mesh: bpy.types.Object):
@@ -1399,21 +1413,11 @@ def split_duplicate_loop_attributes(mesh: bpy.types.Object):
     me: bpy.types.Mesh = mesh.data
     bm = bmesh.from_edit_mesh(me)
 
-    edges_to_split: list[bmesh.types.BMEdge] = []
-
-    add_duplicate_normal_edges(edges_to_split, bm)
-
-    for layer_name in bm.loops.layers.uv.keys():
-        uv_layer = bm.loops.layers.uv.get(layer_name)
-        add_duplicate_uv_edges(edges_to_split, bm, uv_layer)
-
-    # Duplicate edges cause problems with split_edges.
-    edges_to_split = list(set(edges_to_split))
-
     # Don't modify the mesh if no edges need to be split.
     # This check also seems to prevent a potential crash.
+    edges_to_split = find_edges_to_split(bm)
     if len(edges_to_split) > 0:
-        bmesh.ops.split_edges(bm, edges=edges_to_split)
+        bmesh.ops.split_edges(bm, edges=list(edges_to_split))
         bmesh.update_edit_mesh(me)
 
     bm.free()
