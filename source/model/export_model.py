@@ -1280,6 +1280,9 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
         uv_layer.data.foreach_get("uv", loop_uvs)
 
         uvs = per_loop_to_per_vertex(loop_uvs, vertex_indices, (len(mesh.data.vertices), 2))
+        if not np.array_equal(uvs[vertex_indices], loop_uvs.reshape((-1, 2))):
+            raise RuntimeError(f'Mesh {mesh_name} has unsplit UV corners in {uv_layer.name}. '
+                               'Export stopped to avoid changing texture coordinates.')
         # Flip vertical.
         uvs[:,1] = 1.0 - uvs[:,1]
         ssbh_uv_layer.data = uvs
@@ -1357,6 +1360,13 @@ def make_mesh_object(operator, context, mesh: bpy.types.Object, group_name, i, m
 
 
 def should_separate_loop(bm, vert, loop, normal_layer) -> bool:
+    # UV islands can meet at just one vertex, without a shared edge to mark as
+    # a seam. Every exported UV layer must agree before corners share a vertex;
+    # otherwise the per-loop -> per-vertex conversion silently overwrites a UV.
+    for uv_layer in bm.loops.layers.uv.values():
+        if vert.link_loops[0][uv_layer].uv != loop[uv_layer].uv:
+            return True
+
     # Small fluctuations in normal vectors are expected during processing.
     # Check if the angle between normals is sufficiently large.
     # Assume normal vectors are normalized to have length 1.0.
@@ -1402,14 +1412,20 @@ def split_duplicate_loop_attributes(mesh: bpy.types.Object):
     # The original normals are preserved in a color attribute.
     normal_layer = bm.loops.layers.float_color.get('_smush_blender_custom_normals')
 
-    # Create new vertices for loops with different attribute values for the same vertex.
-    for vert in bm.verts:
-        if len(vert.link_loops) < 2:
-            continue
-
-        for loop in vert.link_loops[1:]:
-            if should_separate_loop(bm, vert, loop, normal_layer):
+    # Splitting one corner can move other corners to a new vertex. Iterate stable
+    # corners and look up their current vertex, rather than stale vertex fan lists.
+    while True:
+        vertex_count = len(bm.verts)
+        split_count = 0
+        loops = [loop for face in bm.faces for loop in face.loops]
+        for loop in loops:
+            if len(loop.vert.link_loops) > 1 and should_separate_loop(bm, loop.vert, loop, normal_layer):
                 bmesh.utils.loop_separate(loop)
+                split_count += 1
+        if split_count == 0:
+            break
+        if len(bm.verts) == vertex_count:
+            raise RuntimeError(f'Could not separate conflicting face corners on {mesh.name}')
 
     bmesh.update_edit_mesh(me)
     bm.free()
