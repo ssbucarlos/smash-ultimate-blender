@@ -19,6 +19,7 @@ classes = [
     source.model.import_model.SUB_OP_import_model,
     source.model.export_model.SUB_PT_export_model,
     source.model.export_model.SUB_OP_model_exporter,
+    source.model.material.bake_model_colors.SUB_OP_bake_model_colors,
     source.model.export_model.SUB_OP_vanilla_nusktb_selector,
     source.model.export_model.SUB_OP_vanilla_update_prc_selector,
     source.exo.magic_exo_skel.SUB_OP_build_bone_list,

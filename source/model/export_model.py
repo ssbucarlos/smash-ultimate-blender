@@ -48,6 +48,7 @@ class SUB_PT_export_model(Panel):
         if ssp.model_export_arma.name not in context.view_layer.objects.keys():
             layout.row().label(text='Armature not in view layer!', icon='ERROR')
             return
+        layout.row().operator('sub.bake_model_colors', icon='RENDER_STILL')
         if '' == ssp.vanilla_nusktb:
             layout.row().label(text='Select the vanilla .nusktb for the exporter to reference!')
             row = layout.row()
@@ -567,13 +568,13 @@ def get_mesh_materials(operator, export_meshes) -> set[bpy.types.Material]:
     #  Gather Material Info
     materials = set()
     for mesh in export_meshes:
-        if len(mesh.data.materials) > 0:
-            if mesh.data.materials[0] is not None:
-                if len(mesh.data.materials) > 1:
+        if len(mesh.material_slots) > 0:
+            if mesh.material_slots[0].material is not None:
+                if len(mesh.material_slots) > 1:
                     message = f'The mesh {mesh.name} has more than one material slot. Only the first material will be exported.'
                     operator.report({'WARNING'}, message)
 
-                materials.add(mesh.data.materials[0])
+                materials.add(mesh.material_slots[0].material)
             else:
                 message = f'The mesh {mesh.name} has no material created for the first material slot.' 
                 message += ' Cannot create model.numatb. Create a material or disable .NUMATB export.'
