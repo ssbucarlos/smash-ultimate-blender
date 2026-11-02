@@ -32,6 +32,32 @@ Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for 
 
     ![image](https://github.com/ssbucarlos/smash-ultimate-blender/assets/77519735/b9fab746-2ddf-45f8-8cec-4351993219d5)
 
+## Bake Model Colors
+
+For an opaque Blender model with many mesh sections, open **Ultimate > Model Exporter**,
+choose its armature, and click **Bake Model Colors**. Choose an output folder and texture
+size, then confirm. No individual mesh selection, target image nodes, or render setup is needed.
+The same command is available through F3 for selected meshes without an armature.
+
+The default **One Color Atlas** layout bakes every material and mesh section into one
+shared color image. Choose **Separate Textures** to create one image per material instead.
+The tool bakes evaluated base-color node edits using Cycles, saves and packs the PNGs, and assigns new Ultimate
+materials with the baked images connected to Texture0. It packs new export UVs on mesh
+copies, including models whose original UVs span several UDIM tiles. Original mesh
+datablocks and materials are retained with fake users for recovery.
+Each run writes to a new subfolder, so existing textures are not overwritten.
+Charts that fall between texture pixels are automatically resampled in a second pass,
+with padding filled only in uncovered areas to preserve intentional black colors.
+Then use **Export Model Files** with **Export .NUMATB** and **Export .NUTEXB** enabled.
+Save the `.blend` to keep the new materials and packed textures.
+
+Meshes must already have a `map1` UV map; auxiliary UV maps are preserved.
+Direct Principled, Diffuse, Emission, and non-node materials are supported.
+This is an opaque color bake: it does not bake
+alpha, lighting, normal maps, or varying roughness/metalness. Original material graphs remain
+available for those workflows. Hidden meshes are skipped. Escape cancels between mesh bakes
+and restores the original materials; render settings and selection are restored after every run.
+
 ## System Requirements
 The plugin supports 64-bit versions of Blender 5.1 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
 If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues).
