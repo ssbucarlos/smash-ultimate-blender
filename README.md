@@ -32,6 +32,25 @@ Check the [wiki](https://github.com/ssbucarlos/smash-ultimate-blender/wiki) for 
 
     ![image](https://github.com/ssbucarlos/smash-ultimate-blender/assets/77519735/b9fab746-2ddf-45f8-8cec-4351993219d5)
 
+## Switch Mod Export
+
+**Create Switch Mod Folder** is enabled by default and is visible in both the
+Model Exporter panel and the export browser. For Switch installation, keep it enabled,
+and the fighter and costume are filled from the selected vanilla `.nusktb` path
+when it ends in, for example, `fighter/ken/model/body/c01/model.nusktb` (`c01`
+is the second costume). Enable **Override Vanilla Target** to export to a different
+fighter or costume. If the skeleton has been copied outside that folder structure,
+enter the internal fighter name and costume manually. Select your mod's root folder as the output. The exporter
+creates `fighter/ken/model/body/c01/` and a matching `config.json` at the root,
+registering the successfully exported textures with ARCropolis. This also works
+with separate color textures, normal maps, and PRM textures. Existing config
+settings and other costume entries are preserved; repeated exports do not add
+duplicate paths. The fighter, costume, and folder option are remembered in the
+scene when you save the `.blend`. Copy the resulting mod folder into
+`sd:/ultimate/mods/`. Leave this option off for the original flat export layout.
+This packages existing costume slots `c00` through `c07`; additional costume slots
+and motion-folder `update.prc` installation remain separate workflows.
+
 ## System Requirements
 The plugin supports 64-bit versions of Blender 5.1 or later for Windows, Linux, and MacOS. Apple machines with M1 processors are also supported.
 If your computer can run a supported version of Blender but fails to install the plugin, please make an issue in [issues](https://github.com/ssbucarlos/smash-ultimate-blender/issues).

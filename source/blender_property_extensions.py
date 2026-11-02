@@ -57,10 +57,19 @@ class SubSceneProperties(PropertyGroup):
         description='True if more than the first 5 bones should be displayed',
         default=False,
     )
+    model_export_switch_mod: BoolProperty(
+        name='Create Switch Mod Folder',
+        description='Export fighter folders and config.json inside the selected mod root folder',
+        default=True,
+    )
+    model_export_fighter: StringProperty(default='')
+    model_export_costume: StringProperty(default='c00')
+    model_export_override_target: BoolProperty(default=False)
     vanilla_nusktb: StringProperty(
         name='Vanilla .NUSKTB file path',
         description='The path to the vanilla nusktb file',
         default='',
+        update=export_model.vanilla_export_target_update,
     )
     vanilla_update_prc: StringProperty(
         name='Vanilla update.prc file path',

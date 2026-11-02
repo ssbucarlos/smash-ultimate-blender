@@ -25,6 +25,23 @@ if TYPE_CHECKING:
 from ...dependencies import ssbh_data_py
 from ...dependencies import pyprc
 from .material import material_inputs
+from .arcropolis_config import target_from_vanilla
+
+
+def vanilla_export_target_update(ssp, context):
+    target = target_from_vanilla(ssp.vanilla_nusktb)
+    if target is not None and not ssp.model_export_override_target:
+        ssp.model_export_fighter, ssp.model_export_costume = target
+
+
+def apply_vanilla_export_target(operator, ssp):
+    target = target_from_vanilla(ssp.vanilla_nusktb)
+    if target is not None and not operator.override_vanilla_target:
+        operator.fighter_name, operator.costume_slot = target
+
+
+def vanilla_target_override_update(operator, context):
+    apply_vanilla_export_target(operator, context.scene.sub_scene_properties)
 
 
 class SUB_PT_export_model(Panel):
@@ -48,6 +65,7 @@ class SUB_PT_export_model(Panel):
         if ssp.model_export_arma.name not in context.view_layer.objects.keys():
             layout.row().label(text='Armature not in view layer!', icon='ERROR')
             return
+        layout.row().prop(ssp, 'model_export_switch_mod')
         if '' == ssp.vanilla_nusktb:
             layout.row().label(text='Select the vanilla .nusktb for the exporter to reference!')
             row = layout.row()
@@ -133,6 +151,28 @@ class SUB_OP_model_exporter(Operator):
         #maxlen=255,  # Max internal buffer length, longer would be clamped. Also blender has this in the example but tbh idk what it does yet
     )
     directory: bpy.props.StringProperty(subtype="DIR_PATH")
+
+    create_switch_mod: BoolProperty(
+        name='Create Switch Mod Folder',
+        description='Create fighter folders and config.json inside the selected output folder',
+        default=True,
+    )
+    fighter_name: StringProperty(
+        name='Fighter',
+        description='Internal fighter folder name, for example ken, mario, or captain',
+    )
+    override_vanilla_target: BoolProperty(
+        name='Override Vanilla Target',
+        description='Choose a different fighter or costume instead of using the vanilla skeleton folder path',
+        default=False,
+        update=vanilla_target_override_update,
+    )
+    costume_slot: EnumProperty(
+        name='Costume',
+        description='The costume slot this mod replaces',
+        items=tuple((f'c0{i}', f'c0{i} (costume {i + 1})', '') for i in range(8)),
+        default='c00',
+    )
 
     include_numdlb: BoolProperty(
         name="Export .NUMDLB",
@@ -243,18 +283,78 @@ class SUB_OP_model_exporter(Operator):
 
     # Initially set the filename field to be nothing
     def invoke(self, context, _event):
+        ssp = context.scene.sub_scene_properties
+        self.create_switch_mod = ssp.model_export_switch_mod
+        self.fighter_name = ssp.model_export_fighter
+        self.override_vanilla_target = ssp.model_export_override_target
+        if ssp.model_export_costume in {f'c0{i}' for i in range(8)}:
+            self.costume_slot = ssp.model_export_costume
+        apply_vanilla_export_target(self, ssp)
         if context.scene.sub_scene_properties.vanilla_nusktb == '':
             self.linked_nusktb_settings = 'NO_LINK'
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
+
+    def draw(self, context):
+        layout = self.layout
+        box = layout.box()
+        box.prop(self, 'create_switch_mod')
+        if self.create_switch_mod:
+            inferred = target_from_vanilla(context.scene.sub_scene_properties.vanilla_nusktb)
+            if inferred is not None:
+                box.label(text=f'From vanilla: {inferred[0]} / {inferred[1]}')
+                box.prop(self, 'override_vanilla_target')
+            else:
+                box.label(text='Vanilla path has no target; enter it below.')
+            target_fields = box.column()
+            target_fields.enabled = inferred is None or self.override_vanilla_target
+            target_fields.prop(self, 'fighter_name')
+            target_fields.prop(self, 'costume_slot')
+            box.label(text='Select the mod root folder.')
+            box.label(text='config.json is generated automatically.')
+        for name in ('include_numdlb', 'include_numshb', 'include_numshexb',
+                     'include_nusktb', 'include_numatb', 'include_nuhlpb',
+                     'include_nutexb', 'linked_nusktb_settings',
+                     'optimize_mesh_weights_to_parent_bone', 'armature_position',
+                     'apply_modifiers', 'split_shape_keys', 'ignore_underscore_meshes',
+                     'use_debug_timer'):
+            layout.prop(self, name)
     
     def execute(self, context):
+        if not self.directory:
+            self.report({'ERROR'}, 'Choose an output folder before exporting.')
+            return {'CANCELLED'}
+        folder = Path(bpy.path.abspath(self.directory))
+        ssp = context.scene.sub_scene_properties
+        if self.create_switch_mod:
+            apply_vanilla_export_target(self, ssp)
+            from . import arcropolis_config
+            try:
+                export_folder = arcropolis_config.model_folder(folder, self.fighter_name, self.costume_slot)
+                arcropolis_config.read_config(folder)
+                export_folder.mkdir(parents=True, exist_ok=True)
+            except (ValueError, OSError) as error:
+                self.report({'ERROR'}, f'Cannot prepare Switch mod folder: {error}')
+                return {'CANCELLED'}
+        else:
+            export_folder = folder
+        ssp.model_export_switch_mod = self.create_switch_mod
+        ssp.model_export_fighter = self.fighter_name.strip().lower()
+        ssp.model_export_costume = self.costume_slot
+        ssp.model_export_override_target = self.override_vanilla_target
         start = time.perf_counter()
         with cProfile.Profile() as pr:
-            export_model(self, context, self.directory, self.include_numdlb, self.include_numshb, self.include_numshexb,
+            textures = export_model(self, context, str(export_folder), self.include_numdlb, self.include_numshb, self.include_numshexb,
                     self.include_nusktb, self.include_numatb, self.include_nuhlpb, self.include_nutexb, self.linked_nusktb_settings,
                     self.optimize_mesh_weights_to_parent_bone, self.armature_position, self.apply_modifiers,
                     self.split_shape_keys, self.ignore_underscore_meshes)
+        if self.create_switch_mod:
+            try:
+                arcropolis_config.write_config(folder, self.fighter_name, self.costume_slot, textures)
+            except (ValueError, OSError) as error:
+                self.report({'ERROR'}, f'Model files exported, but config.json could not be written: {error}')
+                return {'CANCELLED'}
+            self.report({'INFO'}, f'Switch mod exported with config.json: {folder}')
         if self.use_debug_timer:
             stats = pstats.Stats(pr)
             stats.sort_stats(pstats.SortKey.TIME)
@@ -374,6 +474,7 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
         selected_object.select_set(False)
 
     folder = Path(directory)
+    exported_textures = set()
     # Create and save files individually to make this step more robust.
     # Users can avoid errors in generating a file by disabling export for that file.
     if include_numshb or include_numshexb or include_numatb or include_numdlb:
@@ -434,7 +535,7 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
                     try:
                         materials = get_mesh_materials(operator, just_export_meshes)
                         from .material.texture.export_nutexb import export_nutexb_from_blender_materials
-                        export_nutexb_from_blender_materials(operator, materials, folder)
+                        exported_textures = export_nutexb_from_blender_materials(operator, materials, folder)
                     except Exception as e:
                         operator.report({'ERROR'}, f'Texture exporting stopped early, error = {e} ; Traceback=\n{traceback.format_exc()}')
             if include_numshexb:
@@ -523,6 +624,7 @@ def export_model(operator: bpy.types.Operator, context, directory, include_numdl
         setup_visibility_drivers(arma)
 
     arma.data.pose_position = old_pose_position
+    return exported_textures
 
 def create_skel_and_prc(operator, context, linked_nusktb_settings, folder) -> tuple[ssbh_data_py.skel_data.SkelData, Any]:
     try:
@@ -1638,4 +1740,3 @@ def create_and_save_nuhlpb(path: Path, arma: bpy.types.Object):
                                         quat2             = [oc.quat2[1], oc.quat2[2], oc.quat2[3], oc.quat2[0]],
                                     ) for oc in arma.data.sub_helper_bone_data.orient_constraints]
     ssbh_hlpb.save(str(path))
-     
