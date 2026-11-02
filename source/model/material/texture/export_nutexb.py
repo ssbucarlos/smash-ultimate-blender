@@ -10,6 +10,7 @@ from ...export_model import would_trimmed_names_be_unique, get_problematic_names
 
 def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials: set[bpy.types.Material], export_dir: Path):
     images: set[bpy.types.Image] = set()
+    exported_paths: set[Path] = set()
     
     linked_materials = get_linked_materials(materials)
 
@@ -62,6 +63,7 @@ def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials
 
         try:
             run([get_ultimate_tex_path(), str(temp_image_path), str(nutexb_filepath), "--format", format], capture_output=True, check=True)
+            exported_paths.add(nutexb_filepath)
         except CalledProcessError as e:
             operator.report({'WARNING'}, f"failed to export `{image.name}` as .NUTEXB, error = {e.stderr}")
 
@@ -70,3 +72,4 @@ def export_nutexb_from_blender_materials(operator: bpy.types.Operator, materials
             temp_image_path.unlink()
     except Exception as e:
         operator.report({'WARNING'}, f"Failed to remove temporary .png file used for exporting textures, error = {e}")
+    return exported_paths
