@@ -51,6 +51,23 @@ with padding filled only in uncovered areas to preserve intentional black colors
 Then use **Export Model Files** with **Export .NUMATB** and **Export .NUTEXB** enabled.
 Save the `.blend` to keep the new materials and packed textures.
 
+**Create Switch Mod Folder** is enabled by default and is visible in both the
+Model Exporter panel and the export browser. For Switch installation, keep it enabled,
+and the fighter and costume are filled from the selected vanilla `.nusktb` path
+when it ends in, for example, `fighter/ken/model/body/c01/model.nusktb` (`c01`
+is the second costume). Enable **Override Vanilla Target** to export to a different
+fighter or costume. If the skeleton has been copied outside that folder structure,
+enter the internal fighter name and costume manually. Select your mod's root folder as the output. The exporter
+creates `fighter/ken/model/body/c01/` and a matching `config.json` at the root,
+registering the successfully exported textures with ARCropolis. This also works
+with separate color textures, normal maps, and PRM textures. Existing config
+settings and other costume entries are preserved; repeated exports do not add
+duplicate paths. The fighter, costume, and folder option are remembered in the
+scene when you save the `.blend`. Copy the resulting mod folder into
+`sd:/ultimate/mods/`. Leave this option off for the original flat export layout.
+This packages existing costume slots `c00` through `c07`; additional costume slots
+and motion-folder `update.prc` installation remain separate workflows.
+
 Meshes must already have a `map1` UV map; auxiliary UV maps are preserved.
 Direct Principled, Diffuse, Emission, and non-node materials are supported.
 This is an opaque color bake: it does not bake
