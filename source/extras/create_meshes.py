@@ -1,23 +1,26 @@
-import bpy
-import bmesh
 import math
+from math import cos, pi, radians, sin, sqrt
+
+import bmesh
+import bpy
 import numpy
-from math import sqrt, cos, sin, pi, radians
-from mathutils import Vector, Matrix, Quaternion
-from bpy.types import Context, Operator, Object, Bone, Mesh
 from bpy.props import FloatProperty, StringProperty
+from bpy.types import Bone, Context, Mesh, Object, Operator
+from mathutils import Matrix, Quaternion, Vector
+
 
 def verts_from_circle(radius, samples, y):
     # x**2 + z**2 = radius**2
     # need to make the object using 'Y' up since bones in blender use 'Y' as primary axis
     verts: list[tuple[float, float, float]] = []
     theta = 2.0 * pi / samples
-    for i in range(1, samples+1):
+    for i in range(1, samples + 1):
         x = radius * cos(theta * i)
         z = radius * sin(theta * i)
-        verts.append((x,y,z))
+        verts.append((x, y, z))
     return verts
-    
+
+
 """def make_capsule(object:bpy.types.Object, start_radius, end_radius, length, start_offset=Vector([0.0,0.0,0.0]), end_offset=Vector([0.0,0.0,0.0])):
     # TODO: Figure out offset
     start_verts = verts_from_circle(start_radius, 32, 0.0)
@@ -37,9 +40,14 @@ def verts_from_circle(radius, samples, y):
     
     object.data.from_pydata(verts, edges, faces)"""
 
-def get_quat_to_point_source_to_target(source_bone: Bone, target_bone: Bone) -> Quaternion:
-    distance_vec: Vector = target_bone.matrix_local.translation - source_bone.matrix_local.translation
-    up_vec = Vector([0,1,0])
+
+def get_quat_to_point_source_to_target(
+    source_bone: Bone, target_bone: Bone
+) -> Quaternion:
+    distance_vec: Vector = (
+        target_bone.matrix_local.translation - source_bone.matrix_local.translation
+    )
+    up_vec = Vector([0, 1, 0])
     cross = up_vec.cross(distance_vec)
     dot = up_vec.dot(distance_vec)
     w = up_vec.length * distance_vec.length + dot
@@ -47,7 +55,17 @@ def get_quat_to_point_source_to_target(source_bone: Bone, target_bone: Bone) -> 
     distance_vec_as_rotation_quat.normalize()
     return distance_vec_as_rotation_quat
 
-def make_capsule_mesh(obj: Object, start_radius, end_radius, start_offset, end_offset, start_bone: Bone, end_bone: Bone, skin_to_start_only=False):
+
+def make_capsule_mesh(
+    obj: Object,
+    start_radius,
+    end_radius,
+    start_offset,
+    end_offset,
+    start_bone: Bone,
+    end_bone: Bone,
+    skin_to_start_only=False,
+):
     # Handle vertex groups
     if start_bone == end_bone:
         skin_to_start_only = True
@@ -55,7 +73,7 @@ def make_capsule_mesh(obj: Object, start_radius, end_radius, start_offset, end_o
     obj.vertex_groups.new(name=start_bone.name)
     if not skin_to_start_only:
         obj.vertex_groups.new(name=end_bone.name)
-    
+
     # Init bmesh
     bm = bmesh.new()
     deform_layer = bm.verts.layers.deform.verify()
@@ -64,24 +82,56 @@ def make_capsule_mesh(obj: Object, start_radius, end_radius, start_offset, end_o
     start_verts = bmesh.ops.create_circle(bm, segments=16, radius=start_radius)
     # Rotate start verts so they face the end_bone so capsule can connect properly
     align_with_end_bone_quat = get_quat_to_point_source_to_target(start_bone, end_bone)
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(radians(90),4,'X'), verts=start_verts['verts'])
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(align_with_end_bone_quat.angle, 4, align_with_end_bone_quat.axis), verts=start_verts['verts'])
-    bmesh.ops.translate(bm, vec=start_bone.matrix_local.translation, verts=start_verts['verts'])
-    bmesh.ops.translate(bm, vec=start_offset, space=start_bone.matrix_local.inverted(), verts=start_verts['verts'])
-    for v in start_verts['verts']:
+    bmesh.ops.rotate(
+        bm, matrix=Matrix.Rotation(radians(90), 4, "X"), verts=start_verts["verts"]
+    )
+    bmesh.ops.rotate(
+        bm,
+        matrix=Matrix.Rotation(
+            align_with_end_bone_quat.angle, 4, align_with_end_bone_quat.axis
+        ),
+        verts=start_verts["verts"],
+    )
+    bmesh.ops.translate(
+        bm, vec=start_bone.matrix_local.translation, verts=start_verts["verts"]
+    )
+    bmesh.ops.translate(
+        bm,
+        vec=start_offset,
+        space=start_bone.matrix_local.inverted(),
+        verts=start_verts["verts"],
+    )
+    for v in start_verts["verts"]:
         g = v[deform_layer]
         g[0] = 1.0
 
     # Handle ending side
     end_verts = bmesh.ops.create_circle(bm, segments=16, radius=end_radius)
     # Rotate end verts so they face the start_bone so capsule can connect properly
-    align_with_start_bone_quat = get_quat_to_point_source_to_target(end_bone, start_bone)
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(radians(90),4,'X'), verts=end_verts['verts'])
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(align_with_start_bone_quat.angle, 4, align_with_start_bone_quat.axis), verts=end_verts['verts'])
-    bmesh.ops.translate(bm, vec=end_bone.matrix_local.translation, verts=end_verts['verts'])
-    bmesh.ops.translate(bm, vec=end_offset, space=end_bone.matrix_local.inverted(), verts=end_verts['verts'])
+    align_with_start_bone_quat = get_quat_to_point_source_to_target(
+        end_bone, start_bone
+    )
+    bmesh.ops.rotate(
+        bm, matrix=Matrix.Rotation(radians(90), 4, "X"), verts=end_verts["verts"]
+    )
+    bmesh.ops.rotate(
+        bm,
+        matrix=Matrix.Rotation(
+            align_with_start_bone_quat.angle, 4, align_with_start_bone_quat.axis
+        ),
+        verts=end_verts["verts"],
+    )
+    bmesh.ops.translate(
+        bm, vec=end_bone.matrix_local.translation, verts=end_verts["verts"]
+    )
+    bmesh.ops.translate(
+        bm,
+        vec=end_offset,
+        space=end_bone.matrix_local.inverted(),
+        verts=end_verts["verts"],
+    )
 
-    for v in end_verts['verts']:
+    for v in end_verts["verts"]:
         g = v[deform_layer]
         if skin_to_start_only:
             g[0] = 1.0
@@ -90,6 +140,7 @@ def make_capsule_mesh(obj: Object, start_radius, end_radius, start_offset, end_o
     bmesh.ops.bridge_loops(bm, edges=bm.edges[:])
     bm.to_mesh(obj.data)
     bm.free()
+
 
 def make_connection_mesh(obj: Object, radius: float, start_bone: Bone, end_bone: Bone):
     # Handle vertex groups
@@ -109,24 +160,48 @@ def make_connection_mesh(obj: Object, radius: float, start_bone: Bone, end_bone:
     # Handle starting side
     start_verts = bmesh.ops.create_circle(bm, segments=16, radius=radius)
     # Rotate start verts so they face the end_bone so capsule can connect properly
-    align_with_end_bone_quat = get_quat_to_point_source_to_target(start_bone_child, end_bone_child)
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(radians(90),4,'X'), verts=start_verts['verts'])
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(align_with_end_bone_quat.angle, 4, align_with_end_bone_quat.axis), verts=start_verts['verts'])
-    bmesh.ops.translate(bm, vec=start_bone_child.matrix_local.translation, verts=start_verts['verts'])
-    
+    align_with_end_bone_quat = get_quat_to_point_source_to_target(
+        start_bone_child, end_bone_child
+    )
+    bmesh.ops.rotate(
+        bm, matrix=Matrix.Rotation(radians(90), 4, "X"), verts=start_verts["verts"]
+    )
+    bmesh.ops.rotate(
+        bm,
+        matrix=Matrix.Rotation(
+            align_with_end_bone_quat.angle, 4, align_with_end_bone_quat.axis
+        ),
+        verts=start_verts["verts"],
+    )
+    bmesh.ops.translate(
+        bm, vec=start_bone_child.matrix_local.translation, verts=start_verts["verts"]
+    )
+
     # Handle ending side
     end_verts = bmesh.ops.create_circle(bm, segments=16, radius=radius)
     # Rotate end verts so they face the start_bone so capsule can connect properly
-    align_with_start_bone_quat = get_quat_to_point_source_to_target(end_bone_child, start_bone_child)
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(radians(90),4,'X'), verts=end_verts['verts'])
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(align_with_start_bone_quat.angle, 4, align_with_start_bone_quat.axis), verts=end_verts['verts'])
-    bmesh.ops.translate(bm, vec=end_bone_child.matrix_local.translation, verts=end_verts['verts'])
-    
+    align_with_start_bone_quat = get_quat_to_point_source_to_target(
+        end_bone_child, start_bone_child
+    )
+    bmesh.ops.rotate(
+        bm, matrix=Matrix.Rotation(radians(90), 4, "X"), verts=end_verts["verts"]
+    )
+    bmesh.ops.rotate(
+        bm,
+        matrix=Matrix.Rotation(
+            align_with_start_bone_quat.angle, 4, align_with_start_bone_quat.axis
+        ),
+        verts=end_verts["verts"],
+    )
+    bmesh.ops.translate(
+        bm, vec=end_bone_child.matrix_local.translation, verts=end_verts["verts"]
+    )
+
     # Assign weights
-    for v in start_verts['verts']:
+    for v in start_verts["verts"]:
         g = v[deform_layer]
         g[0] = 1.0
-    for v in end_verts['verts']:
+    for v in end_verts["verts"]:
         g = v[deform_layer]
         g[1] = 1.0
 
@@ -137,18 +212,39 @@ def make_connection_mesh(obj: Object, radius: float, start_bone: Bone, end_bone:
     bm.to_mesh(obj.data)
     bm.free()
 
+
 def make_connection_obj(connection_name, radius, start_bone, end_bone):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(connection_name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
     make_connection_mesh(obj, radius, start_bone, end_bone)
     return obj
 
-def make_capsule_object(name, start_radius, end_radius, start_offset, end_offset, start_bone, end_bone, skin_to_start_only=False):
+
+def make_capsule_object(
+    name,
+    start_radius,
+    end_radius,
+    start_offset,
+    end_offset,
+    start_bone,
+    end_bone,
+    skin_to_start_only=False,
+):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
     obj.vertex_groups.new(name=end_bone.name)
-    make_capsule_mesh(obj, start_radius, end_radius, start_offset, end_offset, start_bone, end_bone, skin_to_start_only)
+    make_capsule_mesh(
+        obj,
+        start_radius,
+        end_radius,
+        start_offset,
+        end_offset,
+        start_bone,
+        end_bone,
+        skin_to_start_only,
+    )
     return obj
+
 
 def make_sphere_2(obj: bpy.types.Object, radius, offset, bone: bpy.types.Bone):
     mesh = obj.data
@@ -165,51 +261,74 @@ def make_sphere_2(obj: bpy.types.Object, radius, offset, bone: bpy.types.Bone):
     bm.to_mesh(mesh)
     bm.free()
 
-def make_sphere_object_2(name:str, radius: float, offset: tuple[float, float, float], bone: bpy.types.Bone):
+
+def make_sphere_object_2(
+    name: str, radius: float, offset: tuple[float, float, float], bone: bpy.types.Bone
+):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
     make_sphere_2(obj, radius, offset, bone)
     return obj
 
-def make_sphere(object:bpy.types.Object, radius, offset):
+
+def make_sphere(object: bpy.types.Object, radius, offset):
     start_theta = radians(270)
     theta_step = pi / 16
-    verts = [(0, -radius, 0)] # Bottom Pole
-    for iteration in range(1,16): # Dont make the top or bottom or sphere
+    verts = [(0, -radius, 0)]  # Bottom Pole
+    for iteration in range(1, 16):  # Dont make the top or bottom or sphere
         theta = start_theta + theta_step * iteration
         circle_radius = radius * cos(theta)
         circle_y_offset = radius * sin(theta)
         verts += verts_from_circle(circle_radius, 32, circle_y_offset)
-    verts += [(0, radius, 0)] # Top Pole
+    verts += [(0, radius, 0)]  # Top Pole
     for index, v in enumerate(verts):
-        x,y,z = v
+        x, y, z = v
         x += offset[0]
         y += offset[1]
         z += offset[2]
-        verts[index] = (x,y,z)
+        verts[index] = (x, y, z)
     edges = []
-    for circle_index in range (0,15):
-        edges+= [(1 + (circle_index*32) + vi, 1 + (circle_index*32) + vi + 1) for vi in range(0,31)]
-        edges+= [(1 + (circle_index*32), 1 + (circle_index*32) + 31)]
+    for circle_index in range(0, 15):
+        edges += [
+            (1 + (circle_index * 32) + vi, 1 + (circle_index * 32) + vi + 1)
+            for vi in range(0, 31)
+        ]
+        edges += [(1 + (circle_index * 32), 1 + (circle_index * 32) + 31)]
     faces = []
-    for circle_index in range (0,14):
-        faces+= [(1 + (circle_index*32) + vi, 1 + (circle_index*32) + vi + 32,
-                  1 + (circle_index*32) + vi + 33, 1 + (circle_index*32) + vi + 1)
-                  for vi in range(0,31)]
-        faces+= [(1 + (circle_index*32) + 0, 1 + (circle_index*32) + 31, 
-                  1 + (circle_index*32) + 32 + 31, 1 + (circle_index*32) + 32, )]
-    faces += [(0, 1 + vi, 1 + vi + 1) for vi in range (0,31)] # Faces for bottom fan
+    for circle_index in range(0, 14):
+        faces += [
+            (
+                1 + (circle_index * 32) + vi,
+                1 + (circle_index * 32) + vi + 32,
+                1 + (circle_index * 32) + vi + 33,
+                1 + (circle_index * 32) + vi + 1,
+            )
+            for vi in range(0, 31)
+        ]
+        faces += [
+            (
+                1 + (circle_index * 32) + 0,
+                1 + (circle_index * 32) + 31,
+                1 + (circle_index * 32) + 32 + 31,
+                1 + (circle_index * 32) + 32,
+            )
+        ]
+    faces += [(0, 1 + vi, 1 + vi + 1) for vi in range(0, 31)]  # Faces for bottom fan
     faces += [(0, 32, 1)]
     final = len(verts) - 1
-    faces += [(final, final - 32 + vi + 1, final - 32 + vi) for vi in range(0,31)] # Faces for top fan
-    faces += [(final, final - 32, final - 1)]    
+    faces += [
+        (final, final - 32 + vi + 1, final - 32 + vi) for vi in range(0, 31)
+    ]  # Faces for top fan
+    faces += [(final, final - 32, final - 1)]
     object.data.from_pydata(verts, edges, faces)
 
-def make_sphere_object(name, radius, offset=[0,0,0]):
+
+def make_sphere_object(name, radius, offset=[0, 0, 0]):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
     make_sphere(obj, radius, offset)
     return obj
+
 
 """def make_ellipsoid_object(name, radius=1.0, offset=Vector([0.0,0.0,0.0]), rotation=Vector([0.0,0.0,0.0]), scale=Vector([1.0,1.0,1.0])):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
@@ -233,6 +352,7 @@ def make_sphere_object(name, radius, offset=[0,0,0]):
         vert.co = ((co.x+offset.x, co.y+offset.y, co.z+offset.z))
     return obj"""
 
+
 def make_ellipsoid_mesh(obj, offset, rotation, scale, bone):
     mesh = obj.data
     obj.vertex_groups.clear()
@@ -243,7 +363,7 @@ def make_ellipsoid_mesh(obj, offset, rotation, scale, bone):
     rq = Quaternion([radians(angle) for angle in rotation])
     rm = Matrix.Rotation(rq.angle, 4, rq.axis)
     sm = Matrix.Diagonal((scale[0], scale[1], scale[2], 1.0))
-    mat = Matrix(tm @ rm @ sm) 
+    mat = Matrix(tm @ rm @ sm)
     bm.transform(mat)
     bm.transform(bone.matrix_local)
     deform_layer = bm.verts.layers.deform.verify()
@@ -253,11 +373,13 @@ def make_ellipsoid_mesh(obj, offset, rotation, scale, bone):
     bm.to_mesh(mesh)
     bm.free()
 
+
 def make_ellipsoid_object(name, offset, rotation, scale, bone):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
     make_ellipsoid_mesh(obj, offset, rotation, scale, bone)
     return obj
+
 
 def make_plane_mesh(obj: Object, bone: Bone, nx: float, ny: float, nz: float, d: float):
     # Handle vertex groups
@@ -270,9 +392,9 @@ def make_plane_mesh(obj: Object, bone: Bone, nx: float, ny: float, nz: float, d:
 
     # Create Plane
     geom = bmesh.ops.create_grid(bm, x_segments=2, y_segments=2, size=4)
-    
+
     # Calculate needed rotation
-    up_vec = Vector([0,1,0])
+    up_vec = Vector([0, 1, 0])
     goal_normal = Vector([nx, ny, nz])
     goal_normal.normalize()
     cross = up_vec.cross(goal_normal)
@@ -280,15 +402,23 @@ def make_plane_mesh(obj: Object, bone: Bone, nx: float, ny: float, nz: float, d:
     w = up_vec.length * goal_normal.length + dot
     rotation = Quaternion([w] + list(cross))
     rotation.normalize()
-    
+
     # The plane normal is from the bone's space
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(radians(90),4,'X'), verts=geom['verts'])
-    bmesh.ops.rotate(bm, matrix=Matrix.Rotation(rotation.angle, 4, rotation.axis), verts=geom['verts'])
-    bmesh.ops.transform(bm, matrix=bone.matrix_local, verts=geom['verts'])
-    bmesh.ops.translate(bm, vec=d*goal_normal, space=bone.matrix_local.inverted(), verts=geom['verts'])
-    
+    bmesh.ops.rotate(
+        bm, matrix=Matrix.Rotation(radians(90), 4, "X"), verts=geom["verts"]
+    )
+    bmesh.ops.rotate(
+        bm,
+        matrix=Matrix.Rotation(rotation.angle, 4, rotation.axis),
+        verts=geom["verts"],
+    )
+    bmesh.ops.transform(bm, matrix=bone.matrix_local, verts=geom["verts"])
+    bmesh.ops.translate(
+        bm, vec=d * goal_normal, space=bone.matrix_local.inverted(), verts=geom["verts"]
+    )
+
     # Assign weights
-    for v in geom['verts']:
+    for v in geom["verts"]:
         g = v[deform_layer]
         g[0] = 1.0
 
@@ -296,12 +426,15 @@ def make_plane_mesh(obj: Object, bone: Bone, nx: float, ny: float, nz: float, d:
     bm.to_mesh(obj.data)
     bm.free()
 
+
 def make_plane_object(name: str, bone: Bone, nx: float, ny: float, nz: float, d: float):
     mesh: bpy.types.Mesh = bpy.data.meshes.new(name)
     obj: bpy.types.Object = bpy.data.objects.new(mesh.name, mesh)
 
     make_plane_mesh(obj, bone, nx, ny, nz, d)
     return obj
+
+
 """
 class SUB_OP_make_capsule(Operator):
     bl_idname = 'sub.make_capsule'

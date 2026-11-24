@@ -1,192 +1,216 @@
 import bpy
 from bpy.types import (
-    NodeSocketFloat, NodeSocketVector, ShaderNodeTree,
-    NodeGroupInput, NodeGroupOutput, ShaderNodeVectorMath, ShaderNodeCombineXYZ,)
+    NodeGroupInput,
+    NodeGroupOutput,
+    NodeSocketFloat,
+    NodeSocketVector,
+    ShaderNodeCombineXYZ,
+    ShaderNodeTree,
+    ShaderNodeVectorMath,
+)
 
 # So i can know if i made a typo before i test.
-NODE_SOCKET_FLOAT       = NodeSocketFloat.bl_rna.identifier
-NODE_SOCKET_VECTOR      = NodeSocketVector.bl_rna.identifier
-SHADER_NODE_TREE        = ShaderNodeTree.bl_rna.identifier
-NODE_GROUP_INPUT        = NodeGroupInput.bl_rna.identifier
-NODE_GROUP_OUTPUT       = NodeGroupOutput.bl_rna.identifier
+NODE_SOCKET_FLOAT = NodeSocketFloat.bl_rna.identifier
+NODE_SOCKET_VECTOR = NodeSocketVector.bl_rna.identifier
+SHADER_NODE_TREE = ShaderNodeTree.bl_rna.identifier
+NODE_GROUP_INPUT = NodeGroupInput.bl_rna.identifier
+NODE_GROUP_OUTPUT = NodeGroupOutput.bl_rna.identifier
 SHADER_NODE_VECTOR_MATH = ShaderNodeVectorMath.bl_rna.identifier
 SHADER_NODE_COMBINE_XYZ = ShaderNodeCombineXYZ.bl_rna.identifier
 
 
 def ultimate_sprite_sheet_params_node_group():
-    node_tree = bpy.data.node_groups.new('ultimate_sprite_sheet_params', SHADER_NODE_TREE)
+    node_tree = bpy.data.node_groups.new(
+        "ultimate_sprite_sheet_params", SHADER_NODE_TREE
+    )
 
-    node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 X (Column Count)')
-    node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 Y (Row Count)')
-    node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 Z (Active Sprite Number)')
-    node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name='CV 18 W (Total Sprite Count)') # Not used but dont remove because for ease of writing some input logic, its easier to have it here
-    node_tree.interface.new_socket(in_out="INPUT", socket_type=NODE_SOCKET_VECTOR, name='UV Input')
-    node_tree.interface.new_socket(in_out="OUTPUT", socket_type=NODE_SOCKET_VECTOR, name='UV Output')
+    node_tree.interface.new_socket(
+        in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name="CV 18 X (Column Count)"
+    )
+    node_tree.interface.new_socket(
+        in_out="INPUT", socket_type=NODE_SOCKET_FLOAT, name="CV 18 Y (Row Count)"
+    )
+    node_tree.interface.new_socket(
+        in_out="INPUT",
+        socket_type=NODE_SOCKET_FLOAT,
+        name="CV 18 Z (Active Sprite Number)",
+    )
+    node_tree.interface.new_socket(
+        in_out="INPUT",
+        socket_type=NODE_SOCKET_FLOAT,
+        name="CV 18 W (Total Sprite Count)",
+    )  # Not used but dont remove because for ease of writing some input logic, its easier to have it here
+    node_tree.interface.new_socket(
+        in_out="INPUT", socket_type=NODE_SOCKET_VECTOR, name="UV Input"
+    )
+    node_tree.interface.new_socket(
+        in_out="OUTPUT", socket_type=NODE_SOCKET_VECTOR, name="UV Output"
+    )
 
     # Now handle the internal nodes
     nodes = node_tree.nodes
 
     # The following was copy-pasted from NodeToPython
-    #initialize sprite_sheet_param nodes
-    #node Vector Math
+    # initialize sprite_sheet_param nodes
+    # node Vector Math
     vector_math = nodes.new("ShaderNodeVectorMath")
-    vector_math.operation = 'DIVIDE'
-    #Vector_002
+    vector_math.operation = "DIVIDE"
+    # Vector_002
     vector_math.inputs[2].default_value = (0.0, 0.0, 0.0)
-    #Scale
+    # Scale
     vector_math.inputs[3].default_value = 1.0
 
-    #node Combine XYZ
+    # node Combine XYZ
     combine_xyz = nodes.new("ShaderNodeCombineXYZ")
-    #Z
+    # Z
     combine_xyz.inputs[2].default_value = 1.0
 
-    #node Math.001
+    # node Math.001
     math_001 = nodes.new("ShaderNodeMath")
-    math_001.operation = 'DIVIDE'
-    #Value
+    math_001.operation = "DIVIDE"
+    # Value
     math_001.inputs[0].default_value = 1.0
-    #Value_002
+    # Value_002
     math_001.inputs[2].default_value = 0.5
 
-    #node Math
+    # node Math
     math = nodes.new("ShaderNodeMath")
-    math.operation = 'SUBTRACT'
-    #Value
+    math.operation = "SUBTRACT"
+    # Value
     math.inputs[0].default_value = 1.0
-    #Value_002
+    # Value_002
     math.inputs[2].default_value = 0.5
 
-    #node Combine XYZ.001
+    # node Combine XYZ.001
     combine_xyz_001 = nodes.new("ShaderNodeCombineXYZ")
-    #X
+    # X
     combine_xyz_001.inputs[0].default_value = 0.0
-    #Z
+    # Z
     combine_xyz_001.inputs[2].default_value = 0.0
 
-    #node Group Input.001
+    # node Group Input.001
     group_input_001 = nodes.new("NodeGroupInput")
 
-    #node Math.002
+    # node Math.002
     math_002 = nodes.new("ShaderNodeMath")
-    math_002.operation = 'SUBTRACT'
-    #Value_001
+    math_002.operation = "SUBTRACT"
+    # Value_001
     math_002.inputs[1].default_value = 1.0
-    #Value_002
+    # Value_002
     math_002.inputs[2].default_value = 0.5
 
-    #node Math.003
+    # node Math.003
     math_003 = nodes.new("ShaderNodeMath")
-    math_003.operation = 'DIVIDE'
-    #Value_002
+    math_003.operation = "DIVIDE"
+    # Value_002
     math_003.inputs[2].default_value = 0.5
 
-    #node Math.004
+    # node Math.004
     math_004 = nodes.new("ShaderNodeMath")
-    math_004.operation = 'TRUNC'
-    #Value_001
+    math_004.operation = "TRUNC"
+    # Value_001
     math_004.inputs[1].default_value = 0.5
-    #Value_002
+    # Value_002
     math_004.inputs[2].default_value = 0.5
 
-    #node Math.008
+    # node Math.008
     math_008 = nodes.new("ShaderNodeMath")
-    math_008.operation = 'MULTIPLY'
-    #Value_001
+    math_008.operation = "MULTIPLY"
+    # Value_001
     math_008.inputs[1].default_value = -1.0
-    #Value_002
+    # Value_002
     math_008.inputs[2].default_value = 0.5
 
-    #node Group Output
+    # node Group Output
     group_output = nodes.new("NodeGroupOutput")
 
-    #node Vector Math.002
+    # node Vector Math.002
     vector_math_002 = nodes.new("ShaderNodeVectorMath")
-    vector_math_002.operation = 'ADD'
-    #Vector_002
+    vector_math_002.operation = "ADD"
+    # Vector_002
     vector_math_002.inputs[2].default_value = (0.0, 0.0, 0.0)
-    #Scale
+    # Scale
     vector_math_002.inputs[3].default_value = 1.0
 
-    #node Combine XYZ.002
+    # node Combine XYZ.002
     combine_xyz_002 = nodes.new("ShaderNodeCombineXYZ")
-    #Z
+    # Z
     combine_xyz_002.inputs[2].default_value = 0.0
 
-    #node Group Input.004
+    # node Group Input.004
     group_input_004 = nodes.new("NodeGroupInput")
 
-    #node Math.006
+    # node Math.006
     math_006 = nodes.new("ShaderNodeMath")
-    math_006.operation = 'DIVIDE'
-    #Value
+    math_006.operation = "DIVIDE"
+    # Value
     math_006.inputs[0].default_value = 1.0
-    #Value_002
+    # Value_002
     math_006.inputs[2].default_value = 0.5
 
-    #node Math.007
+    # node Math.007
     math_007 = nodes.new("ShaderNodeMath")
-    math_007.operation = 'MULTIPLY'
-    #Value_002
+    math_007.operation = "MULTIPLY"
+    # Value_002
     math_007.inputs[2].default_value = 0.5
 
-    #node Math.010
+    # node Math.010
     math_010 = nodes.new("ShaderNodeMath")
-    math_010.operation = 'MULTIPLY'
-    #Value_002
+    math_010.operation = "MULTIPLY"
+    # Value_002
     math_010.inputs[2].default_value = 0.5
 
-    #node Group Input.003
+    # node Group Input.003
     group_input_003 = nodes.new("NodeGroupInput")
 
-    #node Group Input.006
+    # node Group Input.006
     group_input_006 = nodes.new("NodeGroupInput")
 
-    #node Group Input.005
+    # node Group Input.005
     group_input_005 = nodes.new("NodeGroupInput")
 
-    #node Math.009
+    # node Math.009
     math_009 = nodes.new("ShaderNodeMath")
-    math_009.operation = 'DIVIDE'
-    #Value
+    math_009.operation = "DIVIDE"
+    # Value
     math_009.inputs[0].default_value = 1.0
-    #Value_002
+    # Value_002
     math_009.inputs[2].default_value = 0.5
 
-    #node Math.005
+    # node Math.005
     math_005 = nodes.new("ShaderNodeMath")
-    math_005.operation = 'MODULO'
-    #Value_002
+    math_005.operation = "MODULO"
+    # Value_002
     math_005.inputs[2].default_value = 0.5
 
-    #node Math.011
+    # node Math.011
     math_011 = nodes.new("ShaderNodeMath")
-    math_011.operation = 'SUBTRACT'
-    #Value_001
+    math_011.operation = "SUBTRACT"
+    # Value_001
     math_011.inputs[1].default_value = 1.0
-    #Value_002
+    # Value_002
     math_011.inputs[2].default_value = 0.5
 
-    #node Group Input.007
+    # node Group Input.007
     group_input_007 = nodes.new("NodeGroupInput")
 
-    #node Vector Math.001
+    # node Vector Math.001
     vector_math_001 = nodes.new("ShaderNodeVectorMath")
-    vector_math_001.operation = 'ADD'
-    #Vector_002
+    vector_math_001.operation = "ADD"
+    # Vector_002
     vector_math_001.inputs[2].default_value = (0.0, 0.0, 0.0)
-    #Scale
+    # Scale
     vector_math_001.inputs[3].default_value = 1.0
 
-    #node Group Input.002
+    # node Group Input.002
     group_input_002 = nodes.new("NodeGroupInput")
 
-    #node Group Input
+    # node Group Input
     group_input = nodes.new("NodeGroupInput")
 
-    #Set parents
+    # Set parents
 
-    #Set locations
+    # Set locations
     vector_math.location = (-60.2877197265625, 223.17950439453125)
     combine_xyz.location = (-253.66661071777344, 1.4013652801513672)
     math_001.location = (-252.8219451904297, -131.60067749023438)
@@ -215,7 +239,7 @@ def ultimate_sprite_sheet_params_node_group():
     group_input_002.location = (306.2225646972656, -140.86985778808594)
     group_input.location = (-497.8994140625, -0.0)
 
-    #sSet dimensions
+    # sSet dimensions
     vector_math.width, vector_math.height = 140.0, 100.0
     combine_xyz.width, combine_xyz.height = 140.0, 100.0
     math_001.width, math_001.height = 140.0, 100.0
@@ -244,63 +268,63 @@ def ultimate_sprite_sheet_params_node_group():
     group_input_002.width, group_input_002.height = 140.0, 100.0
     group_input.width, group_input.height = 140.0, 100.0
 
-    #initialize sprite_sheet_param links
+    # initialize sprite_sheet_param links
     links = node_tree.links
-    #group_input.UV -> vector_math.Vector
+    # group_input.UV -> vector_math.Vector
     links.new(group_input.outputs[4], vector_math.inputs[0])
-    #group_input.X (Column Count) -> combine_xyz.X
+    # group_input.X (Column Count) -> combine_xyz.X
     links.new(group_input.outputs[0], combine_xyz.inputs[0])
-    #group_input.Y (Row Count) -> combine_xyz.Y
+    # group_input.Y (Row Count) -> combine_xyz.Y
     links.new(group_input.outputs[1], combine_xyz.inputs[1])
-    #combine_xyz.Vector -> vector_math.Vector
+    # combine_xyz.Vector -> vector_math.Vector
     links.new(combine_xyz.outputs[0], vector_math.inputs[1])
-    #vector_math.Vector -> vector_math_001.Vector
+    # vector_math.Vector -> vector_math_001.Vector
     links.new(vector_math.outputs[0], vector_math_001.inputs[0])
-    #math_001.Value -> math.Value
+    # math_001.Value -> math.Value
     links.new(math_001.outputs[0], math.inputs[1])
-    #math.Value -> combine_xyz_001.Y
+    # math.Value -> combine_xyz_001.Y
     links.new(math.outputs[0], combine_xyz_001.inputs[1])
-    #combine_xyz_001.Vector -> vector_math_001.Vector
+    # combine_xyz_001.Vector -> vector_math_001.Vector
     links.new(combine_xyz_001.outputs[0], vector_math_001.inputs[1])
-    #group_input_001.Y (Row Count) -> math_001.Value
+    # group_input_001.Y (Row Count) -> math_001.Value
     links.new(group_input_001.outputs[1], math_001.inputs[1])
-    #group_input_002.Z (Sprite Number) -> math_002.Value
+    # group_input_002.Z (Sprite Number) -> math_002.Value
     links.new(group_input_002.outputs[2], math_002.inputs[0])
-    #math_002.Value -> math_003.Value
+    # math_002.Value -> math_003.Value
     links.new(math_002.outputs[0], math_003.inputs[0])
-    #math_003.Value -> math_004.Value
+    # math_003.Value -> math_004.Value
     links.new(math_003.outputs[0], math_004.inputs[0])
-    #group_input_004.Y (Row Count) -> math_006.Value
+    # group_input_004.Y (Row Count) -> math_006.Value
     links.new(group_input_004.outputs[1], math_006.inputs[1])
-    #math_004.Value -> math_007.Value
+    # math_004.Value -> math_007.Value
     links.new(math_004.outputs[0], math_007.inputs[0])
-    #math_006.Value -> math_007.Value
+    # math_006.Value -> math_007.Value
     links.new(math_006.outputs[0], math_007.inputs[1])
-    #math_008.Value -> combine_xyz_002.Y
+    # math_008.Value -> combine_xyz_002.Y
     links.new(math_008.outputs[0], combine_xyz_002.inputs[1])
-    #math_007.Value -> math_008.Value
+    # math_007.Value -> math_008.Value
     links.new(math_007.outputs[0], math_008.inputs[0])
-    #vector_math_001.Vector -> vector_math_002.Vector
+    # vector_math_001.Vector -> vector_math_002.Vector
     links.new(vector_math_001.outputs[0], vector_math_002.inputs[0])
-    #vector_math_002.Vector -> group_output.Vector
+    # vector_math_002.Vector -> group_output.Vector
     links.new(vector_math_002.outputs[0], group_output.inputs[0])
-    #combine_xyz_002.Vector -> vector_math_002.Vector
+    # combine_xyz_002.Vector -> vector_math_002.Vector
     links.new(combine_xyz_002.outputs[0], vector_math_002.inputs[1])
-    #group_input_005.X (Column Count) -> math_009.Value
+    # group_input_005.X (Column Count) -> math_009.Value
     links.new(group_input_005.outputs[0], math_009.inputs[1])
-    #math_005.Value -> math_010.Value
+    # math_005.Value -> math_010.Value
     links.new(math_005.outputs[0], math_010.inputs[0])
-    #math_009.Value -> math_010.Value
+    # math_009.Value -> math_010.Value
     links.new(math_009.outputs[0], math_010.inputs[1])
-    #group_input_003.X (Column Count) -> math_003.Value
+    # group_input_003.X (Column Count) -> math_003.Value
     links.new(group_input_003.outputs[0], math_003.inputs[1])
-    #math_010.Value -> combine_xyz_002.X
+    # math_010.Value -> combine_xyz_002.X
     links.new(math_010.outputs[0], combine_xyz_002.inputs[0])
-    #group_input_007.Z (Sprite Number) -> math_011.Value
+    # group_input_007.Z (Sprite Number) -> math_011.Value
     links.new(group_input_007.outputs[2], math_011.inputs[0])
-    #math_011.Value -> math_005.Value
+    # math_011.Value -> math_005.Value
     links.new(math_011.outputs[0], math_005.inputs[0])
-    #group_input_006.X (Column Count) -> math_005.Value
+    # group_input_006.X (Column Count) -> math_005.Value
     links.new(group_input_006.outputs[0], math_005.inputs[1])
 
     return node_tree

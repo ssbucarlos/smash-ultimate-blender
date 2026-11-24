@@ -1,29 +1,48 @@
 import bpy
+from bpy.types import (
+    ByteColorAttribute,
+    Context,
+    FloatColorAttribute,
+    Mesh,
+    MeshPolygon,
+    Object,
+)
 
-from bpy.types import Context, Object, Mesh, ByteColorAttribute, FloatColorAttribute, MeshPolygon
 
 def main(context: Context):
     obj: Object = context.object
     mesh: Mesh = obj.data
-    active_color_set: ByteColorAttribute | FloatColorAttribute  = mesh.color_attributes.active_color
+    active_color_set: ByteColorAttribute | FloatColorAttribute = (
+        mesh.color_attributes.active_color
+    )
     active_brush = context.tool_settings.vertex_paint.brush
 
     if mesh.use_paint_mask:
-        selected_polygons: set[MeshPolygon] = {polygon for polygon in mesh.polygons if polygon.select == True}
+        selected_polygons: set[MeshPolygon] = {
+            polygon for polygon in mesh.polygons if polygon.select == True
+        }
         for polygon in selected_polygons:
-            if active_color_set.domain == "POINT": # Per-Vertex
+            if active_color_set.domain == "POINT":  # Per-Vertex
                 for vertex_index in polygon.vertices:
-                    active_color_set.data[vertex_index].color[0:3] = active_brush.color[:]
-            elif active_color_set.domain == "CORNER": # Per-Loop
+                    active_color_set.data[vertex_index].color[0:3] = active_brush.color[
+                        :
+                    ]
+            elif active_color_set.domain == "CORNER":  # Per-Loop
                 for loop_index in polygon.loop_indices:
                     active_color_set.data[loop_index].color[0:3] = active_brush.color[:]
     elif mesh.use_paint_mask_vertex:
-        selected_vertex_indices = {vert.index for vert in mesh.vertices if vert.select == True}
-        if active_color_set.domain == "POINT": # Per-Vertex
+        selected_vertex_indices = {
+            vert.index for vert in mesh.vertices if vert.select == True
+        }
+        if active_color_set.domain == "POINT":  # Per-Vertex
             for vert_index in selected_vertex_indices:
                 active_color_set.data[vert_index].color[0:3] = active_brush.color[:]
-        elif active_color_set.domain == "CORNER": # Per-Loop
-            selected_loop_indices = {loop.index for loop in mesh.loops if loop.vertex_index in selected_vertex_indices}
+        elif active_color_set.domain == "CORNER":  # Per-Loop
+            selected_loop_indices = {
+                loop.index
+                for loop in mesh.loops
+                if loop.vertex_index in selected_vertex_indices
+            }
             for loop_index in selected_loop_indices:
                 active_color_set.data[loop_index].color[0:3] = active_brush.color[:]
     else:
@@ -33,6 +52,7 @@ def main(context: Context):
 
 class SUB_OP_LinearColorSet(bpy.types.Operator):
     """Tooltip"""
+
     bl_idname = "paint.sub_vertex_color_set_linear"
     bl_label = "Set Vertex Colors (Linear)"
 
@@ -42,11 +62,13 @@ class SUB_OP_LinearColorSet(bpy.types.Operator):
 
     def execute(self, context):
         main(context)
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 def menu_func(self, context):
-    self.layout.operator(SUB_OP_LinearColorSet.bl_idname, text=SUB_OP_LinearColorSet.bl_label)
+    self.layout.operator(
+        SUB_OP_LinearColorSet.bl_idname, text=SUB_OP_LinearColorSet.bl_label
+    )
 
 
 # Register and add to the "object" menu (required to also use F3 search "Simple Object Operator" for quick access).
@@ -62,4 +84,3 @@ def unregister():
 
 if __name__ == "__main__":
     register()
-

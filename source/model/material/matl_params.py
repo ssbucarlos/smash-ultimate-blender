@@ -1,5 +1,6 @@
-from ....dependencies import ssbh_data_py
 from typing import NamedTuple
+
+from ....dependencies import ssbh_data_py
 
 ParamId = ssbh_data_py.matl_data.ParamId
 param_id_to_ui_name = {
@@ -42,7 +43,7 @@ param_id_to_ui_name = {
     ParamId.Sampler16.value: "Sampler16 (Ink Normal Map)",
     ParamId.Sampler17.value: "Sampler17 (Unused)",
     ParamId.Sampler18.value: "Sampler18 (Unused)",
-    ParamId.Sampler19.value: "Sampler19 (Unused)", 
+    ParamId.Sampler19.value: "Sampler19 (Unused)",
     ParamId.CustomVector0.value: "CV 0 (Minimum Texture Alpha)",
     ParamId.CustomVector1.value: "CV 1",
     ParamId.CustomVector2.value: "CV 2",
@@ -155,12 +156,14 @@ param_id_to_ui_name = {
     ParamId.RasterizerState10.value: "Rasterizer State 10?",
 }
 
+
 class Vec4SocketParams(NamedTuple):
     x_socket_name: str
     y_socket_name: str
     z_socket_name: str
     w_socket_name: str
     default_value: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+
 
 vec4_param_name_to_socket_params: dict[str, Vec4SocketParams] = {
     ParamId.CustomVector0.name: Vec4SocketParams(
@@ -230,13 +233,13 @@ vec4_param_name_to_socket_params: dict[str, Vec4SocketParams] = {
         "CV 10 Z",
         "CV 10 W",
     ),
-    ParamId.CustomVector11.name:Vec4SocketParams(
+    ParamId.CustomVector11.name: Vec4SocketParams(
         "CV 11 X (Fake SSS Color R)",
         "CV 11 Y (Fake SSS Color G)",
         "CV 11 Z (Fake SSS Color B)",
         "CV 11 W",
     ),
-    ParamId.CustomVector12.name:Vec4SocketParams(
+    ParamId.CustomVector12.name: Vec4SocketParams(
         "CV 12 X",
         "CV 12 Y",
         "CV 12 Z",
@@ -249,13 +252,13 @@ vec4_param_name_to_socket_params: dict[str, Vec4SocketParams] = {
         "CV 13 W",
         (1.0, 1.0, 1.0, 1.0),
     ),
-    ParamId.CustomVector14.name:Vec4SocketParams(
+    ParamId.CustomVector14.name: Vec4SocketParams(
         "CV 14 X (Rim Light Color R)",
         "CV 14 Y (Rim Light Color G)",
         "CV 14 Z (Rim Light Color B)",
         "CV 14 W (Rim Light Blend Factor)",
     ),
-    ParamId.CustomVector15.name:Vec4SocketParams(
+    ParamId.CustomVector15.name: Vec4SocketParams(
         "CV 15 X",
         "CV 15 Y",
         "CV 15 Z",
@@ -267,25 +270,25 @@ vec4_param_name_to_socket_params: dict[str, Vec4SocketParams] = {
         "CV 16 Z",
         "CV 16 W",
     ),
-    ParamId.CustomVector17.name:Vec4SocketParams(
+    ParamId.CustomVector17.name: Vec4SocketParams(
         "CV 17 X",
         "CV 17 Y",
         "CV 17 Z",
         "CV 17 W",
     ),
-    ParamId.CustomVector18.name:Vec4SocketParams(
+    ParamId.CustomVector18.name: Vec4SocketParams(
         "CV 18 X (Sprite Sheet Column Count)",
         "CV 18 Y (Sprite Sheet Row Count)",
         "CV 18 Z (Frames Per Sprite)",
         "CV 18 W (Total Sprite Count)",
     ),
-    ParamId.CustomVector19.name:Vec4SocketParams(
+    ParamId.CustomVector19.name: Vec4SocketParams(
         "CV 19 X",
         "CV 19 Y",
         "CV 19 Z",
         "CV 19 W",
     ),
-    ParamId.CustomVector20.name:Vec4SocketParams(
+    ParamId.CustomVector20.name: Vec4SocketParams(
         "CV 20 X",
         "CV 20 Y",
         "CV 20 Z",
@@ -297,157 +300,157 @@ vec4_param_name_to_socket_params: dict[str, Vec4SocketParams] = {
         "CV 21 Z",
         "CV 21 W",
     ),
-    ParamId.CustomVector22.name:Vec4SocketParams(
+    ParamId.CustomVector22.name: Vec4SocketParams(
         "CV 22 X",
         "CV 22 Y",
         "CV 22 Z",
         "CV 22 W",
     ),
-    ParamId.CustomVector23.name:Vec4SocketParams(
+    ParamId.CustomVector23.name: Vec4SocketParams(
         "CV 23 X",
         "CV 23 Y",
         "CV 23 Z",
         "CV 23 W",
     ),
-    ParamId.CustomVector24.name:Vec4SocketParams(
+    ParamId.CustomVector24.name: Vec4SocketParams(
         "CV 24 X",
         "CV 24 Y",
         "CV 24 Z",
         "CV 24 W",
     ),
-    ParamId.CustomVector25.name:Vec4SocketParams(
+    ParamId.CustomVector25.name: Vec4SocketParams(
         "CV 25 X",
         "CV 25 Y",
         "CV 25 Z",
         "CV 25 W",
     ),
-    ParamId.CustomVector26.name:Vec4SocketParams(
+    ParamId.CustomVector26.name: Vec4SocketParams(
         "CV 26 X",
         "CV 26 Y",
         "CV 26 Z",
         "CV 26 W",
     ),
-    ParamId.CustomVector27.name:Vec4SocketParams(
+    ParamId.CustomVector27.name: Vec4SocketParams(
         "CV 27 X",
         "CV 27 Y",
         "CV 27 Z",
         "CV 27 W",
     ),
-    ParamId.CustomVector28.name:Vec4SocketParams(
+    ParamId.CustomVector28.name: Vec4SocketParams(
         "CV 28 X",
         "CV 28 Y",
         "CV 28 Z",
         "CV 28 W",
     ),
-    ParamId.CustomVector29.name:Vec4SocketParams(
+    ParamId.CustomVector29.name: Vec4SocketParams(
         "CV 29 X",
         "CV 29 Y",
         "CV 29 Z",
         "CV 29 W",
     ),
-    ParamId.CustomVector30.name:Vec4SocketParams(
+    ParamId.CustomVector30.name: Vec4SocketParams(
         "CV 30 X (Fake SSS Blend Factor)",
         "CV 30 Y (Fake SSS Sharpness)",
         "CV 30 Z",
         "CV 30 W",
     ),
-    ParamId.CustomVector31.name:Vec4SocketParams(
+    ParamId.CustomVector31.name: Vec4SocketParams(
         "CV 31 X (UV Layer 2 Scale X)",
         "CV 31 Y (UV Layer 2 Scale Y)",
         "CV 31 Z (UV Layer 2 Trans X)",
         "CV 31 W (UV Layer 2 Trans Y)",
     ),
-    ParamId.CustomVector32.name:Vec4SocketParams(
+    ParamId.CustomVector32.name: Vec4SocketParams(
         "CV 32 X (UV Layer 3 Scale X)",
         "CV 32 Y (UV Layer 3 Scale Y)",
         "CV 32 Z (UV Layer 3 Trans X)",
         "CV 32 W (UV Layer 3 Trans Y)",
     ),
-    ParamId.CustomVector33.name:Vec4SocketParams(
+    ParamId.CustomVector33.name: Vec4SocketParams(
         "CV 33 X (UV Layer 4 Transform?)",
         "CV 33 Y (UV Layer 4 Transform?)",
         "CV 33 Z (UV Layer 4 Transform?)",
         "CV 33 W (UV Layer 4 Transform?)",
     ),
-    ParamId.CustomVector34.name:Vec4SocketParams(
+    ParamId.CustomVector34.name: Vec4SocketParams(
         "CV 34 X (UV Transform Dual Normal)",
         "CV 34 Y (UV Transform Dual Normal)",
         "CV 34 Z (UV Transform Dual Normal)",
         "CV 34 W (UV Transform Dual Normal)",
     ),
-    ParamId.CustomVector35.name:Vec4SocketParams(
+    ParamId.CustomVector35.name: Vec4SocketParams(
         "CV 35 X",
         "CV 35 Y",
         "CV 35 Z",
         "CV 35 W",
     ),
-    ParamId.CustomVector36.name:Vec4SocketParams(
+    ParamId.CustomVector36.name: Vec4SocketParams(
         "CV 36 X",
         "CV 36 Y",
         "CV 36 Z",
         "CV 36 W",
     ),
-    ParamId.CustomVector37.name:Vec4SocketParams(
+    ParamId.CustomVector37.name: Vec4SocketParams(
         "CV 37 X",
         "CV 37 Y",
         "CV 37 Z",
         "CV 37 W",
     ),
-    ParamId.CustomVector38.name:Vec4SocketParams(
+    ParamId.CustomVector38.name: Vec4SocketParams(
         "CV 38 X",
         "CV 38 Y",
         "CV 38 Z",
         "CV 38 W",
     ),
-    ParamId.CustomVector39.name:Vec4SocketParams(
+    ParamId.CustomVector39.name: Vec4SocketParams(
         "CV 39 X",
         "CV 39 Y",
         "CV 39 Z",
         "CV 39 W",
     ),
-    ParamId.CustomVector40.name:Vec4SocketParams(
+    ParamId.CustomVector40.name: Vec4SocketParams(
         "CV 40 X",
         "CV 40 Y",
         "CV 40 Z",
         "CV 40 W",
     ),
-    ParamId.CustomVector41.name:Vec4SocketParams(
+    ParamId.CustomVector41.name: Vec4SocketParams(
         "CV 41 X",
         "CV 41 Y",
         "CV 41 Z",
         "CV 41 W",
     ),
-    ParamId.CustomVector42.name:Vec4SocketParams(
+    ParamId.CustomVector42.name: Vec4SocketParams(
         "CV 42 X",
         "CV 42 Y",
         "CV 42 Z",
         "CV 42 W",
     ),
-    ParamId.CustomVector43.name:Vec4SocketParams(
+    ParamId.CustomVector43.name: Vec4SocketParams(
         "CV 43 X",
         "CV 43 Y",
         "CV 43 Z",
         "CV 43 W",
     ),
-    ParamId.CustomVector44.name:Vec4SocketParams(
+    ParamId.CustomVector44.name: Vec4SocketParams(
         "CV 44 X",
         "CV 44 Y",
         "CV 44 Z",
         "CV 44 W",
     ),
-    ParamId.CustomVector45.name:Vec4SocketParams(
+    ParamId.CustomVector45.name: Vec4SocketParams(
         "CV 45 X",
         "CV 45 Y",
         "CV 45 Z",
         "CV 45 W",
     ),
-    ParamId.CustomVector46.name:Vec4SocketParams(
+    ParamId.CustomVector46.name: Vec4SocketParams(
         "CV 46 X (Bayo Anim Skin R)",
         "CV 46 Y (Bayo Anim Skin G)",
         "CV 46 Z (Bayo Anim Skin B)",
         "CV 46 W (Bayo Anim Alpha)",
     ),
-    ParamId.CustomVector47.name:Vec4SocketParams(
+    ParamId.CustomVector47.name: Vec4SocketParams(
         "CV 47 X (PRM R Metalness)",
         "CV 47 Y (PRM G Roughness)",
         "CV 47 Z (PRM B AO)",
@@ -455,96 +458,98 @@ vec4_param_name_to_socket_params: dict[str, Vec4SocketParams] = {
     ),
 }
 
+
 # Texture Params end up with two sockets each, one for the RGB and the other for the Alpha
 class SplitTextureSocketParams(NamedTuple):
     rgb_socket_name: str
     alpha_socket_name: str
-    default_rgba: tuple[float,float,float,float] = (0.0, 0.0, 0.0, 1.0)
+    default_rgba: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
 
-texture_param_name_to_socket_params: dict[str, SplitTextureSocketParams]= {
+
+texture_param_name_to_socket_params: dict[str, SplitTextureSocketParams] = {
     ParamId.Texture0.name: SplitTextureSocketParams(
-        'Texture0 RGB (Col Map Layer 1)',
-        'Texture0 Alpha (Col Map Layer 1)',
+        "Texture0 RGB (Col Map Layer 1)",
+        "Texture0 Alpha (Col Map Layer 1)",
     ),
     ParamId.Texture1.name: SplitTextureSocketParams(
-        'Texture1 RGB (Col Map Layer 2)',
-        'Texture1 Alpha (Col Map Layer 2)',
-        (0.0, 0.0, 0.0, 0.0)
+        "Texture1 RGB (Col Map Layer 2)",
+        "Texture1 Alpha (Col Map Layer 2)",
+        (0.0, 0.0, 0.0, 0.0),
     ),
     ParamId.Texture2.name: SplitTextureSocketParams(
-        'Texture2 RGB (Irradiance Cube Map)',
-        'Texture2 Alpha (Irradiance Cube Map)',
+        "Texture2 RGB (Irradiance Cube Map)",
+        "Texture2 Alpha (Irradiance Cube Map)",
     ),
     ParamId.Texture3.name: SplitTextureSocketParams(
-        'Texture3 RGB (Ambient Occlusion Map)',
-        'Texture3 Alpha (Ambient Occlusion Map)',
+        "Texture3 RGB (Ambient Occlusion Map)",
+        "Texture3 Alpha (Ambient Occlusion Map)",
     ),
     ParamId.Texture4.name: SplitTextureSocketParams(
-        'Texture4 RGB (NOR Map)',
-        'Texture4 Alpha (NOR Map Cavity Channel)',
+        "Texture4 RGB (NOR Map)",
+        "Texture4 Alpha (NOR Map Cavity Channel)",
         (0.5, 0.5, 0.0, 1.0),
     ),
     ParamId.Texture5.name: SplitTextureSocketParams(
-        'Texture5 RGB (Emissive Map Layer 1)',
-        'Texture5 Alpha (Emissive Map Layer 1)',
+        "Texture5 RGB (Emissive Map Layer 1)",
+        "Texture5 Alpha (Emissive Map Layer 1)",
     ),
     ParamId.Texture6.name: SplitTextureSocketParams(
-        'Texture6 RGB (PRM Map)',
-        'Texture6 Alpha (PRM Map Specular)',
+        "Texture6 RGB (PRM Map)",
+        "Texture6 Alpha (PRM Map Specular)",
         (0.0, 1.0, 1.0, 0.0),
     ),
     ParamId.Texture7.name: SplitTextureSocketParams(
-        'Texture7 RGB (Specular Cube Map)',
-        'Texture7 Alpha (Specular Cube Map)',
+        "Texture7 RGB (Specular Cube Map)",
+        "Texture7 Alpha (Specular Cube Map)",
     ),
     ParamId.Texture8.name: SplitTextureSocketParams(
-        'Texture8 RGB (Diffuse Cube Map)',
-        'Texture8 Alpha (Diffuse Cube Map)',
+        "Texture8 RGB (Diffuse Cube Map)",
+        "Texture8 Alpha (Diffuse Cube Map)",
     ),
     ParamId.Texture9.name: SplitTextureSocketParams(
-        'Texture9 RGB (Baked Lighting Map)',
-        'Texture9 Alpha (Baked Lighting Map)',
+        "Texture9 RGB (Baked Lighting Map)",
+        "Texture9 Alpha (Baked Lighting Map)",
     ),
     ParamId.Texture10.name: SplitTextureSocketParams(
-        'Texture10 RGB (Diffuse Map Layer 1)',
-        'Texture10 Alpha (Diffuse Map Layer 1)',
+        "Texture10 RGB (Diffuse Map Layer 1)",
+        "Texture10 Alpha (Diffuse Map Layer 1)",
     ),
     ParamId.Texture11.name: SplitTextureSocketParams(
-        'Texture11 RGB (Diffuse Map Layer 2)',
-        'Texture11 Alpha (Diffuse Map Layer 2)',
+        "Texture11 RGB (Diffuse Map Layer 2)",
+        "Texture11 Alpha (Diffuse Map Layer 2)",
     ),
     ParamId.Texture12.name: SplitTextureSocketParams(
-        'Texture12 RGB (Diffuse Map Layer 3)',
-        'Texture12 Alpha (Diffuse Map Layer 3)',
+        "Texture12 RGB (Diffuse Map Layer 3)",
+        "Texture12 Alpha (Diffuse Map Layer 3)",
     ),
     ParamId.Texture13.name: SplitTextureSocketParams(
-        'Texture13 RGB (Projection Light Map)',
-        'Texture13 Alpha (Projection Light Map)',
+        "Texture13 RGB (Projection Light Map)",
+        "Texture13 Alpha (Projection Light Map)",
     ),
     ParamId.Texture14.name: SplitTextureSocketParams(
-        'Texture14 RGB (Emissive Map Layer 2)',
-        'Texture14 Alpha (Emissive Map Layer 2)',
-        (0.0, 0.0, 0.0, 0.0)
+        "Texture14 RGB (Emissive Map Layer 2)",
+        "Texture14 Alpha (Emissive Map Layer 2)",
+        (0.0, 0.0, 0.0, 0.0),
     ),
     ParamId.Texture15.name: SplitTextureSocketParams(
-        'Texture15 RGB (Unused)',
-        'Texture15 Alpha (Unused)',
+        "Texture15 RGB (Unused)",
+        "Texture15 Alpha (Unused)",
     ),
     ParamId.Texture16.name: SplitTextureSocketParams(
-        'Texture16 RGB (Ink Normal Map)',
-        'Texture16 Alpha (Ink Normal Map)',
+        "Texture16 RGB (Ink Normal Map)",
+        "Texture16 Alpha (Ink Normal Map)",
     ),
     ParamId.Texture17.name: SplitTextureSocketParams(
-        'Texture17 RGB (Unused)',
-        'Texture17 Alpha (Unused)',
+        "Texture17 RGB (Unused)",
+        "Texture17 Alpha (Unused)",
     ),
     ParamId.Texture18.name: SplitTextureSocketParams(
-        'Texture18 RGB (Unused)',
-        'Texture18 Alpha (Unused)',
+        "Texture18 RGB (Unused)",
+        "Texture18 Alpha (Unused)",
     ),
     ParamId.Texture19.name: SplitTextureSocketParams(
-        'Texture19 RGB (Unused)',
-        'Texture19 RGB (Unused)',
+        "Texture19 RGB (Unused)",
+        "Texture19 RGB (Unused)",
     ),
 }
 
@@ -599,55 +604,55 @@ vector_param_id_values: set[int] = {
     ParamId.CustomVector47.value,
 }
 
-vector_param_id_value_to_default_value: dict[int, tuple[float,float,float,float]] = {
-    ParamId.CustomVector0.value: (0,0,0,0),
-    ParamId.CustomVector1.value: (1,1,1,1),
-    ParamId.CustomVector2.value: (1,1,1,1),
-    ParamId.CustomVector3.value: (1,1,1,1),
-    ParamId.CustomVector4.value: (1,1,1,1),
-    ParamId.CustomVector5.value: (1,1,1,1),
-    ParamId.CustomVector6.value: (1,1,0,0),
-    ParamId.CustomVector7.value: (1,1,1,1),
-    ParamId.CustomVector8.value: (1,1,1,1),
-    ParamId.CustomVector9.value: (1,1,1,1),
-    ParamId.CustomVector10.value: (1,1,1,1),
-    ParamId.CustomVector11.value: (0,0,0,1),
-    ParamId.CustomVector12.value: (1,1,1,1),
-    ParamId.CustomVector13.value: (1,1,1,1),
-    ParamId.CustomVector14.value: (1,1,1,1),
-    ParamId.CustomVector15.value: (1,1,1,1),
-    ParamId.CustomVector16.value: (1,1,1,1),
-    ParamId.CustomVector17.value: (1,1,1,1),
-    ParamId.CustomVector18.value: (1,1,1,1),
-    ParamId.CustomVector19.value: (1,1,1,1),
-    ParamId.CustomVector20.value: (1,1,1,1),
-    ParamId.CustomVector21.value: (1,1,1,1),
-    ParamId.CustomVector22.value: (1,1,1,1),
-    ParamId.CustomVector23.value: (1,1,1,1),
-    ParamId.CustomVector24.value: (1,1,1,1),
-    ParamId.CustomVector25.value: (1,1,1,1),
-    ParamId.CustomVector26.value: (1,1,1,1),
-    ParamId.CustomVector27.value: (1,1,1,1),
-    ParamId.CustomVector28.value: (1,1,1,1),
-    ParamId.CustomVector29.value: (1,1,1,1),
-    ParamId.CustomVector30.value: (0,0,0,1),
-    ParamId.CustomVector31.value: (1,1,0,0),
-    ParamId.CustomVector32.value: (1,1,0,0),
-    ParamId.CustomVector33.value: (1,1,1,1),
-    ParamId.CustomVector34.value: (1,1,0,0),
-    ParamId.CustomVector35.value: (1,1,1,1),
-    ParamId.CustomVector36.value: (1,1,1,1),
-    ParamId.CustomVector37.value: (1,1,1,1),
-    ParamId.CustomVector38.value: (1,1,1,1),
-    ParamId.CustomVector39.value: (1,1,1,1),
-    ParamId.CustomVector40.value: (1,1,1,1),
-    ParamId.CustomVector41.value: (1,1,1,1),
-    ParamId.CustomVector42.value: (1,1,1,1),
-    ParamId.CustomVector43.value: (1,1,1,1),
-    ParamId.CustomVector44.value: (1,1,1,1),
-    ParamId.CustomVector45.value: (1,1,1,1),
-    ParamId.CustomVector46.value: (1,1,1,1),
-    ParamId.CustomVector47.value: (1,1,1,1),
+vector_param_id_value_to_default_value: dict[int, tuple[float, float, float, float]] = {
+    ParamId.CustomVector0.value: (0, 0, 0, 0),
+    ParamId.CustomVector1.value: (1, 1, 1, 1),
+    ParamId.CustomVector2.value: (1, 1, 1, 1),
+    ParamId.CustomVector3.value: (1, 1, 1, 1),
+    ParamId.CustomVector4.value: (1, 1, 1, 1),
+    ParamId.CustomVector5.value: (1, 1, 1, 1),
+    ParamId.CustomVector6.value: (1, 1, 0, 0),
+    ParamId.CustomVector7.value: (1, 1, 1, 1),
+    ParamId.CustomVector8.value: (1, 1, 1, 1),
+    ParamId.CustomVector9.value: (1, 1, 1, 1),
+    ParamId.CustomVector10.value: (1, 1, 1, 1),
+    ParamId.CustomVector11.value: (0, 0, 0, 1),
+    ParamId.CustomVector12.value: (1, 1, 1, 1),
+    ParamId.CustomVector13.value: (1, 1, 1, 1),
+    ParamId.CustomVector14.value: (1, 1, 1, 1),
+    ParamId.CustomVector15.value: (1, 1, 1, 1),
+    ParamId.CustomVector16.value: (1, 1, 1, 1),
+    ParamId.CustomVector17.value: (1, 1, 1, 1),
+    ParamId.CustomVector18.value: (1, 1, 1, 1),
+    ParamId.CustomVector19.value: (1, 1, 1, 1),
+    ParamId.CustomVector20.value: (1, 1, 1, 1),
+    ParamId.CustomVector21.value: (1, 1, 1, 1),
+    ParamId.CustomVector22.value: (1, 1, 1, 1),
+    ParamId.CustomVector23.value: (1, 1, 1, 1),
+    ParamId.CustomVector24.value: (1, 1, 1, 1),
+    ParamId.CustomVector25.value: (1, 1, 1, 1),
+    ParamId.CustomVector26.value: (1, 1, 1, 1),
+    ParamId.CustomVector27.value: (1, 1, 1, 1),
+    ParamId.CustomVector28.value: (1, 1, 1, 1),
+    ParamId.CustomVector29.value: (1, 1, 1, 1),
+    ParamId.CustomVector30.value: (0, 0, 0, 1),
+    ParamId.CustomVector31.value: (1, 1, 0, 0),
+    ParamId.CustomVector32.value: (1, 1, 0, 0),
+    ParamId.CustomVector33.value: (1, 1, 1, 1),
+    ParamId.CustomVector34.value: (1, 1, 0, 0),
+    ParamId.CustomVector35.value: (1, 1, 1, 1),
+    ParamId.CustomVector36.value: (1, 1, 1, 1),
+    ParamId.CustomVector37.value: (1, 1, 1, 1),
+    ParamId.CustomVector38.value: (1, 1, 1, 1),
+    ParamId.CustomVector39.value: (1, 1, 1, 1),
+    ParamId.CustomVector40.value: (1, 1, 1, 1),
+    ParamId.CustomVector41.value: (1, 1, 1, 1),
+    ParamId.CustomVector42.value: (1, 1, 1, 1),
+    ParamId.CustomVector43.value: (1, 1, 1, 1),
+    ParamId.CustomVector44.value: (1, 1, 1, 1),
+    ParamId.CustomVector45.value: (1, 1, 1, 1),
+    ParamId.CustomVector46.value: (1, 1, 1, 1),
+    ParamId.CustomVector47.value: (1, 1, 1, 1),
 }
 
 texture_param_id_values = {
@@ -674,16 +679,16 @@ texture_param_id_values = {
 }
 
 sampler_param_id_values = {
-    ParamId.Sampler0.value, 
-    ParamId.Sampler1.value, 
-    ParamId.Sampler2.value, 
-    ParamId.Sampler3.value, 
-    ParamId.Sampler4.value, 
-    ParamId.Sampler5.value, 
-    ParamId.Sampler6.value, 
-    ParamId.Sampler7.value, 
-    ParamId.Sampler8.value, 
-    ParamId.Sampler9.value, 
+    ParamId.Sampler0.value,
+    ParamId.Sampler1.value,
+    ParamId.Sampler2.value,
+    ParamId.Sampler3.value,
+    ParamId.Sampler4.value,
+    ParamId.Sampler5.value,
+    ParamId.Sampler6.value,
+    ParamId.Sampler7.value,
+    ParamId.Sampler8.value,
+    ParamId.Sampler9.value,
     ParamId.Sampler10.value,
     ParamId.Sampler11.value,
     ParamId.Sampler12.value,
@@ -721,26 +726,26 @@ float_param_id_values = {
 
 float_param_id_value_to_default_value = {
     ParamId.CustomFloat0.value: 0.0,
-    ParamId.CustomFloat1.value:  0.0,
-    ParamId.CustomFloat2.value:  0.0,
-    ParamId.CustomFloat3.value:  0.0,
-    ParamId.CustomFloat4.value:  0.0,
-    ParamId.CustomFloat5.value:  0.0,
-    ParamId.CustomFloat6.value:  0.0,
-    ParamId.CustomFloat7.value:  0.0,
-    ParamId.CustomFloat8.value:  0.0,
-    ParamId.CustomFloat9.value:  0.0,
-    ParamId.CustomFloat10.value:  0.0,
-    ParamId.CustomFloat11.value:  0.0,
-    ParamId.CustomFloat12.value:  0.0,
-    ParamId.CustomFloat13.value:  0.0,
-    ParamId.CustomFloat14.value:  0.0,
-    ParamId.CustomFloat15.value:  0.0,
-    ParamId.CustomFloat16.value:  0.0,
-    ParamId.CustomFloat17.value:  0.0,
-    ParamId.CustomFloat18.value:  0.0,
-    ParamId.CustomFloat19.value:  0.0,
-} 
+    ParamId.CustomFloat1.value: 0.0,
+    ParamId.CustomFloat2.value: 0.0,
+    ParamId.CustomFloat3.value: 0.0,
+    ParamId.CustomFloat4.value: 0.0,
+    ParamId.CustomFloat5.value: 0.0,
+    ParamId.CustomFloat6.value: 0.0,
+    ParamId.CustomFloat7.value: 0.0,
+    ParamId.CustomFloat8.value: 0.0,
+    ParamId.CustomFloat9.value: 0.0,
+    ParamId.CustomFloat10.value: 0.0,
+    ParamId.CustomFloat11.value: 0.0,
+    ParamId.CustomFloat12.value: 0.0,
+    ParamId.CustomFloat13.value: 0.0,
+    ParamId.CustomFloat14.value: 0.0,
+    ParamId.CustomFloat15.value: 0.0,
+    ParamId.CustomFloat16.value: 0.0,
+    ParamId.CustomFloat17.value: 0.0,
+    ParamId.CustomFloat18.value: 0.0,
+    ParamId.CustomFloat19.value: 0.0,
+}
 
 bool_param_id_values = {
     ParamId.CustomBoolean0.value,
@@ -789,18 +794,17 @@ bool_param_id_value_to_default_value = {
 }
 
 
-
 blend_state_param_id_values = {
-    ParamId.BlendState0.value, 
-    ParamId.BlendState1.value, 
-    ParamId.BlendState2.value, 
-    ParamId.BlendState3.value, 
-    ParamId.BlendState4.value, 
-    ParamId.BlendState5.value, 
-    ParamId.BlendState6.value, 
-    ParamId.BlendState7.value, 
-    ParamId.BlendState8.value, 
-    ParamId.BlendState9.value, 
+    ParamId.BlendState0.value,
+    ParamId.BlendState1.value,
+    ParamId.BlendState2.value,
+    ParamId.BlendState3.value,
+    ParamId.BlendState4.value,
+    ParamId.BlendState5.value,
+    ParamId.BlendState6.value,
+    ParamId.BlendState7.value,
+    ParamId.BlendState8.value,
+    ParamId.BlendState9.value,
     ParamId.BlendState10.value,
 }
 

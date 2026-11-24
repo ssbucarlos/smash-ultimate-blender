@@ -1,6 +1,8 @@
-from . import attribute_renamer
-from . import create_meshes
-from . import eye_material_custom_vector_31_modal
-from . import misc_panel
-from . import rename_utils
-from . import set_linear_vertex_color
+from . import (
+    attribute_renamer,
+    create_meshes,
+    eye_material_custom_vector_31_modal,
+    misc_panel,
+    rename_utils,
+    set_linear_vertex_color,
+)

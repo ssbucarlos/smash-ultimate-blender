@@ -1,3 +1,1 @@
-from . import anim_data
-from . import export_anim
-from . import import_anim
+from . import anim_data, export_anim, import_anim

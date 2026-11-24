@@ -1,3 +1,1 @@
-from . import operators
-from . import sub_swing_data
-from . import ui    
+from . import operators, sub_swing_data, ui

@@ -88,11 +88,11 @@ classes = [
     source.extras.rename_utils.SUB_OT_rename_textures_to_material,
     source.extras.misc_panel.SUB_PT_misc,
     source.model.material.operators.SUB_OP_change_render_pass,
-    source.model.material.operators.SUB_OP_create_sub_matl_data_from_shader_label,  
-    source.model.material.operators.SUB_OP_apply_material_preset,  
+    source.model.material.operators.SUB_OP_create_sub_matl_data_from_shader_label,
+    source.model.material.operators.SUB_OP_apply_material_preset,
     source.model.material.operators.SUB_OP_convert_blender_material,
     source.model.material.operators.SUB_OP_convert_blender_material_with_prm,
-    source.model.material.operators.SUB_OP_copy_from_ult_material,    
+    source.model.material.operators.SUB_OP_copy_from_ult_material,
     source.model.material.ui.SUB_PT_matl_data_master,
     source.model.material.ui.SUB_PT_matl_data_bools,
     source.model.material.ui.SUB_PT_matl_data_floats,
@@ -185,9 +185,11 @@ classes = [
     source.model.material.shader_nodes.custom_sampler_node.SUB_CSN_ultimate_sampler,
 ]
 
+
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+
 
 def unregister():
     for cls in reversed(classes):

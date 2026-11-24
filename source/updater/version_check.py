@@ -1,8 +1,10 @@
 import re
+
 import requests
 
 COMPATIBLE_UPDATE_AVAILABLE: bool = None
-LATEST_COMPATIBLE_VERSION: tuple[int,int,int] = None
+LATEST_COMPATIBLE_VERSION: tuple[int, int, int] = None
+
 
 def check_for_newer_version():
     """
@@ -15,21 +17,34 @@ def check_for_newer_version():
     from ...__init__ import bl_info
 
     try:
-        response = requests.get("https://api.github.com/repos/ssbucarlos/smash-ultimate-blender/git/refs/tags", timeout=.5)
+        response = requests.get(
+            "https://api.github.com/repos/ssbucarlos/smash-ultimate-blender/git/refs/tags",
+            timeout=0.5,
+        )
     except Exception as e:
-        print(f"Smash_ultimate_blender: Couldn't check for newer version, please check your internet connection. exception info=`{e}`")
+        print(
+            f"Smash_ultimate_blender: Couldn't check for newer version, please check your internet connection. exception info=`{e}`"
+        )
         return
-    
-    #example of "refs" {'refs/tags/v1.3.0', 'refs/tags/v1.3.1',...}
+
+    # example of "refs" {'refs/tags/v1.3.0', 'refs/tags/v1.3.1',...}
     refs = {s.get("ref") for s in response.json()}
     regex_pattern = r"^refs/tags/v(\d*)\.(\d*)\.(\d*)$"
-    current_major, current_minor, current_patch = bl_info["version"][0], bl_info["version"][1], bl_info["version"][2]
+    current_major, current_minor, current_patch = (
+        bl_info["version"][0],
+        bl_info["version"][1],
+        bl_info["version"][2],
+    )
     current_minor_patch_version = (current_minor, current_patch)
 
     for ref in refs:
-        if match:= re.match(regex_pattern, ref):
-            if groups:= match.groups():
-                found_major, found_minor, found_patch = int(groups[0]), int(groups[1]), int(groups[2])
+        if match := re.match(regex_pattern, ref):
+            if groups := match.groups():
+                found_major, found_minor, found_patch = (
+                    int(groups[0]),
+                    int(groups[1]),
+                    int(groups[2]),
+                )
                 found_version = (found_major, found_minor, found_patch)
                 found_minor_patch_version = (found_minor, found_patch)
                 if found_major == current_major:
@@ -41,4 +56,3 @@ def check_for_newer_version():
                             LATEST_COMPATIBLE_VERSION = found_version
                         elif LATEST_COMPATIBLE_VERSION < found_version:
                             LATEST_COMPATIBLE_VERSION = found_version
-    
